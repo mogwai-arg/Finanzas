@@ -157,7 +157,7 @@ esta app sea propia. Lo que sí tienen resuelto es el trabajo aburrido:
 
 ## Pendiente de definir
 
-- **Publicar la app en Google Cloud** (Testing → In production). Necesita tu cuenta.
+- **Publicar la app en Google Cloud** (Testing → In production). Paso a paso en [`../docs/google-oauth.md`](../docs/google-oauth.md).
 
 - **Cuánto entra por mes.** Los porcentajes de "14 % de lo que entra" y el ritmo del presupuesto necesitan un ingreso de referencia: fijo, o el promedio de los últimos tres meses.
 - **El logotipo** está compuesto en Archivo 800 con `letter-spacing: -0.05em`. Para producción hay que convertirlo a curvas.
