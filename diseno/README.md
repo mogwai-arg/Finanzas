@@ -79,6 +79,37 @@ celular, ni en iOS ni en Android. "Que llegue igual que la notificación del
 banco" se resuelve por el lado del mail con `watch()`, no interceptando la
 notificación. La diferencia real es de segundos.
 
+### Un acuerdo paritario no es "X % por mes"
+
+El acuerdo de comercio de julio 2026 dice: **1,9 % en julio, agosto y septiembre,
+no acumulativo, sobre la base de junio**. Eso no es lo mismo que 1,9 % mensual:
+
+```
+acumulativo      1,900 %  ·  1,900 %  ·  1,900 %     (compone)
+no acumulativo   1,900 %  ·  1,865 %  ·  1,830 %     (el salto mensual baja)
+```
+
+Proyectar componiendo sobreestima el sueldo todos los meses. El modelo del
+acuerdo, contrastado con los recibos reales, acierta dentro del **0,4 %**.
+
+Y hay una segunda trampa: el **bono de $25.000** del acuerdo se paga solo en
+julio y agosto. Sin declarar la vigencia, la proyección lo sigue sumando para
+siempre. Por eso las sumas no remunerativas llevan `desde` y `hasta`.
+
+Consecuencia concreta: **septiembre se cobra menos que agosto** — $1.981.950
+contra $2.026.665 — porque agosto traía dos días de vacaciones y el bono. No es
+un error de cuenta, y la app tiene que poder explicarlo en vez de mostrar una
+caída sin motivo.
+
+Después de septiembre el acuerdo no dice nada (hay revisión en octubre), así que
+lo proyectado se marca `conAcuerdo: false`: es una suposición, no un dato.
+
+### El sobre
+
+Es el **44 % de lo que entra**. Un modelo que solo mire el neto bancario ve
+menos de la mitad de la plata. Sube con el mismo aumento que el banco, así que
+se escala con el básico en vez de quedar congelado.
+
 ### El cierre de Galicia no cae un día fijo del mes
 
 Sale del resumen de agosto/26, que publica seis fechas en una fila:

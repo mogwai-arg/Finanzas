@@ -99,13 +99,93 @@ export function factorRemunerativo(recibos) {
  * basico. Se separan en la parte fija y la parte que si escala, para que la
  * proyeccion no las infle. Ignorar esto sobreestima el neto todos los meses.
  */
-export function componerNoRemunerativo(recibos, sumasFijas = 0) {
+export function componerNoRemunerativo(recibos, sumasFijas = 0, sumas = null) {
   const rs = porPeriodo(recibos).filter(r => !esAtipico(r) && r.basico > 0);
   if (!rs.length) return { fijo: sumasFijas, escala: 0, basicoBase: 0 };
   const ult = rs[rs.length - 1];
-  return { fijo: sumasFijas,
-           escala: Math.max(0, (ult.noRemunerativo || 0) - sumasFijas),
+  // Con sumas declaradas, la parte fija es la que estaba vigente EN ESE MES.
+  // Usar otro numero deja el resto como "escala" y lo suma dos veces.
+  const fijo = sumas ? sumasVigentes(sumas, ult.periodo) : sumasFijas;
+  return { fijo,
+           escala: Math.max(0, (ult.noRemunerativo || 0) - fijo),
            basicoBase: ult.basico };
+}
+
+
+// ---------------------------------------------------------------------
+// ACUERDOS PARITARIOS
+// ---------------------------------------------------------------------
+
+/**
+ * Un acuerdo paritario argentino casi nunca es "X % por mes". Suele ser
+ * "X % en julio, X % en agosto y X % en septiembre, NO ACUMULATIVO, sobre la
+ * base de junio". La diferencia no es teorica:
+ *
+ *   acumulativo:      1,90 % · 1,90 % · 1,90 %   (compone)
+ *   no acumulativo:   1,90 % · 1,865 % · 1,830 % (el salto mensual BAJA)
+ *
+ * Proyectar componiendo sobreestima el sueldo mes a mes. Y cuando el acuerdo
+ * se termina no hay que seguir extrapolando: hay una revision, y hasta que se
+ * firme lo que venga es una suposicion, no un dato.
+ *
+ * Forma:
+ *   { base:'2026-06', acumulativo:false, revisionEn:'2026-10',
+ *     tramos:[{periodo:'2026-07', pct:1.9}, ...] }
+ */
+
+/** Acuerdo vigente del CCT 130/75 (comercio), julio-septiembre 2026. */
+export const ACUERDO_COMERCIO_JUL_SEP_2026 = {
+  nombre: 'CCT 130/75 · acuerdo julio 2026',
+  base: '2026-06',
+  acumulativo: false,
+  revisionEn: '2026-10',
+  tramos: [
+    { periodo: '2026-07', pct: 1.9 },
+    { periodo: '2026-08', pct: 1.9 },
+    { periodo: '2026-09', pct: 1.9 }
+  ]
+};
+
+/**
+ * Sumas no remunerativas con vigencia. El bono extraordinario del acuerdo
+ * ($50.000 en dos cuotas) se paga solo en julio y agosto: si no se declara la
+ * vigencia, la proyeccion lo sigue sumando para siempre.
+ */
+export const SUMAS_COMERCIO_2026 = [
+  { concepto: 'Suma fija no remunerativa', monto: 100000, desde: '2026-01' },
+  { concepto: 'Recomposición',             monto:  20000, desde: '2026-01' },
+  { concepto: 'Bono extraordinario',       monto:  25000, desde: '2026-07', hasta: '2026-08' }
+];
+
+/** Porcentaje total acumulado sobre la base, al periodo dado. */
+export function pctAcumulado(acuerdo, periodo) {
+  if (!acuerdo || !acuerdo.tramos) return null;
+  const vigentes = acuerdo.tramos.filter(t => t.periodo <= periodo);
+  if (!vigentes.length) return periodo >= acuerdo.base ? 0 : null;
+  if (acuerdo.acumulativo) {
+    return (vigentes.reduce((f, t) => f * (1 + t.pct / 100), 1) - 1) * 100;
+  }
+  return vigentes.reduce((s, t) => s + t.pct, 0);
+}
+
+/** Basico de un periodo segun el acuerdo. null si el acuerdo no lo cubre. */
+export function basicoSegunAcuerdo(basicoBase, acuerdo, periodo) {
+  const pct = pctAcumulado(acuerdo, periodo);
+  if (pct == null) return null;
+  return redondear(Number(basicoBase) * (1 + pct / 100));
+}
+
+/** El acuerdo ya no dice nada de este periodo: lo que siga es suposicion. */
+export function fueraDeAcuerdo(acuerdo, periodo) {
+  if (!acuerdo || !acuerdo.tramos || !acuerdo.tramos.length) return true;
+  return periodo > acuerdo.tramos[acuerdo.tramos.length - 1].periodo;
+}
+
+/** Suma de las no remunerativas vigentes en un periodo. */
+export function sumasVigentes(sumas, periodo) {
+  return (sumas || [])
+    .filter(x => (!x.desde || x.desde <= periodo) && (!x.hasta || x.hasta >= periodo))
+    .reduce((s, x) => s + Number(x.monto || 0), 0);
 }
 
 // ---------------------------------------------------------------------
@@ -120,27 +200,40 @@ export function componerNoRemunerativo(recibos, sumasFijas = 0) {
  * @param ritmo      variacion mensual del basico; por defecto la aprendida
  * @param sumasFijas parte no remunerativa que NO escala con la paritaria
  */
-export function proyectarSueldo(recibos, { meses = 6, ritmo = null, sumasFijas = 0 } = {}) {
+export function proyectarSueldo(recibos, { meses = 6, ritmo = null, sumasFijas = 0,
+                                            acuerdo = null, sumas = null } = {}) {
   const rs = porPeriodo(recibos).filter(r => r.basico > 0);
   if (!rs.length) return [];
 
   const paso = ritmo == null ? ritmoParitaria(recibos) : ritmo;
   const k = factorRemunerativo(recibos);
-  const nr = componerNoRemunerativo(recibos, sumasFijas);
+  const nr = componerNoRemunerativo(recibos, sumasFijas, sumas);
   const ult = rs[rs.length - 1];
+  const base = acuerdo ? (rs.find(r => r.periodo === acuerdo.base) || {}).basico : null;
 
   const out = [];
   let basico = ult.basico;
   for (let i = 1; i <= meses; i++) {
-    basico = basico * (1 + paso);
+    const periodo = sumarMeses(ult.periodo, i);
+
+    // Si hay acuerdo y cubre el periodo, manda el acuerdo. Cuando se acaba,
+    // se sigue con el ritmo aprendido pero marcando que ya es suposicion.
+    const porAcuerdo = base ? basicoSegunAcuerdo(base, acuerdo, periodo) : null;
+    const conAcuerdo = porAcuerdo != null && !fueraDeAcuerdo(acuerdo, periodo);
+    basico = conAcuerdo ? porAcuerdo : basico * (1 + paso);
+
     const remunerativo = basico * k;
-    const noRemunerativo = nr.fijo +
-      (nr.basicoBase ? nr.escala * (basico / nr.basicoBase) : 0);
+    // Con sumas declaradas se respeta su vigencia; si no, se usa la parte fija
+    // aprendida del ultimo recibo. Lo primero es mucho mas exacto: un bono que
+    // vencio en agosto no puede seguir sumando en septiembre.
+    const noRemunerativo = sumas
+      ? sumasVigentes(sumas, periodo) + (nr.basicoBase ? nr.escala * (basico / nr.basicoBase) : 0)
+      : nr.fijo + (nr.basicoBase ? nr.escala * (basico / nr.basicoBase) : 0);
+
     out.push({
-      periodo: sumarMeses(ult.periodo, i),
-      basico: redondear(basico),
+      periodo, basico: redondear(basico),
       ...netoDeRecibo({ remunerativo, noRemunerativo }),
-      estimado: true
+      estimado: true, conAcuerdo
     });
   }
   return out;
@@ -173,16 +266,27 @@ export function aguinaldo(recibos, anio, semestre) {
  * `diaCobro` es el dia del mes SIGUIENTE al periodo en que acredita.
  */
 export function calendarioDeIngresos(recibos, { meses = 6, diaCobro = 1,
-                                                sobre = 0, ritmo = null,
-                                                sumasFijas = 0 } = {}) {
-  const proy = proyectarSueldo(recibos, { meses, ritmo, sumasFijas });
+                                                sobre = 0, sobreDesde = null,
+                                                ritmo = null, sumasFijas = 0,
+                                                acuerdo = null, sumas = null } = {}) {
+  const proy = proyectarSueldo(recibos, { meses, ritmo, sumasFijas, acuerdo, sumas });
+  const rs = porPeriodo(recibos).filter(r => r.basico > 0);
+  // El sobre sube con el mismo aumento que el banco, asi que se escala con el
+  // basico. `sobreDesde` es el periodo del que se conoce el importe.
+  const refSobre = sobreDesde
+    ? (rs.find(r => r.periodo === sobreDesde) || {}).basico
+    : (rs.length ? rs[rs.length - 1].basico : null);
+
   const out = [];
   for (const p of proy) {
     out.push({ fecha: cobroDe(p.periodo, diaCobro), concepto: 'Sueldo',
-               monto: p.neto, via: 'banco', periodo: p.periodo, estimado: true });
+               monto: p.neto, via: 'banco', periodo: p.periodo,
+               estimado: true, conAcuerdo: p.conAcuerdo });
     if (sobre > 0) {
+      const monto = refSobre ? redondear(Number(sobre) * (p.basico / refSobre)) : Number(sobre);
       out.push({ fecha: cobroDe(p.periodo, diaCobro), concepto: 'Sobre',
-                 monto: Number(sobre), via: 'efectivo', periodo: p.periodo, estimado: true });
+                 monto, via: 'efectivo', periodo: p.periodo,
+                 estimado: true, conAcuerdo: p.conAcuerdo });
     }
     const [y, m] = p.periodo.split('-').map(Number);
     if (MESES_SAC.includes(m)) {

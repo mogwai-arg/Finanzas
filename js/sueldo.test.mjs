@@ -7,7 +7,8 @@
 import {
   APORTES, netoDeRecibo, esAtipico, variacionesBasico, ritmoParitaria,
   factorRemunerativo, componerNoRemunerativo, proyectarSueldo, aguinaldo,
-  calendarioDeIngresos, sumarMeses
+  calendarioDeIngresos, sumarMeses,
+  pctAcumulado, basicoSegunAcuerdo, fueraDeAcuerdo, sumasVigentes
 } from './sueldo.js';
 
 let ok = 0, fallo = 0;
@@ -145,7 +146,16 @@ t('el sueldo acredita el mes siguiente al periodo', () => {
 t('el sobre entra el mismo dia, aparte y en efectivo', () => {
   const c = calendarioDeIngresos(NORMALES, { meses: 1, sobre: 600000 });
   const s = c.find(x => x.concepto === 'Sobre');
-  igual(s.via, 'efectivo'); igual(s.monto, 600000);
+  igual(s.via, 'efectivo');
+  igual(s.fecha, c.find(x => x.concepto === 'Sueldo').fecha);
+});
+t('el sobre acompaña al aumento, no queda congelado', () => {
+  const c = calendarioDeIngresos(NORMALES, { meses: 1, sobre: 600000, ritmo: 0.02 });
+  cerca(c.find(x => x.concepto === 'Sobre').monto, 612000, 1);
+});
+t('con ritmo cero el sobre no se mueve', () => {
+  const c = calendarioDeIngresos(NORMALES, { meses: 1, sobre: 600000, ritmo: 0 });
+  cerca(c.find(x => x.concepto === 'Sobre').monto, 600000, 1);
 });
 t('sin sobre declarado no aparece la fila', () => {
   igual(calendarioDeIngresos(NORMALES, { meses: 1 }).some(x => x.concepto === 'Sobre'), false);
@@ -178,6 +188,91 @@ t('todo sale ordenado por fecha', () => {
   const c = calendarioDeIngresos(NORMALES, { meses: 12, sobre: 1 });
   for (let i = 1; i < c.length; i++)
     if (c[i].fecha < c[i - 1].fecha) throw new Error('desordenado en ' + c[i].fecha);
+});
+
+console.log('\nACUERDO PARITARIO');
+const ACUERDO = {
+  base: '2026-06', acumulativo: false, revisionEn: '2026-10',
+  tramos: [{ periodo: '2026-07', pct: 1.9 },
+           { periodo: '2026-08', pct: 1.9 },
+           { periodo: '2026-09', pct: 1.9 }]
+};
+const SUMAS = [
+  { concepto: 'Suma fija', monto: 100000, desde: '2026-01' },
+  { concepto: 'Recomposición', monto: 20000, desde: '2026-01' },
+  { concepto: 'Bono', monto: 25000, desde: '2026-07', hasta: '2026-08' }
+];
+
+t('no acumulativo: los tramos se SUMAN, no se componen', () => {
+  cerca(pctAcumulado(ACUERDO, '2026-09'), 5.7, 1e-9);
+});
+t('acumulativo: los tramos se componen', () => {
+  const a = { ...ACUERDO, acumulativo: true };
+  cerca(pctAcumulado(a, '2026-09'), 5.8083, 0.001);
+});
+t('la diferencia entre los dos no es teorica', () => {
+  const noAcum = basicoSegunAcuerdo(1179445, ACUERDO, '2026-09');
+  const acum = basicoSegunAcuerdo(1179445, { ...ACUERDO, acumulativo: true }, '2026-09');
+  if (!(acum > noAcum + 1000)) throw new Error('deberian separarse más de mil pesos');
+});
+t('el basico de julio coincide con el recibo real dentro del 0,5 %', () => {
+  cerca(basicoSegunAcuerdo(1179445, ACUERDO, '2026-07'), 1204135, 1204135 * 0.005);
+});
+t('el de agosto tambien', () => {
+  cerca(basicoSegunAcuerdo(1179445, ACUERDO, '2026-08'), 1228824, 1228824 * 0.005);
+});
+t('septiembre proyectado por acuerdo da $ 1.246.673', () => {
+  cerca(basicoSegunAcuerdo(1179445, ACUERDO, '2026-09'), 1246673.36, 1);
+});
+t('antes de la base el acuerdo no dice nada', () =>
+  igual(pctAcumulado(ACUERDO, '2026-05'), null));
+t('en el mes base el aumento es cero', () =>
+  cerca(pctAcumulado(ACUERDO, '2026-06'), 0, 1e-9));
+t('octubre queda fuera del acuerdo: hay revision', () => {
+  igual(fueraDeAcuerdo(ACUERDO, '2026-09'), false);
+  igual(fueraDeAcuerdo(ACUERDO, '2026-10'), true);
+});
+
+console.log('\nSUMAS CON VIGENCIA');
+t('en junio el bono todavia no existe', () => cerca(sumasVigentes(SUMAS, '2026-06'), 120000));
+t('en julio y agosto se paga', () => {
+  cerca(sumasVigentes(SUMAS, '2026-07'), 145000);
+  cerca(sumasVigentes(SUMAS, '2026-08'), 145000);
+});
+t('en septiembre ya no: el no remunerativo baja 25.000', () =>
+  cerca(sumasVigentes(SUMAS, '2026-09'), 120000));
+t('sin declarar la vigencia el bono se cobraria para siempre', () => {
+  const sinVigencia = SUMAS.map(x => ({ ...x, hasta: undefined }));
+  cerca(sumasVigentes(sinVigencia, '2027-06'), 145000);
+  cerca(sumasVigentes(SUMAS, '2027-06'), 120000);
+});
+
+console.log('\nPROYECCION CON ACUERDO');
+t('el acuerdo manda sobre el ritmo aprendido', () => {
+  const p = proyectarSueldo(HISTORIA, { meses: 1, acuerdo: ACUERDO, sumas: SUMAS });
+  cerca(p[0].basico, 1246673.36, 1);
+  igual(p[0].conAcuerdo, true);
+});
+t('septiembre se cobra MENOS que agosto, y no es un error', () => {
+  const p = proyectarSueldo(HISTORIA, { meses: 1, acuerdo: ACUERDO, sumas: SUMAS });
+  // agosto trajo 2 dias de vacaciones y el bono de 25.000; septiembre no
+  if (!(p[0].neto < 2026665.38)) throw new Error('septiembre deberia dar menos que agosto');
+  cerca(p[0].neto, 1981905, 5000);
+});
+t('pasado el acuerdo, la proyeccion se marca como suposicion', () => {
+  const p = proyectarSueldo(HISTORIA, { meses: 3, acuerdo: ACUERDO, sumas: SUMAS });
+  igual(p.map(x => x.conAcuerdo).join(','), 'true,false,false');
+});
+t('sin acuerdo sigue funcionando como antes', () => {
+  const p = proyectarSueldo(HISTORIA, { meses: 1 });
+  igual(p[0].conAcuerdo, false);
+});
+t('el sobre declarado en un mes se escala a los demas', () => {
+  const c = calendarioDeIngresos(HISTORIA, { meses: 1, sobre: 1532000,
+                                             sobreDesde: '2026-08',
+                                             acuerdo: ACUERDO, sumas: SUMAS });
+  const s = c.find(x => x.concepto === 'Sobre');
+  cerca(s.monto, 1532000 * (1246673.36 / 1228824), 50);
 });
 
 console.log(`\n${ok} pruebas OK${fallo ? `, ${fallo} FALLAN` : ''}\n`);
