@@ -8,7 +8,8 @@ import {
   APORTES, netoDeRecibo, esAtipico, variacionesBasico, ritmoParitaria,
   factorRemunerativo, componerNoRemunerativo, proyectarSueldo, aguinaldo,
   calendarioDeIngresos, sumarMeses,
-  pctAcumulado, basicoSegunAcuerdo, fueraDeAcuerdo, sumasVigentes
+  pctAcumulado, basicoSegunAcuerdo, fueraDeAcuerdo, sumasVigentes,
+  brutoDeRecibo, netoDeclarado
 } from './sueldo.js';
 
 let ok = 0, fallo = 0;
@@ -140,7 +141,7 @@ t('un semestre sin recibos devuelve null', () => igual(aguinaldo(HISTORIA, 2025,
 
 console.log('\nCALENDARIO');
 t('el sueldo acredita el mes siguiente al periodo', () => {
-  const c = calendarioDeIngresos(NORMALES, { meses: 1, diaCobro: 1 });
+  const c = calendarioDeIngresos(NORMALES, { meses: 1, diaCobro: 1, habil: false });
   igual(c[0].fecha, '2026-08-01');
 });
 t('el sobre entra el mismo dia, aparte y en efectivo', () => {
@@ -171,8 +172,15 @@ t('un dia de cobro 31 cae en el ultimo dia de febrero', () => {
   // el ultimo recibo es de diciembre -> se proyecta enero -> se cobra en febrero
   const c = calendarioDeIngresos([{ periodo: '2026-12', basico: 100, remunerativo: 183,
                                     noRemunerativo: 0, conceptos: [] }],
-                                 { meses: 1, diaCobro: 31 });
+                                 { meses: 1, diaCobro: 31, habil: false });
   igual(c[0].fecha, '2027-02-28');
+});
+t('si el ultimo dia del mes cae domingo, el cobro pasa al mes siguiente', () => {
+  // 28/02/2027 es domingo: se cobra el lunes 1 de marzo
+  const c = calendarioDeIngresos([{ periodo: '2026-12', basico: 100, remunerativo: 183,
+                                    noRemunerativo: 0, conceptos: [] }],
+                                 { meses: 1, diaCobro: 31 });
+  igual(c[0].fecha, '2027-03-01');
 });
 t('el sueldo de diciembre se cobra en enero, no en diciembre', () => {
   const c = calendarioDeIngresos([{ periodo: '2026-11', basico: 100, remunerativo: 183,
@@ -273,6 +281,83 @@ t('el sobre declarado en un mes se escala a los demas', () => {
                                              acuerdo: ACUERDO, sumas: SUMAS });
   const s = c.find(x => x.concepto === 'Sobre');
   cerca(s.monto, 1532000 * (1246673.36 / 1228824), 50);
+});
+
+console.log('\nBRUTO, NETO Y COSTO: los tres numeros del recibo');
+const AGOSTO = HISTORIA[3];
+t('el bruto es remunerativo + no remunerativo', () =>
+  cerca(brutoDeRecibo(AGOSTO), 2474636.31, 0.02));
+t('el neto es el bruto menos los aportes', () =>
+  cerca(netoDeclarado(AGOSTO), 2026665.38, 0.02));
+t('entre uno y otro hay $ 447.970 de aportes', () =>
+  cerca(brutoDeRecibo(AGOSTO) - netoDeclarado(AGOSTO), 447970.93, 0.02));
+t('usar el bruto como ingreso lo sobreestima un 22 %', () => {
+  const error = brutoDeRecibo(AGOSTO) / netoDeclarado(AGOSTO) - 1;
+  if (error < 0.20 || error > 0.24) throw new Error('el error deberia rondar el 22 %, dio ' + (error * 100).toFixed(1));
+});
+t('lo que se proyecta es el neto, nunca el bruto', () => {
+  const p = proyectarSueldo(HISTORIA, { meses: 1, acuerdo: ACUERDO, sumas: SUMAS })[0];
+  if (p.neto >= p.remunerativo + p.noRemunerativo)
+    throw new Error('el neto no puede ser mayor o igual al bruto');
+});
+
+console.log('\nPRIMER DIA HABIL');
+t('si el 1 es dia de semana, se cobra el 1', () => {
+  // 01/07/2026 cae miercoles
+  const c = calendarioDeIngresos(NORMALES, { meses: 1, diaCobro: 1 });
+  igual(c[0].fecha, '2026-08-03');   // 01/08/2026 es sabado -> lunes 3
+});
+t('si el 1 cae sabado, se corre al lunes: pasa en agosto/26', () => {
+  const c = calendarioDeIngresos([{ periodo: '2026-06', basico: 100, remunerativo: 183,
+                                    noRemunerativo: 0, conceptos: [] }],
+                                 { meses: 1, diaCobro: 1 });
+  igual(c[0].fecha, '2026-08-03');
+});
+t('si el 1 cae domingo tambien se corre', () => {
+  // 01/11/2026 es domingo -> lunes 2
+  const c = calendarioDeIngresos([{ periodo: '2026-09', basico: 100, remunerativo: 183,
+                                    noRemunerativo: 0, conceptos: [] }],
+                                 { meses: 1, diaCobro: 1 });
+  igual(c[0].fecha, '2026-11-02');
+});
+t('un feriado declarado tambien corre el cobro', () => {
+  // recibo de julio -> se proyecta agosto -> se cobra el 1 de septiembre (martes)
+  const c = calendarioDeIngresos([{ periodo: '2026-07', basico: 100, remunerativo: 183,
+                                    noRemunerativo: 0, conceptos: [] }],
+                                 { meses: 1, diaCobro: 1 });
+  igual(c[0].fecha, '2026-09-01');
+  const conFeriado = calendarioDeIngresos([{ periodo: '2026-07', basico: 100, remunerativo: 183,
+                                             noRemunerativo: 0, conceptos: [] }],
+                                          { meses: 1, diaCobro: 1, feriados: ['2026-09-01'] });
+  igual(conFeriado[0].fecha, '2026-09-02');
+});
+t('con habil en false se respeta el dia tal cual', () => {
+  const c = calendarioDeIngresos([{ periodo: '2026-06', basico: 100, remunerativo: 183,
+                                    noRemunerativo: 0, conceptos: [] }],
+                                 { meses: 1, diaCobro: 1, habil: false });
+  igual(c[0].fecha, '2026-08-01');
+});
+
+console.log('\nUN SOLO COBRO: banco y sobre juntos');
+t('con juntos, banco y sobre son una sola fila', () => {
+  const c = calendarioDeIngresos(HISTORIA, { meses: 1, sobre: 1532000, sobreDesde: '2026-08',
+                                             acuerdo: ACUERDO, sumas: SUMAS, juntos: true });
+  const s = c.filter(x => x.concepto === 'Sueldo');
+  igual(s.length, 1);
+  igual(s[0].via, 'mixto');
+  cerca(s[0].monto, s[0].banco + s[0].efectivo, 0.02);
+});
+t('el sobre es alrededor del 44 % de lo que entra', () => {
+  const c = calendarioDeIngresos(HISTORIA, { meses: 1, sobre: 1532000, sobreDesde: '2026-08',
+                                             acuerdo: ACUERDO, sumas: SUMAS, juntos: true });
+  const s = c.find(x => x.concepto === 'Sueldo');
+  const pct = s.efectivo / s.monto;
+  if (pct < 0.42 || pct > 0.46) throw new Error('esperaba ~44 %, dio ' + (pct * 100).toFixed(1));
+});
+t('sin juntos siguen siendo dos filas del mismo dia', () => {
+  const c = calendarioDeIngresos(HISTORIA, { meses: 1, sobre: 1532000, sobreDesde: '2026-08' });
+  const s = c.find(x => x.concepto === 'Sueldo'), o = c.find(x => x.concepto === 'Sobre');
+  igual(s.fecha, o.fecha);
 });
 
 console.log(`\n${ok} pruebas OK${fallo ? `, ${fallo} FALLAN` : ''}\n`);

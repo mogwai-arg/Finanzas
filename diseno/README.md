@@ -79,6 +79,37 @@ celular, ni en iOS ni en Android. "Que llegue igual que la notificación del
 banco" se resuelve por el lado del mail con `watch()`, no interceptando la
 notificación. La diferencia real es de segundos.
 
+### Bruto, neto y costo empleador: tres números en la misma hoja
+
+El recibo de agosto los imprime uno debajo del otro y es facilísimo agarrar el
+que no es:
+
+```
+Remunerativo                $ 2.301.786,41
+No remunerativo           + $   172.849,90
+──────────────────────────────────────────
+SUELDO BRUTO                $ 2.474.636,31
+Descuentos                - $   447.970,93
+──────────────────────────────────────────
+SUELDO NETO                 $ 2.026.665,38   ← lo que entra al banco
+
+COSTO TOTAL EMPLEADOR       $ 3.102.322,40   ← no lo cobra nadie
+```
+
+Usar el bruto como "lo que entra" **sobreestima el ingreso un 22 %**. Hay una
+prueba que lo fija: si alguna vez alguien cambia la proyección para usar el
+bruto, la suite falla.
+
+### El cobro es el primer día hábil, no el día 1
+
+Las fechas de los recibos: 01/06 (lunes), 01/07 (miércoles) y **03/08** — porque
+el 1 de agosto de 2026 cayó sábado. La regla es primer día hábil del mes, con
+feriados declarables. Sin esto la app avisa un ingreso que todavía no entró y el
+saldo del fin de semana queda mal.
+
+Banco y sobre entran **juntos, de una sola vez**: `calendarioDeIngresos` los
+puede emitir como una fila única (`via: 'mixto'`) con el desglose adentro.
+
 ### Un acuerdo paritario no es "X % por mes"
 
 El acuerdo de comercio de julio 2026 dice: **1,9 % en julio, agosto y septiembre,

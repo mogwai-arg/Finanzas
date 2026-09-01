@@ -22,6 +22,19 @@ export const APORTES = {
   sobreTotal: 0.025
 };
 
+/**
+ * Los tres numeros del recibo, que es facil confundir porque estan uno debajo
+ * del otro en la misma hoja:
+ *
+ *   remunerativo + no remunerativo          = BRUTO
+ *   bruto - aportes del trabajador          = NETO      <- lo que entra al banco
+ *   bruto + contribuciones patronales       = COSTO EMPLEADOR   <- no lo cobra nadie
+ *
+ * Usar el bruto como "lo que entra" sobreestima el ingreso en el 18 % largo.
+ */
+export const brutoDeRecibo = r => redondear(Number(r.remunerativo || 0) + Number(r.noRemunerativo || 0));
+export const netoDeclarado = r => redondear(brutoDeRecibo(r) - Number(r.deducciones || 0));
+
 /** Meses en los que se cobra el aguinaldo (SAC). */
 export const MESES_SAC = [6, 12];
 
@@ -268,7 +281,9 @@ export function aguinaldo(recibos, anio, semestre) {
 export function calendarioDeIngresos(recibos, { meses = 6, diaCobro = 1,
                                                 sobre = 0, sobreDesde = null,
                                                 ritmo = null, sumasFijas = 0,
-                                                acuerdo = null, sumas = null } = {}) {
+                                                acuerdo = null, sumas = null,
+                                                habil = true, feriados = [],
+                                                juntos = false } = {}) {
   const proy = proyectarSueldo(recibos, { meses, ritmo, sumasFijas, acuerdo, sumas });
   const rs = porPeriodo(recibos).filter(r => r.basico > 0);
   // El sobre sube con el mismo aumento que el banco, asi que se escala con el
@@ -279,14 +294,23 @@ export function calendarioDeIngresos(recibos, { meses = 6, diaCobro = 1,
 
   const out = [];
   for (const p of proy) {
-    out.push({ fecha: cobroDe(p.periodo, diaCobro), concepto: 'Sueldo',
-               monto: p.neto, via: 'banco', periodo: p.periodo,
-               estimado: true, conAcuerdo: p.conAcuerdo });
-    if (sobre > 0) {
-      const monto = refSobre ? redondear(Number(sobre) * (p.basico / refSobre)) : Number(sobre);
-      out.push({ fecha: cobroDe(p.periodo, diaCobro), concepto: 'Sobre',
-                 monto, via: 'efectivo', periodo: p.periodo,
-                 estimado: true, conAcuerdo: p.conAcuerdo });
+    const fecha = cobroDe(p.periodo, diaCobro, { habil, feriados });
+    const enSobre = sobre > 0
+      ? (refSobre ? redondear(Number(sobre) * (p.basico / refSobre)) : Number(sobre))
+      : 0;
+
+    if (juntos && enSobre > 0) {
+      // Banco y sobre entran el mismo dia y de una sola vez.
+      out.push({ fecha, concepto: 'Sueldo', monto: redondear(p.neto + enSobre),
+                 via: 'mixto', banco: p.neto, efectivo: enSobre,
+                 periodo: p.periodo, estimado: true, conAcuerdo: p.conAcuerdo });
+    } else {
+      out.push({ fecha, concepto: 'Sueldo', monto: p.neto, via: 'banco',
+                 periodo: p.periodo, estimado: true, conAcuerdo: p.conAcuerdo });
+      if (enSobre > 0) {
+        out.push({ fecha, concepto: 'Sobre', monto: enSobre, via: 'efectivo',
+                   periodo: p.periodo, estimado: true, conAcuerdo: p.conAcuerdo });
+      }
     }
     const [y, m] = p.periodo.split('-').map(Number);
     if (MESES_SAC.includes(m)) {
@@ -309,10 +333,28 @@ export function sumarMeses(periodo, n) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 }
 
-/** Fecha de cobro de un periodo: dia `dia` del mes siguiente. */
-function cobroDe(periodo, dia) {
+/**
+ * Fecha de cobro de un periodo: dia `dia` del mes siguiente.
+ *
+ * Con `habil: true` corre al primer dia habil siguiente. Es lo que hace el
+ * empleador: los recibos pagan el 01/06 (lunes), el 01/07 (miercoles) y el
+ * 03/08 — porque el 1 de agosto cayo sabado. Sin esta regla, la app avisa un
+ * ingreso que todavia no entro y el saldo del fin de semana queda mal.
+ */
+function cobroDe(periodo, dia, { habil = false, feriados = [] } = {}) {
   const p = sumarMeses(periodo, 1);
   const [y, m] = p.split('-').map(Number);
   const ultimo = new Date(y, m, 0).getDate();
-  return `${p}-${String(Math.min(dia, ultimo)).padStart(2, '0')}`;
+  let d = new Date(y, m - 1, Math.min(dia, ultimo));
+  if (habil) {
+    const esFeriado = f => feriados.includes(f);
+    for (let i = 0; i < 10; i++) {
+      const iso = fechaISO(d);
+      if (d.getDay() !== 0 && d.getDay() !== 6 && !esFeriado(iso)) break;
+      d = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1);
+    }
+  }
+  return fechaISO(d);
 }
+
+const fechaISO = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
