@@ -79,6 +79,25 @@ celular, ni en iOS ni en Android. "Que llegue igual que la notificación del
 banco" se resuelve por el lado del mail con `watch()`, no interceptando la
 notificación. La diferencia real es de segundos.
 
+### Validado contra el banco
+
+El extracto de Galicia dice: **"Acreditamiento de haberes · 01/09/26 · $2.026.665,38"**.
+Es el único punto de control real que hay —importe y fecha juntos— y el modelo
+lo reproduce exacto:
+
+- El neto calculado del recibo de agosto da $2.026.665,38, idéntico.
+- La fecha 01/09/2026 es martes, primer día hábil de septiembre.
+- Y con eso son **cuatro de cuatro**: 05→01/06, 06→01/07, 07→03/08 (el 1 cayó
+  sábado), 08→01/09.
+
+Está fijado en las pruebas. Si alguna vez el cálculo se desvía de ese importe o
+de esa fecha, la suite falla.
+
+**Alineación de períodos:** lo que entra el 1 de septiembre es el sueldo del
+período **agosto**. La app tiene que mostrar el mes al que corresponde, no el mes
+en que cae, o el presupuesto queda corrido un mes.
+
+
 ### Bruto, neto y costo empleador: tres números en la misma hoja
 
 El recibo de agosto los imprime uno debajo del otro y es facilísimo agarrar el

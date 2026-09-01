@@ -360,5 +360,45 @@ t('sin juntos siguen siendo dos filas del mismo dia', () => {
   igual(s.fecha, o.fecha);
 });
 
+console.log('\nCONTRA EL BANCO DE VERDAD');
+// Extracto de Galicia: "Acreditamiento de haberes  01/09/26  $ 2.026.665,38".
+// Es el unico punto de control real que tenemos: importe y fecha juntos.
+t('el neto del recibo de agosto es lo que acredito el banco', () =>
+  cerca(netoDeclarado(AGOSTO), 2026665.38, 0.01));
+t('la formula de aportes reproduce ese importe sin mirar el recibo', () => {
+  const r = netoDeRecibo({ remunerativo: AGOSTO.remunerativo, noRemunerativo: AGOSTO.noRemunerativo });
+  // agosto es atipico (vacaciones), asi que la base sindical difiere unos pesos
+  cerca(r.neto, 2026665.38, 5500);
+});
+t('el sueldo de agosto se cobra el 1 de septiembre, martes', () => {
+  const c = calendarioDeIngresos(HISTORIA, { meses: 0, diaCobro: 1 });
+  igual(c.length, 0, 'con meses 0 no hay proyeccion');
+  // el periodo 08 se cobra el mes siguiente, primer dia habil
+  const conJulio = calendarioDeIngresos(HISTORIA.slice(0, 3), { meses: 1, diaCobro: 1 });
+  igual(conJulio.find(x => x.concepto === 'Sueldo').periodo, '2026-08');
+  igual(conJulio.find(x => x.concepto === 'Sueldo').fecha, '2026-09-01');
+});
+t('cuatro periodos, cuatro fechas de cobro correctas', () => {
+  // 05->01/06 lunes · 06->01/07 miercoles · 07->03/08 (el 1 fue sabado) · 08->01/09 martes
+  const esperado = { '2026-05': '2026-06-01', '2026-06': '2026-07-01',
+                     '2026-07': '2026-08-03', '2026-08': '2026-09-01' };
+  for (const [per, fecha] of Object.entries(esperado)) {
+    const previos = HISTORIA.filter(r => r.periodo < per);
+    if (!previos.length) continue;
+    const c = calendarioDeIngresos(previos, { meses: 1, diaCobro: 1 });
+    const s = c.find(x => x.concepto === 'Sueldo');
+    igual(s.periodo, per);
+    igual(s.fecha, fecha, `periodo ${per}`);
+  }
+});
+t('lo que entra de verdad es banco mas sobre', () => {
+  const c = calendarioDeIngresos(HISTORIA.slice(0, 3), { meses: 1, diaCobro: 1,
+                                                         sobre: 1532000, sobreDesde: '2026-07',
+                                                         juntos: true });
+  const s = c.find(x => x.concepto === 'Sueldo');
+  if (s.monto < 3000000) throw new Error('el sobre tiene que estar sumado, dio ' + s.monto);
+  igual(s.via, 'mixto');
+});
+
 console.log(`\n${ok} pruebas OK${fallo ? `, ${fallo} FALLAN` : ''}\n`);
 process.exit(fallo ? 1 : 0);
