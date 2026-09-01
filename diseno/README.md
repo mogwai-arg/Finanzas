@@ -79,6 +79,32 @@ celular, ni en iOS ni en Android. "Que llegue igual que la notificación del
 banco" se resuelve por el lado del mail con `watch()`, no interceptando la
 notificación. La diferencia real es de segundos.
 
+### Tres tarjetas, dos ciclos: por eso "¿con qué pago?" vale
+
+| Tarjeta | Cierra | Vence | Límite |
+|---|---|---|---|
+| Galicia Visa ·9817 | 27/08 → 01/10 | 04/09 → 09/10 | $7.000.000 |
+| Galicia Mastercard | 27/08 → 01/10 | 04/09 → 09/10 | $7.000.000 |
+| Mercado Pago | **05/09** → 05/10 | por confirmar | $2.555.000 |
+
+Con dos ciclos distintos, **la misma compra cambia de mes según la tarjeta**:
+
+- Compra el **4 de septiembre**: Galicia cierra el 1/10 y vence el 9/10 (35 días
+  de aire). Mercado Pago cierra al día siguiente (24 días menos).
+- Compra el **6 de septiembre**: se da vuelta. Mercado Pago ya cerró y pasa a
+  octubre; ahora es la que más aire da.
+
+Dos días de diferencia en la fecha de compra valen casi un mes de financiación.
+Eso no se puede calcular de cabeza, y es exactamente lo que resuelve la pantalla.
+
+### Límite consumido ≠ próximo resumen
+
+La app de Mercado Pago lo muestra al lado: **límite consumido $595.729** contra
+un **próximo resumen de $394.463**. Los $201.266 de diferencia son cuotas de
+meses siguientes que ya tienen el límite tomado. `limiteDeTarjeta()` cuenta
+todas las cuotas pendientes, no sólo el resumen en curso.
+
+
 ### Validado contra el banco
 
 El extracto de Galicia dice: **"Acreditamiento de haberes · 01/09/26 · $2.026.665,38"**.

@@ -203,4 +203,87 @@ t('proximoCiclo dice si la fecha es del banco o estimada', () => {
 });
 
 
+// ---------------------------------------------------------------------
+// LIMITE Y FINANCIACION
+// Tres tarjetas reales: las dos de Galicia cierran el 27, Mercado Pago el 5.
+// ---------------------------------------------------------------------
+console.log('\nLIMITE Y FINANCIACION');
+
+const MP = {
+  id: 'mp', tipo: 'credito', nombre: 'Mercado Pago', limite: 2555000,
+  cierre_dia: 5, vencimiento_dia: 15,
+  ciclos: [{ cierre: '2026-09-05', vence: '2026-09-15' },
+           { cierre: '2026-10-05', vence: '2026-10-15' }]
+};
+const TARJETAS = [GALICIA, { ...GALICIA, id: 'g2', nombre: 'Mastercard' }, MP];
+
+t('el limite consumido incluye las cuotas que todavia no vencieron', () => {
+  const txs = [
+    // una compra en 3 cuotas de 100.000: las 3 toman limite
+    { id: '1', account_id: 'mp', tipo: 'gasto', moneda: 'ARS',
+      fecha: '2026-09-02', monto: 300000, cuotas: 3 }
+  ];
+  const l = F.limiteDeTarjeta(MP, txs, d('2026-09-03'));
+  assert.equal(l.consumido, 300000);
+  assert.equal(l.disponible, 2255000);
+});
+t('lo ya vencido deja de tomar limite', () => {
+  const txs = [{ id: '1', account_id: 'mp', tipo: 'gasto', moneda: 'ARS',
+                 fecha: '2026-09-02', monto: 300000, cuotas: 3 }];
+  // pasado el vencimiento de la primera cuota quedan dos
+  const l = F.limiteDeTarjeta(MP, txs, d('2026-09-20'));
+  assert.equal(l.consumido, 200000);
+});
+t('los consumos de otra tarjeta no cuentan', () => {
+  const txs = [{ id: '1', account_id: 'g', tipo: 'gasto', moneda: 'ARS',
+                 fecha: '2026-09-02', monto: 300000, cuotas: 1 }];
+  assert.equal(F.limiteDeTarjeta(MP, txs, d('2026-09-03')).consumido, 0);
+});
+t('los ingresos no consumen limite', () => {
+  const txs = [{ id: '1', account_id: 'mp', tipo: 'ingreso', moneda: 'ARS',
+                 fecha: '2026-09-02', monto: 300000, cuotas: 1 }];
+  assert.equal(F.limiteDeTarjeta(MP, txs, d('2026-09-03')).consumido, 0);
+});
+t('sin limite cargado no divide por cero', () => {
+  const l = F.limiteDeTarjeta({ ...MP, limite: null }, [], d('2026-09-03'));
+  assert.equal(l.usado, 0);
+});
+
+t('una compra del 4 de septiembre: Galicia da un mes mas de aire', () => {
+  const f = F.financiacion(d('2026-09-04'), TARJETAS);
+  assert.equal(f[0].tarjeta.id === 'g' || f[0].tarjeta.id === 'g2', true);
+  assert.equal(F.fechaISO(f[0].vence), '2026-10-09');
+  const mp = f.find(x => x.tarjeta.id === 'mp');
+  assert.equal(F.fechaISO(mp.vence), '2026-09-15');   // cierra al dia siguiente
+  assert.equal(f[0].diasDeAire - mp.diasDeAire, 24);
+});
+t('una compra del 6 de septiembre: se da vuelta', () => {
+  const f = F.financiacion(d('2026-09-06'), TARJETAS);
+  const gal = f.find(x => x.tarjeta.id === 'g');
+  const mp = f.find(x => x.tarjeta.id === 'mp');
+  // MP ya cerro el 5, asi que cae en el resumen de octubre
+  assert.equal(F.fechaISO(mp.vence), '2026-10-15');
+  assert.equal(F.fechaISO(gal.vence), '2026-10-09');
+  assert.equal(mp.diasDeAire > gal.diasDeAire, true);
+});
+t('viene ordenado de mas a menos dias de aire', () => {
+  const f = F.financiacion(d('2026-09-06'), TARJETAS);
+  for (let i = 1; i < f.length; i++)
+    assert.equal(f[i - 1].diasDeAire >= f[i].diasDeAire, true);
+});
+t('las cuentas que no son credito quedan afuera', () => {
+  const f = F.financiacion(d('2026-09-06'),
+    [...TARJETAS, { id: 'ef', tipo: 'efectivo' }, { id: 'db', tipo: 'debito' }]);
+  assert.equal(f.length, 3);
+});
+t('una tarjeta dada de baja tampoco aparece', () => {
+  const f = F.financiacion(d('2026-09-06'), [...TARJETAS, { id: 'x', tipo: 'credito', activo: false }]);
+  assert.equal(f.length, 3);
+});
+t('avisa cuando la fecha sale de los ciclos declarados', () => {
+  const f = F.financiacion(d('2027-03-10'), TARJETAS);
+  assert.equal(f.every(x => x.declarado === false), true);
+});
+
+
 console.log(`\n${ok} pruebas OK`);

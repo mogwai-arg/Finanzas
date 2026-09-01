@@ -180,6 +180,53 @@ export function deudaFutura(txs, tarjetas, moneda = 'ARS', ref = hoy(), meses = 
   return out;
 }
 
+
+// ---------------------------------------------------------------------
+// LIMITE Y FINANCIACION
+// ---------------------------------------------------------------------
+
+/**
+ * Limite consumido y disponible de una tarjeta.
+ *
+ * "Consumido" no es el proximo resumen: incluye TODAS las cuotas que todavia
+ * no vencieron. En la app de Mercado Pago se ve la diferencia — limite
+ * consumido $595.729 contra un proximo resumen de $394.463: los $201.266 de
+ * mas son cuotas de meses siguientes que ya tienen el limite tomado.
+ */
+export function limiteDeTarjeta(tarjeta, txs, ref = hoy(), moneda = 'ARS') {
+  const limite = Number(tarjeta.limite) || 0;
+  let consumido = 0;
+  for (const tx of txs) {
+    if (tx.account_id !== tarjeta.id || tx.tipo !== 'gasto' || tx.moneda !== moneda) continue;
+    for (const c of cronograma(tx, tarjeta, ref)) if (c.pendiente) consumido += c.monto;
+  }
+  consumido = round2(consumido);
+  return { limite, consumido, disponible: round2(limite - consumido),
+           usado: limite > 0 ? Math.round((consumido / limite) * 100) : 0 };
+}
+
+/**
+ * Cuantos dias de aire da cada tarjeta para una compra hecha hoy.
+ *
+ * Es el motor de "¿con que pago?". Con tarjetas de ciclos distintos la
+ * diferencia es enorme: las de Galicia cierran el 27 y Mercado Pago el 5, asi
+ * que una compra del 4 de septiembre entra en el resumen de Mercado Pago que
+ * cierra al dia siguiente, y en el de Galicia recien el 1 de octubre. Un mes
+ * de financiacion depende de con cual pagues.
+ *
+ * Devuelve las tarjetas ordenadas de mas a menos dias de aire.
+ */
+export function financiacion(fecha, tarjetas) {
+  return tarjetas
+    .filter(t => t.tipo === 'credito' && t.activo !== false)
+    .map(t => {
+      const c = cicloDeCompra(fecha, t);
+      return { tarjeta: t, cierre: c.cierre, vence: c.vence, declarado: c.declarado,
+               diasDeAire: dias(fecha, c.vence) };
+    })
+    .sort((a, b) => b.diasDeAire - a.diasDeAire);
+}
+
 // ---------------------------------------------------------------------
 // MES CORRIENTE
 // ---------------------------------------------------------------------
