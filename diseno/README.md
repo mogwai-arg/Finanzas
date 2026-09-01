@@ -1,10 +1,10 @@
 # BISHUSHA — diseño y hoja de ruta
 
-Estado al 01/09/2026. Segundo pase de diseño, sin implementar todavía.
+Estado al 01/09/2026. Tercer pase de diseño, sin implementar todavía.
 
 - **Sistema visual completo:** [`sistema-de-diseno.html`](sistema-de-diseno.html) — abrilo en el navegador.
-  Logo, tokens, ocho pantallas en claro y oscuro, auditoría del código actual y
-  comparación con siete apps de referencia.
+  Logo, tokens, doce pantallas en claro y oscuro, cuatro acentos a elegir,
+  auditoría del código actual y comparación con diez apps de referencia.
 - **Tokens listos para usar:** [`../css/tokens.css`](../css/tokens.css)
 - **Marca:** [`../marca/`](../marca/)
 
@@ -16,12 +16,46 @@ Estado al 01/09/2026. Segundo pase de diseño, sin implementar todavía.
 |---|---|---|
 | Estética | iOS nativo: título grande, listas agrupadas, tipografía del sistema | Es el aparato donde la vas a usar. Jakob's law: lo que ya sabés usar |
 | Color | Gris y blanco. Verde, ámbar y rojo solo con significado | Si algo tiene color, es porque hay que mirarlo |
-| Acento | Índigo `#4B41D8`, ~5 % de los píxeles | Único color con personalidad. Es reemplazable por tinta sin romper nada |
+| Acento | **Sin definir.** Cuatro candidatos en el comparador; recomendado: petróleo `#0D5470` | El índigo está tomado por Copilot y media industria cripto |
 | Íconos | Trazo plano de 1.85, sin emojis | Los emojis rompen el registro iOS y cambian de dibujo según el aparato |
 | Tipografía | La del sistema (SF Pro), seis tamaños | Una app de plata que espera una fuente web se siente lenta antes de mostrar un número |
 | Navegación | Hoy · Gastos · **+** · Tarjetas · Promos | Cuatro destinos y el alta en el centro, donde llega el pulgar |
-| Monedas | Control segmentado Pesos / Dólares. No se suman | Se mantiene la decisión original: nada de conversión automática silenciosa |
+| Monedas | Control segmentado Pesos / Dólares, ocultables con el ícono de ojo. No se suman | Se mantiene la decisión original: nada de conversión automática silenciosa |
 | Oscuro | Paleta propia, no el claro invertido | Un índigo saturado vibra sobre negro |
+
+### Presupuesto sin verde ni rojo
+
+El dato más importante de toda la investigación: **el 67 % de la gente abandona
+una app de gastos antes de los 30 días**, y una de las causas es el ciclo de
+culpa. Verde cuando cumplís y rojo cuando te pasás hace que el usuario se
+autodefina como "malo con la plata" y se desenganche a los dos o tres meses de
+tablero rojo.
+
+Por eso las barras de presupuesto van en **tinta para el avance y ámbar para el
+exceso**, con una acción al lado — *"$ 31.000 de más · mover de Entretenimiento"* —
+en vez de un veredicto. Verde y rojo quedan reservados para hechos: plata que
+entró, una factura vencida. Nunca para calificar cómo gastás.
+
+La otra causa es la que más riesgo tiene acá: **una de cada tres conexiones
+bancarias pide reautorizar antes de los 90 días, y cuando se rompe el 68 %
+abandona en vez de reconectar**. El permiso de Gmail de esta app, en modo prueba
+de Google, se cae **cada 7 días**. Por eso el aviso de reconexión es un bloque
+de primer nivel en la pantalla principal, con un botón de un tap, y no un
+renglón perdido en Ajustes.
+
+### Velocidad de ingesta
+
+| Vía | Latencia | Estado |
+|---|---|---|
+| `gmail-sync` cada 30 min (hoy) | hasta 30 min | funciona |
+| Gmail `users.watch()` + Cloud Pub/Sub → Edge Function | **segundos** | a implementar |
+| Webhooks de Mercado Pago | instantáneo | refuerzo, el mail queda de respaldo |
+| Personal Pay | solo mail | no tiene API pública |
+
+**Límite duro:** una PWA no puede leer las notificaciones de otras apps del
+celular, ni en iOS ni en Android. "Que llegue igual que la notificación del
+banco" se resuelve por el lado del mail con `watch()`, no interceptando la
+notificación. La diferencia real es de segundos.
 
 ## Lo que hay que arreglar del código actual
 
@@ -70,11 +104,16 @@ reglas            -- + condiciones compuestas: comercio + rango de monto + cuent
 
 ### 3 — Argentina
 - [ ] **Cotización en vivo** desde `dolarapi.com` (gratis, sin clave).
+- [ ] **Ingreso aprendido, no cargado.** Paritarias todos los meses: la app calcula el sueldo de lo que ya entró, proyecta el próximo con el ritmo de los últimos aumentos, separa banco de sobre y anticipa el aguinaldo.
+- [ ] **Dónde está la plata.** Saldo por lugar — Galicia, Mercado Pago, Personal Pay, efectivo, Wallbit, billete — porque con seis lugares el total no te dice si podés pagar algo mañana.
+- [ ] **Gmail `users.watch()` + Pub/Sub** para bajar la ingesta de 30 minutos a segundos.
+- [ ] **Aviso de reconexión** de primer nivel cuando Google corta el permiso.
 - [ ] **Comparación en moneda constante.** Comparar pesos nominales mes a mes miente.
 - [ ] **Deduplicar MODO ↔ banco.** Un pago con MODO sobre tarjeta Galicia manda dos mails; el índice único por `externo_id` no lo agarra. Hace falta match difuso por monto + fecha ±2 d + últimos 4.
 
 ### 4 — Que no la abandones
-- [ ] **PIN o biometría** al abrir, y botón de ocultar montos.
+- [x] **Ocultar montos con el ícono de ojo** — diseñado. Se tapan los números, no la interfaz.
+- [ ] **PIN o biometría** al abrir.
 - [ ] **Buscador y filtros combinados** en Gastos.
 - [ ] **Widget de pantalla de inicio** con el número del mes.
 - [ ] **Exportar a CSV** además del JSON que ya está.

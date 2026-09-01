@@ -329,9 +329,13 @@ a{color:var(--brand)}
 .bud .n{font-size:14.5px;font-weight:500;letter-spacing:-.012em}
 .bud .q{font-size:13px;color:var(--ap-tx2);font-variant-numeric:tabular-nums}
 .bud .q b{color:var(--ap-tx);font-weight:600}
-.mini{height:6px;border-radius:99px;background:var(--ap-fill);margin-top:7px;overflow:hidden}
-.mini b{display:block;height:100%;border-radius:99px;background:var(--ap-tx2)}
-.mini b.ok{background:var(--ap-pos)} .mini b.al{background:var(--ap-amb)} .mini b.ex{background:var(--ap-neg)}
+.mini{display:flex;gap:2px;height:6px;border-radius:99px;background:var(--ap-fill);
+      margin-top:7px;overflow:hidden}
+.mini b{height:100%;border-radius:99px;background:var(--ap-tx2)}
+.mini b.ok{background:var(--ap-tx2)} .mini b.al{background:var(--ap-tx)}
+.mini s{height:100%;border-radius:99px;background:var(--ap-amb);text-decoration:none}
+.budact{display:flex;align-items:center;gap:5px;font-size:12.5px;color:var(--ap-amb);
+        font-weight:600;margin-top:7px}
 
 /* promos */
 .promo{background:var(--ap-card);border-radius:16px;padding:14px}
@@ -364,6 +368,37 @@ a{color:var(--brand)}
 .empty p{font-size:14px;color:var(--ap-tx2);max-width:30ch;line-height:1.45}
 .empty button{border:0;font:inherit;font-size:15px;font-weight:600;background:var(--ap-tx);color:var(--ap-bg);
   padding:11px 20px;border-radius:12px;margin-top:4px}
+
+
+/* acentos candidatos — el comparador los aplica por atributo */
+.scr[data-acc="tinta"]    {--ap-brand:#14161C;--ap-brand-bg:#E7E8EE}
+.scr[data-acc="petroleo"] {--ap-brand:#0D5470;--ap-brand-bg:#E1EDF3}
+.scr[data-acc="ciruela"]  {--ap-brand:#7D2B52;--ap-brand-bg:#F8E7EF}
+.scr[data-acc="berenjena"]{--ap-brand:#4A2D5C;--ap-brand-bg:#F0E9F4}
+.scr[data-app="dark"][data-acc="tinta"]    {--ap-brand:#F2F3F7;--ap-brand-bg:#262932}
+.scr[data-app="dark"][data-acc="petroleo"] {--ap-brand:#59B8D6;--ap-brand-bg:#102C36}
+.scr[data-app="dark"][data-acc="ciruela"]  {--ap-brand:#E0729E;--ap-brand-bg:#331520}
+.scr[data-app="dark"][data-acc="berenjena"]{--ap-brand:#B892CE;--ap-brand-bg:#241A2B}
+.scr.mini{height:348px;border-radius:24px}
+.scr.mini .nav{padding:20px 16px 10px}
+.scr.mini .nav h1{font-size:25px}
+.scr.mini .hero-mes{padding:15px}
+.scr.mini .hero-mes .big{font-size:30px}
+.scr.mini .flow{gap:13px}
+.scr.mini:has(.tabs) .flow{padding-bottom:72px}
+.scr.mini .tabs{left:9px;right:9px;bottom:9px;padding:7px 4px;border-radius:23px}
+.scr.mini .tab{font-size:9.5px;gap:2px}
+/* montos ocultos */
+.oculto{filter:blur(7px);opacity:.62;user-select:none}
+
+
+.accgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(268px,1fr));gap:22px;margin-top:30px}
+.accbox{display:flex;flex-direction:column;gap:12px}
+.accmeta .accn{display:flex;align-items:center;gap:8px;font-family:var(--f-disp);font-size:16px;font-weight:700;letter-spacing:-.02em}
+.accmeta .accn code{margin-left:auto;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11.5px;
+  font-weight:400;color:var(--ink3);letter-spacing:0}
+.accdot{width:13px;height:13px;border-radius:50%;flex:none;box-shadow:0 0 0 1px rgba(128,128,128,.28)}
+.accmeta p{font-size:13.5px;color:var(--ink2);line-height:1.5;margin-top:6px}
 
 /* ============================================================
    TABLAS / listas de la spec
@@ -408,7 +443,7 @@ ol.steps p{font-size:14.5px;color:var(--ink2);line-height:1.5;max-width:60ch}
 }
 </style>
 
-<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><defs><symbol id="i-cart" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><circle cx="9.2" cy="20" r="1.4"/><circle cx="18" cy="20" r="1.4"/><path d="M2.6 3.2h2.3l2.4 11.3a1.9 1.9 0 0 0 1.9 1.5h8.6a1.9 1.9 0 0 0 1.8-1.4L21.2 7H6.1"/></g></symbol><symbol id="i-card" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="5" width="19" height="14" rx="2.6"/><path d="M2.5 9.8h19"/><path d="M6 15.2h3.4"/></g></symbol><symbol id="i-school" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.2 22 8l-10 4.8L2 8l10-4.8Z"/><path d="M6.2 10.4V16c0 1.7 2.6 3 5.8 3s5.8-1.3 5.8-3v-5.6"/><path d="M22 8v5.4"/></g></symbol><symbol id="i-health" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M9.6 3.2h4.8v6.4h6.4v4.8h-6.4v6.4H9.6v-6.4H3.2V9.6h6.4Z"/></g></symbol><symbol id="i-pill" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M17.4 3.6a4.9 4.9 0 0 1 0 6.9l-6.9 6.9a4.9 4.9 0 0 1-6.9-6.9l6.9-6.9a4.9 4.9 0 0 1 6.9 0Z"/><path d="m7.1 7.1 6.9 6.9"/></g></symbol><symbol id="i-car" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M3.1 12.4 5 7.1a2 2 0 0 1 1.9-1.3h10.2A2 2 0 0 1 19 7.1l1.9 5.3"/><rect x="2.5" y="12.4" width="19" height="5.6" rx="2.1"/><path d="M6.9 15.2h.01M17.1 15.2h.01"/><path d="M5.4 18v1.9M18.6 18v1.9"/></g></symbol><symbol id="i-fuel" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M3.6 20.6h10.6M4.7 20.6V5.2a2 2 0 0 1 2-2h5.2a2 2 0 0 1 2 2v15.4"/><path d="M4.7 11.2h9.2"/><path d="M13.9 8.4h2.9a1.9 1.9 0 0 1 1.9 1.9v5.4a1.7 1.7 0 0 0 3.4 0V9.4l-2.2-2.7"/></g></symbol><symbol id="i-music" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M9.3 17.6V5.4l10.4-1.9v12.2"/><circle cx="6.6" cy="17.8" r="2.7"/><circle cx="17" cy="15.7" r="2.7"/></g></symbol><symbol id="i-cash" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="5.6" width="19" height="12.8" rx="2.4"/><circle cx="12" cy="12" r="2.7"/><path d="M6.2 12h.01M17.8 12h.01"/></g></symbol><symbol id="i-phone" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><rect x="6.6" y="2.5" width="10.8" height="19" rx="2.7"/><path d="M10.6 18.6h2.8"/></g></symbol><symbol id="i-plane" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.6c.9 0 1.6.8 1.6 1.8v4.4l7.5 4.3v2.2l-7.5-2.2v4.3l2.3 1.6v1.6L12 19.7l-3.9.9v-1.6l2.3-1.6v-4.3l-7.5 2.2v-2.2l7.5-4.3V4.4c0-1 .7-1.8 1.6-1.8Z"/></g></symbol><symbol id="i-sofa" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M3.6 11.4V8.6a2 2 0 0 1 2-2h12.8a2 2 0 0 1 2 2v2.8"/><path d="M20.4 11.4a2 2 0 0 0-2 2v2.2H5.6v-2.2a2 2 0 1 0-4 0v4.6a1.5 1.5 0 0 0 1.5 1.5h17.8a1.5 1.5 0 0 0 1.5-1.5v-4.6a2 2 0 0 0-2-2Z"/></g></symbol><symbol id="i-spark" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M10.4 2.8 12.2 7.6 17 9.4l-4.8 1.8-1.8 4.8-1.8-4.8L3.8 9.4l4.8-1.8Z"/><path d="M18.4 15.2l.9 2.3 2.3.9-2.3.9-.9 2.3-.9-2.3-2.3-.9 2.3-.9Z"/></g></symbol><symbol id="i-cloud" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M17.4 19.2a4.6 4.6 0 0 0 .6-9.1 6.6 6.6 0 0 0-12.5 1.4 3.9 3.9 0 0 0 .8 7.7Z"/></g></symbol><symbol id="i-play" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="3.8" width="19" height="13.4" rx="2.4"/><path d="M8.2 21.2h7.6"/><path d="m10.6 8.4 4.4 2.5-4.4 2.5Z"/></g></symbol><symbol id="i-modo" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><rect x="3.4" y="2.5" width="9.6" height="19" rx="2.5"/><path d="M7 18.6h2.4"/><path d="M16.6 8.6a4.8 4.8 0 0 1 0 6.8M19.6 5.9a8.8 8.8 0 0 1 0 12.2"/></g></symbol><symbol id="i-food" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M6.2 2.6v6.8a2.6 2.6 0 0 0 5.2 0V2.6M8.8 12v9.4"/><path d="M17.4 2.6c-1.8 1-2.7 3.1-2.7 5.7s.9 4.2 2.7 4.7v8.4"/></g></symbol><symbol id="i-check" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6.4 9.2 17.2 4 12"/></g></symbol><symbol id="i-close" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6 6 18"/></g></symbol><symbol id="i-up" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5"/><path d="m6 11 6-6 6 6"/></g></symbol></defs></svg>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><defs><symbol id="i-cart" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><circle cx="9.2" cy="20" r="1.4"/><circle cx="18" cy="20" r="1.4"/><path d="M2.6 3.2h2.3l2.4 11.3a1.9 1.9 0 0 0 1.9 1.5h8.6a1.9 1.9 0 0 0 1.8-1.4L21.2 7H6.1"/></g></symbol><symbol id="i-card" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="5" width="19" height="14" rx="2.6"/><path d="M2.5 9.8h19"/><path d="M6 15.2h3.4"/></g></symbol><symbol id="i-school" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.2 22 8l-10 4.8L2 8l10-4.8Z"/><path d="M6.2 10.4V16c0 1.7 2.6 3 5.8 3s5.8-1.3 5.8-3v-5.6"/><path d="M22 8v5.4"/></g></symbol><symbol id="i-health" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M9.6 3.2h4.8v6.4h6.4v4.8h-6.4v6.4H9.6v-6.4H3.2V9.6h6.4Z"/></g></symbol><symbol id="i-pill" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M17.4 3.6a4.9 4.9 0 0 1 0 6.9l-6.9 6.9a4.9 4.9 0 0 1-6.9-6.9l6.9-6.9a4.9 4.9 0 0 1 6.9 0Z"/><path d="m7.1 7.1 6.9 6.9"/></g></symbol><symbol id="i-car" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M3.1 12.4 5 7.1a2 2 0 0 1 1.9-1.3h10.2A2 2 0 0 1 19 7.1l1.9 5.3"/><rect x="2.5" y="12.4" width="19" height="5.6" rx="2.1"/><path d="M6.9 15.2h.01M17.1 15.2h.01"/><path d="M5.4 18v1.9M18.6 18v1.9"/></g></symbol><symbol id="i-fuel" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M3.6 20.6h10.6M4.7 20.6V5.2a2 2 0 0 1 2-2h5.2a2 2 0 0 1 2 2v15.4"/><path d="M4.7 11.2h9.2"/><path d="M13.9 8.4h2.9a1.9 1.9 0 0 1 1.9 1.9v5.4a1.7 1.7 0 0 0 3.4 0V9.4l-2.2-2.7"/></g></symbol><symbol id="i-music" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M9.3 17.6V5.4l10.4-1.9v12.2"/><circle cx="6.6" cy="17.8" r="2.7"/><circle cx="17" cy="15.7" r="2.7"/></g></symbol><symbol id="i-cash" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="5.6" width="19" height="12.8" rx="2.4"/><circle cx="12" cy="12" r="2.7"/><path d="M6.2 12h.01M17.8 12h.01"/></g></symbol><symbol id="i-phone" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><rect x="6.6" y="2.5" width="10.8" height="19" rx="2.7"/><path d="M10.6 18.6h2.8"/></g></symbol><symbol id="i-plane" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.6c.9 0 1.6.8 1.6 1.8v4.4l7.5 4.3v2.2l-7.5-2.2v4.3l2.3 1.6v1.6L12 19.7l-3.9.9v-1.6l2.3-1.6v-4.3l-7.5 2.2v-2.2l7.5-4.3V4.4c0-1 .7-1.8 1.6-1.8Z"/></g></symbol><symbol id="i-sofa" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M3.6 11.4V8.6a2 2 0 0 1 2-2h12.8a2 2 0 0 1 2 2v2.8"/><path d="M20.4 11.4a2 2 0 0 0-2 2v2.2H5.6v-2.2a2 2 0 1 0-4 0v4.6a1.5 1.5 0 0 0 1.5 1.5h17.8a1.5 1.5 0 0 0 1.5-1.5v-4.6a2 2 0 0 0-2-2Z"/></g></symbol><symbol id="i-spark" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M10.4 2.8 12.2 7.6 17 9.4l-4.8 1.8-1.8 4.8-1.8-4.8L3.8 9.4l4.8-1.8Z"/><path d="M18.4 15.2l.9 2.3 2.3.9-2.3.9-.9 2.3-.9-2.3-2.3-.9 2.3-.9Z"/></g></symbol><symbol id="i-cloud" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M17.4 19.2a4.6 4.6 0 0 0 .6-9.1 6.6 6.6 0 0 0-12.5 1.4 3.9 3.9 0 0 0 .8 7.7Z"/></g></symbol><symbol id="i-play" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="3.8" width="19" height="13.4" rx="2.4"/><path d="M8.2 21.2h7.6"/><path d="m10.6 8.4 4.4 2.5-4.4 2.5Z"/></g></symbol><symbol id="i-modo" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><rect x="3.4" y="2.5" width="9.6" height="19" rx="2.5"/><path d="M7 18.6h2.4"/><path d="M16.6 8.6a4.8 4.8 0 0 1 0 6.8M19.6 5.9a8.8 8.8 0 0 1 0 12.2"/></g></symbol><symbol id="i-food" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M6.2 2.6v6.8a2.6 2.6 0 0 0 5.2 0V2.6M8.8 12v9.4"/><path d="M17.4 2.6c-1.8 1-2.7 3.1-2.7 5.7s.9 4.2 2.7 4.7v8.4"/></g></symbol><symbol id="i-check" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6.4 9.2 17.2 4 12"/></g></symbol><symbol id="i-close" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6 6 18"/></g></symbol><symbol id="i-up" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5"/><path d="m6 11 6-6 6 6"/></g></symbol><symbol id="i-eye" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.6-6.4 10-6.4S22 12 22 12s-3.6 6.4-10 6.4S2 12 2 12Z"/><circle cx="12" cy="12" r="2.9"/></g></symbol><symbol id="i-eyeoff" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M9.6 5.9A9.8 9.8 0 0 1 12 5.6c6.4 0 10 6.4 10 6.4a17.6 17.6 0 0 1-3.3 4.1M6 7.1A17.4 17.4 0 0 0 2 12s3.6 6.4 10 6.4a9.9 9.9 0 0 0 3.4-.6"/><path d="M10 10a2.9 2.9 0 0 0 4 4"/><path d="m3 3 18 18"/></g></symbol><symbol id="i-bank" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9.6 12 4l9 5.6"/><path d="M4.6 9.6v8.8M9.5 9.6v8.8M14.5 9.6v8.8M19.4 9.6v8.8"/><path d="M2.6 18.4h18.8M2.6 21h18.8"/></g></symbol><symbol id="i-wallet" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M20.4 7.4V6a2 2 0 0 0-2-2H4.8a2.2 2.2 0 0 0 0 4.4h15.6a1.6 1.6 0 0 1 1.6 1.6v8a2 2 0 0 1-2 2H4.6a2 2 0 0 1-2-2V6.2"/><path d="M17.6 13.2h.01"/></g></symbol><symbol id="i-sobre" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="4.6" width="19" height="14.8" rx="2.2"/><path d="m3.4 6.4 8.6 6 8.6-6"/></g></symbol><symbol id="i-recibo" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M5 2.6h14v18.8l-2.8-1.8-2.8 1.8-2.8-1.8-2.8 1.8L5 19.6Z"/><path d="M8.6 7.6h6.8M8.6 12h6.8"/></g></symbol><symbol id="i-bolt" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M13.4 2.4 4 13.6h6.6L10.6 21.6 20 10.4h-6.6Z"/></g></symbol><symbol id="i-coins" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="6.2" rx="8.4" ry="3.6"/><path d="M3.6 6.2v5.6c0 2 3.8 3.6 8.4 3.6s8.4-1.6 8.4-3.6V6.2"/><path d="M3.6 11.8v5.6c0 2 3.8 3.6 8.4 3.6s8.4-1.6 8.4-3.6v-5.6"/></g></symbol><symbol id="i-trend" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M2.8 17.2 9 11l4 4 8.2-8.2"/><path d="M15.4 6.8h5.8v5.8"/></g></symbol></defs></svg>
 
 <div class="wrap">
 
@@ -422,9 +457,9 @@ ol.steps p{font-size:14.5px;color:var(--ink2);line-height:1.5;max-width:60ch}
   </div>
   <p class="tag">Sistema de diseño y arquitectura de pantallas para una PWA de finanzas personales. Cobrás en dólares, gastás en pesos, pagás en cuotas — <b>y anotás lo menos posible.</b></p>
   <div class="meta">
-    <span>Segundo pase · 01/09/2026</span>
+    <span>Tercer pase · 01/09/2026</span>
     <span>iOS-nativo, mobile-first</span>
-    <span>Claro y oscuro</span>
+    <span>12 pantallas · claro y oscuro</span>
     <span>390 × 844 pt</span>
   </div>
 </header>
@@ -639,7 +674,12 @@ ol.steps p{font-size:14.5px;color:var(--ink2);line-height:1.5;max-width:60ch}
                 <span class="pill bra">Gmail</span>
               </div>
               <div class="amt">$ 48.200</div>
-              <div class="meta">1 pago · leído del aviso de consumo</div>
+              <div class="meta">leído del aviso de consumo de Galicia</div>
+
+              <div style="font-size:12px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--ap-tx2);margin-top:16px">En cuántas cuotas</div>
+              <div class="catpick" style="margin-top:8px">
+                <b class="on">1 pago</b><b>3</b><b>6</b><b>12</b><b>Otra</b>
+              </div>
 
               <div style="margin-top:16px;padding:12px 13px;background:var(--ap-pos-bg);border-radius:13px;display:flex;gap:9px;align-items:flex-start">
                 <svg width="17" height="17" style="flex:none;margin-top:1px;color:var(--ap-pos)"><use href="#i-check"/></svg>
@@ -891,7 +931,7 @@ ol.steps p{font-size:14.5px;color:var(--ink2);line-height:1.5;max-width:60ch}
             </div>
             <div class="capbar">
               <div class="cl"><span>Tope del mes</span><span><b>$ 12.400</b> de $ 20.000</span></div>
-              <div class="mini"><b class="al" style="width:62%"></b></div>
+              <div class="mini"><b class="al" style="flex:62"></b></div>
             </div>
           </div>
 
@@ -909,7 +949,7 @@ ol.steps p{font-size:14.5px;color:var(--ink2);line-height:1.5;max-width:60ch}
             </div>
             <div class="capbar">
               <div class="cl"><span>Tope del mes</span><span><b>$ 0</b> de $ 8.000</span></div>
-              <div class="mini"><b class="ok" style="width:2%"></b></div>
+              <div class="mini"><b class="ok" style="flex:2"></b></div>
             </div>
           </div>
 
@@ -1054,9 +1094,13 @@ ol.steps p{font-size:14.5px;color:var(--ink2);line-height:1.5;max-width:60ch}
           <div>
             <div class="ghead">Presupuesto</div>
             <div class="grp">
-              <div class="bud"><div class="r"><span class="n">Supermercado</span><span class="q"><b>$ 186.400</b> de 240.000</span></div><div class="mini"><b class="ok" style="width:78%"></b></div></div>
-              <div class="bud"><div class="r"><span class="n">Gastronomía</span><span class="q"><b>$ 112.900</b> de 120.000</span></div><div class="mini"><b class="al" style="width:94%"></b></div></div>
-              <div class="bud"><div class="r"><span class="n">Combustible</span><span class="q"><b>$ 141.000</b> de 110.000</span></div><div class="mini"><b class="ex" style="width:100%"></b></div></div>
+              <div class="bud"><div class="r"><span class="n">Supermercado</span><span class="q"><b>$ 186.400</b> de 240.000</span></div><div class="mini"><b class="ok" style="flex:78"></b></div></div>
+              <div class="bud"><div class="r"><span class="n">Gastronomía</span><span class="q"><b>$ 112.900</b> de 120.000</span></div><div class="mini"><b class="al" style="flex:94"></b></div></div>
+              <div class="bud"><div class="r"><span class="n">Combustible</span><span class="q"><b>$ 141.000</b> de 110.000</span></div>
+                <div class="mini"><b class="al" style="flex:78"></b><s style="flex:22"></s></div>
+                <div class="budact">$ 31.000 de más · mover de Entretenimiento
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="m9 18 6-6-6-6"/></svg></div>
+              </div>
             </div>
           </div>
         </div>
@@ -1095,6 +1139,18 @@ ol.steps p{font-size:14.5px;color:var(--ink2);line-height:1.5;max-width:60ch}
           </div>
 
           <div style="margin-top:6px">
+            <div class="ghead">Se cortó la lectura de mails</div>
+            <div class="grp pad" style="display:flex;gap:11px;align-items:flex-start;box-shadow:0 0 0 1.5px var(--ap-amb)">
+              <svg width="19" height="19" style="flex:none;margin-top:1px;color:var(--ap-amb)"><use href="#i-bolt"/></svg>
+              <div style="flex:1">
+                <div style="font-weight:600;font-size:14.5px;letter-spacing:-.015em">Google cortó el permiso hace 4 días</div>
+                <div style="font-size:13px;color:var(--ap-tx2);margin-top:3px;line-height:1.42">Puede haber consumos de Galicia y Mercado Pago sin cargar desde el martes.</div>
+                <button style="border:0;font:inherit;font-size:14.5px;font-weight:600;background:var(--ap-tx);color:var(--ap-bg);padding:10px 18px;border-radius:11px;margin-top:11px">Reconectar · 1 tap</button>
+              </div>
+            </div>
+          </div>
+
+          <div>
             <div class="ghead">Sin conexión</div>
             <div class="grp pad" style="display:flex;gap:11px;align-items:flex-start">
               <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="var(--ap-amb)" stroke-width="2.1" stroke-linecap="round" style="flex:none;margin-top:1px" aria-hidden="true"><path d="M1.6 5.6a16 16 0 0 1 20.8 0"/><path d="M6 10a10 10 0 0 1 12 0"/><circle cx="12" cy="15.5" r="1.3" fill="var(--ap-amb)" stroke="none"/><path d="m3 3 18 18"/></svg>
@@ -1116,7 +1172,347 @@ ol.steps p{font-size:14.5px;color:var(--ink2);line-height:1.5;max-width:60ch}
       <p class="why">Tres cosas que casi nunca se diseñan y son las que más se ven. El esqueleto muestra <em>la forma de lo que viene</em>, no un spinner. El aviso de offline dice de cuándo son los datos y qué está esperando. Y el estado vacío es una felicitación con la próxima acción a mano.</p>
     </div>
 
+    <!-- ---------- REVISAR EN CUOTAS ---------- -->
+    <div class="dev">
+      <div class="lbl"><b>Revisar en cuotas</b><span>el caso que hay que no errar</span></div>
+      <div class="frame"><div class="scr" data-app="light">
+        <div class="sb"><span>9:41</span><span class="rt"><svg width="15" height="11" viewBox="0 0 18 13" fill="currentColor" aria-hidden="true"><rect x="0" y="8.5" width="3" height="4.5" rx="1"/><rect x="4.6" y="6" width="3" height="7" rx="1"/><rect x="9.2" y="3" width="3" height="10" rx="1"/><rect x="13.8" y="0" width="3" height="13" rx="1"/></svg><svg width="15" height="12" viewBox="0 0 20 15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M1.6 4.6a12 12 0 0 1 16.8 0"/><path d="M4.9 8.1a7.4 7.4 0 0 1 10.2 0"/><circle cx="10" cy="12.3" r="1.1" fill="currentColor" stroke="none"/></svg><i></i></span></div>
+        <div class="nav"><div><h1>Revisar</h1><div class="sub">3 de 6</div></div>
+          <div class="act"><div class="iconbtn"><svg width="17" height="17"><use href="#i-close"/></svg></div></div></div>
+        <div class="flow">
+          <div class="card-rev" style="margin-top:6px">
+            <div class="who">
+              <div class="av" style="width:38px;height:38px;border-radius:11px"><svg width="17" height="17"><use href="#i-phone"/></svg></div>
+              <div style="flex:1">
+                <div style="font-size:16px;font-weight:600;letter-spacing:-.02em">FRAVEGA SACIEI</div>
+                <div style="font-size:12.5px;color:var(--ap-tx2);margin-top:1px">Galicia Visa ·4417 · hoy 16:42</div>
+              </div>
+              <span class="pill bra">Gmail</span>
+            </div>
+            <div class="amt">$ 1.546.800</div>
+            <div class="meta">total de la compra, no de la cuota</div>
+
+            <div style="margin-top:14px;padding:12px 13px;background:var(--ap-amb-bg);border-radius:13px;display:flex;gap:9px;align-items:flex-start">
+              <svg width="17" height="17"><use href="#i-bolt"/></svg>
+              <div style="font-size:13px;color:var(--ap-amb);line-height:1.4">
+                El mail decía <b>"12 cuotas sin interés"</b>. Confirmá que sea así: si me equivoco acá, se me van los doce meses.
+              </div>
+            </div>
+
+            <div style="font-size:12px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--ap-tx2);margin-top:16px">En cuántas cuotas</div>
+            <div class="catpick" style="margin-top:8px">
+              <b>1 pago</b><b>3</b><b>6</b><b class="on">12</b><b>Otra</b>
+            </div>
+
+            <div style="margin-top:14px;padding:13px;background:var(--ap-fill);border-radius:13px">
+              <div style="display:flex;justify-content:space-between;align-items:baseline">
+                <span style="font-size:13.5px;color:var(--ap-tx2)">Cada cuota</span>
+                <b style="font-size:19px;font-weight:700;letter-spacing:-.03em;font-variant-numeric:tabular-nums">$ 128.900</b>
+              </div>
+              <div style="display:flex;justify-content:space-between;align-items:baseline;margin-top:6px">
+                <span style="font-size:13.5px;color:var(--ap-tx2)">Primera</span>
+                <b style="font-size:13.5px;font-weight:600;font-variant-numeric:tabular-nums">resumen de octubre</b>
+              </div>
+              <div style="display:flex;justify-content:space-between;align-items:baseline;margin-top:4px">
+                <span style="font-size:13.5px;color:var(--ap-tx2)">Última</span>
+                <b style="font-size:13.5px;font-weight:600;font-variant-numeric:tabular-nums">septiembre 2027</b>
+              </div>
+            </div>
+
+            <div class="bigbtn"><button>Corregir</button><button class="pri">Está bien</button></div>
+          </div>
+        </div>
+      </div></div>
+      <p class="why">Esto es lo que marcaste. La cantidad de cuotas es el único dato que, si entra mal, <em>arrastra el error doce meses</em>. Por eso no se confirma con un botón genérico: la app muestra el monto por cuota, el primer resumen y el último, y recién ahí pedís confirmación. Todo lo demás se puede corregir después sin consecuencias.</p>
+    </div>
+
+    <!-- ---------- DONDE ESTA LA PLATA ---------- -->
+    <div class="dev">
+      <div class="lbl"><b>Dónde está</b><span>con el ojo abierto</span></div>
+      <div class="frame"><div class="scr" data-app="light">
+        <div class="sb"><span>9:41</span><span class="rt"><svg width="15" height="11" viewBox="0 0 18 13" fill="currentColor" aria-hidden="true"><rect x="0" y="8.5" width="3" height="4.5" rx="1"/><rect x="4.6" y="6" width="3" height="7" rx="1"/><rect x="9.2" y="3" width="3" height="10" rx="1"/><rect x="13.8" y="0" width="3" height="13" rx="1"/></svg><svg width="15" height="12" viewBox="0 0 20 15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M1.6 4.6a12 12 0 0 1 16.8 0"/><path d="M4.9 8.1a7.4 7.4 0 0 1 10.2 0"/><circle cx="10" cy="12.3" r="1.1" fill="currentColor" stroke="none"/></svg><i></i></span></div>
+        <div class="nav"><div><h1>Dónde está</h1><div class="sub">actualizado hace 6 min</div></div>
+          <div class="act"><div class="iconbtn"><svg width="17" height="17"><use href="#i-eye"/></svg></div></div></div>
+        <div class="flow">
+          <div class="grid2" style="display:grid;grid-template-columns:1fr 1fr;gap:9px">
+            <div class="grp pad">
+              <div style="font-size:12px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--ap-tx2)">En pesos</div>
+              <div style="font-size:23px;font-weight:800;letter-spacing:-.032em;margin-top:5px;font-variant-numeric:tabular-nums">$ 1.564.300</div>
+            </div>
+            <div class="grp pad">
+              <div style="font-size:12px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--ap-tx2)">En dólares</div>
+              <div style="font-size:23px;font-weight:800;letter-spacing:-.032em;margin-top:5px;font-variant-numeric:tabular-nums">US$ 6.020</div>
+            </div>
+          </div>
+
+          <div>
+            <div class="ghead">Pesos</div>
+            <div class="grp">
+              <div class="li"><div class="av"><svg width="17" height="17"><use href="#i-bank"/></svg></div>
+                <div class="m"><div class="t">Galicia · caja de ahorro</div><div class="s">sincronizada por mail</div></div>
+                <div class="v">$ 1.240.000</div></div>
+              <div class="li"><div class="av"><svg width="17" height="17"><use href="#i-modo"/></svg></div>
+                <div class="m"><div class="t">Mercado Pago</div><div class="s">rinde 32 % anual</div></div>
+                <div class="v">$ 186.400</div></div>
+              <div class="li"><div class="av"><svg width="17" height="17"><use href="#i-modo"/></svg></div>
+                <div class="m"><div class="t">Personal Pay</div><div class="s">rinde 30 % anual</div></div>
+                <div class="v">$ 42.900</div></div>
+              <div class="li"><div class="av"><svg width="17" height="17"><use href="#i-cash"/></svg></div>
+                <div class="m"><div class="t">Efectivo</div><div class="s">contado el 8 de septiembre</div></div>
+                <div class="v">$ 95.000</div></div>
+            </div>
+          </div>
+
+          <div>
+            <div class="ghead">Dólares</div>
+            <div class="grp">
+              <div class="li"><div class="av"><svg width="17" height="17"><use href="#i-bank"/></svg></div>
+                <div class="m"><div class="t">Wallbit</div><div class="s">cuenta en Estados Unidos</div></div>
+                <div class="v">US$ 4.820<small>$ 7.157.700</small></div></div>
+              <div class="li"><div class="av"><svg width="17" height="17"><use href="#i-coins"/></svg></div>
+                <div class="m"><div class="t">Billete</div><div class="s">en la caja de casa</div></div>
+                <div class="v">US$ 1.200<small>$ 1.782.000</small></div></div>
+            </div>
+          </div>
+
+          <div style="font-size:12.5px;color:var(--ap-tx2);padding:0 4px;line-height:1.45">
+            El 66 % de tu plata está en dólares. Al MEP de hoy, todo junto son $ 10.504.000.
+          </div>
+        </div>
+      </div></div>
+      <p class="why">Preguntaste si hace falta saber dónde está la plata más allá del total. Sí: con seis lugares distintos, <em>el total no te dice si podés pagar algo mañana</em>. Los pesos de Mercado Pago están a un tap, el billete de la caja no. Cada renglón dice de cuándo es el dato, porque el efectivo se cuenta a mano y envejece.</p>
+    </div>
+
+    <!-- ---------- SALDOS OCULTOS ---------- -->
+    <div class="dev">
+      <div class="lbl"><b>Ojo cerrado</b><span>el mismo tap, montos tapados</span></div>
+      <div class="frame"><div class="scr" data-app="light">
+        <div class="sb"><span>9:41</span><span class="rt"><svg width="15" height="11" viewBox="0 0 18 13" fill="currentColor" aria-hidden="true"><rect x="0" y="8.5" width="3" height="4.5" rx="1"/><rect x="4.6" y="6" width="3" height="7" rx="1"/><rect x="9.2" y="3" width="3" height="10" rx="1"/><rect x="13.8" y="0" width="3" height="13" rx="1"/></svg><svg width="15" height="12" viewBox="0 0 20 15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M1.6 4.6a12 12 0 0 1 16.8 0"/><path d="M4.9 8.1a7.4 7.4 0 0 1 10.2 0"/><circle cx="10" cy="12.3" r="1.1" fill="currentColor" stroke="none"/></svg><i></i></span></div>
+        <div class="nav"><div><h1>Dónde está</h1><div class="sub">montos ocultos</div></div>
+          <div class="act"><div class="iconbtn on"><svg width="17" height="17"><use href="#i-eyeoff"/></svg></div></div></div>
+        <div class="flow">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:9px">
+            <div class="grp pad">
+              <div style="font-size:12px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--ap-tx2)">En pesos</div>
+              <div class="oculto" style="font-size:23px;font-weight:800;letter-spacing:-.032em;margin-top:5px;font-variant-numeric:tabular-nums">$ 1.564.300</div>
+            </div>
+            <div class="grp pad">
+              <div style="font-size:12px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--ap-tx2)">En dólares</div>
+              <div class="oculto" style="font-size:23px;font-weight:800;letter-spacing:-.032em;margin-top:5px;font-variant-numeric:tabular-nums">US$ 6.020</div>
+            </div>
+          </div>
+          <div>
+            <div class="ghead">Pesos</div>
+            <div class="grp">
+              <div class="li"><div class="av"><svg width="17" height="17"><use href="#i-bank"/></svg></div>
+                <div class="m"><div class="t">Galicia · caja de ahorro</div><div class="s">sincronizada por mail</div></div>
+                <div class="v oculto">$ 1.240.000</div></div>
+              <div class="li"><div class="av"><svg width="17" height="17"><use href="#i-modo"/></svg></div>
+                <div class="m"><div class="t">Mercado Pago</div><div class="s">rinde 32 % anual</div></div>
+                <div class="v oculto">$ 186.400</div></div>
+              <div class="li"><div class="av"><svg width="17" height="17"><use href="#i-modo"/></svg></div>
+                <div class="m"><div class="t">Personal Pay</div><div class="s">rinde 30 % anual</div></div>
+                <div class="v oculto">$ 42.900</div></div>
+              <div class="li"><div class="av"><svg width="17" height="17"><use href="#i-cash"/></svg></div>
+                <div class="m"><div class="t">Efectivo</div><div class="s">contado el 8 de septiembre</div></div>
+                <div class="v oculto">$ 95.000</div></div>
+            </div>
+          </div>
+          <div>
+            <div class="ghead">Dólares</div>
+            <div class="grp">
+              <div class="li"><div class="av"><svg width="17" height="17"><use href="#i-bank"/></svg></div>
+                <div class="m"><div class="t">Wallbit</div><div class="s">cuenta en Estados Unidos</div></div>
+                <div class="v oculto">US$ 4.820</div></div>
+              <div class="li"><div class="av"><svg width="17" height="17"><use href="#i-coins"/></svg></div>
+                <div class="m"><div class="t">Billete</div><div class="s">en la caja de casa</div></div>
+                <div class="v oculto">US$ 1.200</div></div>
+            </div>
+          </div>
+          <div style="font-size:12.5px;color:var(--ap-tx2);padding:0 4px;line-height:1.45">
+            Los nombres y las fechas se siguen leyendo. Lo único tapado son los números.
+          </div>
+        </div>
+      </div></div>
+      <p class="why">Un tap en el ojo y vuelve. Se tapan <em>los montos, no la interfaz</em>: seguís sabiendo qué cuentas tenés y cuándo se actualizaron, que es lo que hace útil la pantalla en el colectivo. Queda guardado por aparato, y hay un ajuste para que arranque siempre tapado.</p>
+    </div>
+
+    <!-- ---------- INGRESOS ---------- -->
+    <div class="dev">
+      <div class="lbl"><b>Ingresos</b><span>paritarias, sobre y proyección</span></div>
+      <div class="frame"><div class="scr" data-app="light">
+        <div class="sb"><span>9:41</span><span class="rt"><svg width="15" height="11" viewBox="0 0 18 13" fill="currentColor" aria-hidden="true"><rect x="0" y="8.5" width="3" height="4.5" rx="1"/><rect x="4.6" y="6" width="3" height="7" rx="1"/><rect x="9.2" y="3" width="3" height="10" rx="1"/><rect x="13.8" y="0" width="3" height="13" rx="1"/></svg><svg width="15" height="12" viewBox="0 0 20 15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M1.6 4.6a12 12 0 0 1 16.8 0"/><path d="M4.9 8.1a7.4 7.4 0 0 1 10.2 0"/><circle cx="10" cy="12.3" r="1.1" fill="currentColor" stroke="none"/></svg><i></i></span></div>
+        <div class="nav"><div><h1>Ingresos</h1><div class="sub">septiembre 2026</div></div>
+          <div class="act"><div class="iconbtn"><svg width="17" height="17"><use href="#i-recibo"/></svg></div></div></div>
+        <div class="flow">
+          <div class="hero-mes">
+            <div class="top">
+              <div><div class="big"><em>$</em>2.312.000</div><div class="of">entró este mes, sin contar Wallbit</div></div>
+              <span class="pill pos"><svg width="11" height="11"><use href="#i-trend"/></svg>7,8 %</span>
+            </div>
+            <div style="display:flex;gap:3px;margin-top:14px;height:7px">
+              <div style="flex:74;background:var(--ap-tx);border-radius:99px 0 0 99px"></div>
+              <div style="flex:26;background:var(--ap-tx3);border-radius:0 99px 99px 0"></div>
+            </div>
+            <div class="legend" style="margin-top:9px">
+              <span>banco <b>$ 1.712.000</b></span><span>sobre <b>$ 600.000</b></span>
+            </div>
+          </div>
+
+          <div>
+            <div class="ghead">Cómo viene<a href="#">Ver recibos</a></div>
+            <div class="grp pad">
+              <div style="display:flex;gap:5px;align-items:flex-end;height:62px">
+                <div style="flex:1;background:var(--ap-line);height:56%;border-radius:4px 4px 0 0"></div>
+                <div style="flex:1;background:var(--ap-tx3);height:61%;border-radius:4px 4px 0 0"></div>
+                <div style="flex:1;background:var(--ap-tx3);height:61%;border-radius:4px 4px 0 0"></div>
+                <div style="flex:1;background:var(--ap-tx);height:73%;border-radius:4px 4px 0 0"></div>
+                <div style="flex:1;background:var(--ap-brand);opacity:.35;height:78%;border-radius:4px 4px 0 0"></div>
+                <div style="flex:1;background:var(--ap-brand);opacity:.35;height:78%;border-radius:4px 4px 0 0"></div>
+                <div style="flex:1;background:var(--ap-brand);opacity:.35;height:100%;border-radius:4px 4px 0 0"></div>
+              </div>
+              <div style="display:flex;gap:5px;margin-top:6px;font-size:10.5px;color:var(--ap-tx3);text-align:center">
+                <span style="flex:1">jun</span><span style="flex:1">jul</span><span style="flex:1">ago</span>
+                <span style="flex:1;color:var(--ap-tx);font-weight:600">sep</span>
+                <span style="flex:1">oct</span><span style="flex:1">nov</span><span style="flex:1">dic</span>
+              </div>
+              <div style="font-size:12.5px;color:var(--ap-tx2);margin-top:11px;padding-top:11px;border-top:1px solid var(--ap-line);line-height:1.45">
+                Tres aumentos en cuatro meses, 7,9 % promedio. Si la paritaria sigue el ritmo, en <b style="color:var(--ap-tx)">octubre cobrás $ 2.494.000</b>.
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <div class="ghead">Lo que entra</div>
+            <div class="grp">
+              <div class="li"><div class="av"><svg width="17" height="17"><use href="#i-bank"/></svg></div>
+                <div class="m"><div class="t">Sueldo por banco</div><div class="s">acreditó el 4 · Galicia</div></div>
+                <div class="v pos" style="color:var(--ap-pos)">$ 1.712.000</div></div>
+              <div class="li"><div class="av"><svg width="17" height="17"><use href="#i-sobre"/></svg></div>
+                <div class="m"><div class="t">Sobre</div><div class="s">cobrado el 5 · a mano</div></div>
+                <div class="v" style="color:var(--ap-pos)">$ 600.000</div></div>
+              <div class="li"><div class="av"><svg width="17" height="17"><use href="#i-cash"/></svg></div>
+                <div class="m"><div class="t">Wallbit</div><div class="s">acreditó el 5 · en dólares</div></div>
+                <div class="v" style="color:var(--ap-pos)">US$ 2.600</div></div>
+            </div>
+          </div>
+
+          <div>
+            <div class="ghead">Se viene</div>
+            <div class="grp">
+              <div class="li"><div class="av bra"><svg width="17" height="17"><use href="#i-coins"/></svg></div>
+                <div class="m"><div class="t">Aguinaldo</div><div class="s">diciembre · la mitad del mejor mes</div></div>
+                <div class="v">≈ $ 1.247.000</div></div>
+            </div>
+          </div>
+        </div>
+      </div></div>
+      <p class="why">El sueldo argentino no es un número fijo, así que la app no lo pregunta: lo <em>aprende de lo que ya entró</em>. Las barras claras son historia y las tintadas son proyección — nunca se mezclan. El sobre es una fila más, con su ícono propio, porque si el efectivo no está no cierra nada. Y el aguinaldo aparece solo, que es plata que todos olvidan hasta que llega.</p>
+    </div>
+
   </div>
+</section>
+
+<div class="rule"></div>
+
+<!-- ================= ABANDONO ================= -->
+<section class="sec">
+  <span class="eyebrow">Lo mejor y lo peor de todas</span>
+  <h2>El 67 % abandona antes de los 30 días</h2>
+  <p class="lede">Pediste que sacara lo mejor y eliminara lo peor de cada una. Lo más útil que encontré no está en las listas de funciones: está en por qué la gente las deja. Cuatro causas explican casi todo el abandono, y tres de ellas ya estaban latentes en este proyecto.</p>
+
+  <div class="tblwrap">
+    <table>
+      <thead><tr><th>Por qué la dejan</th><th>El dato</th><th>Qué hace BISHUSHA</th><th></th></tr></thead>
+      <tbody>
+        <tr>
+          <td><b>Se rompe la conexión con el banco</b></td>
+          <td>Una de cada tres conexiones pide volver a autorizar antes de los 90 días. Cuando se rompe, <b>el 68 % abandona la app en vez de reconectar</b>.</td>
+          <td>Es <b>el mayor riesgo del proyecto</b>: el permiso de Gmail en modo prueba de Google caduca cada 7 días. La app tiene que avisar antes de que lo notes, decir cuántos días quedaron sin leer, y reconectar en un tap desde la pantalla principal — no escondido en Ajustes.</td>
+          <td><span class="tag crit">Riesgo n.º 1</span></td>
+        </tr>
+        <tr>
+          <td><b>Cansa cargar a mano</b></td>
+          <td>Las apps con carga manual pierden usuarios <b>al triple de velocidad</b> que las que sincronizan solas.</td>
+          <td>Ya es el principio rector del proyecto. Lo que agrego: el cazador de recurrentes, para que los gastos fijos tampoco haya que darlos de alta a mano.</td>
+          <td><span class="tag ok">Ya resuelto</span></td>
+        </tr>
+        <tr>
+          <td><b>Categorizar todo cansa más de lo que sirve</b></td>
+          <td>Asignar categoría a cada compra genera carga mental sin beneficio proporcional. Y los algoritmos se equivocan seguido.</td>
+          <td>La categoría viene elegida y se acepta con el mismo botón que confirma el movimiento: <b>cero taps extra si está bien</b>. Y se puede saltear — un movimiento sin categoría sigue sumando al total del mes.</td>
+          <td><span class="tag imp">Ajustado</span></td>
+        </tr>
+        <tr>
+          <td><b>El tablero en rojo da culpa</b></td>
+          <td>Verde cuando cumplís y rojo cuando te pasás hace que la gente se autodefina como <b>"mala con la plata"</b> y se desenganche a los dos o tres meses de tablero rojo.</td>
+          <td><b>Cambié el diseño por esto.</b> Las barras de presupuesto ya no son verdes ni rojas: el avance va en tinta y el exceso en ámbar, con una acción al lado en vez de un veredicto. Verde y rojo quedan para hechos — plata que entró, una factura vencida —, nunca para calificar cómo gastás.</td>
+          <td><span class="tag crit">Rediseñado</span></td>
+        </tr>
+        <tr>
+          <td><b>Se pierden los datos</b></td>
+          <td>Hay usuarios que perdieron años de movimientos categorizados a mano por una falla, sin forma de recuperarlos.</td>
+          <td>Exportación a JSON y CSV, y la cola offline arreglada para que una fila rota no congele la sincronización. El caché local del celular es una copia más.</td>
+          <td><span class="tag imp">Cubierto</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3 style="font-family:var(--f-disp);font-size:20px;font-weight:800;letter-spacing:-.025em;margin-top:44px">De las diez apps, lo que vale y lo que no</h3>
+  <div class="tblwrap" style="margin-top:18px">
+    <table>
+      <thead><tr><th>App</th><th>Lo mejor</th><th>Lo peor</th></tr></thead>
+      <tbody>
+        <tr><td><b>Copilot</b></td><td>Reglas granulares y categorización que aprende de tus correcciones. La más linda de todas.</td><td>Solo Apple, 95 dólares al año. Su ventaja real no es el diseño: es aprender.</td></tr>
+        <tr><td><b>PocketGuard</b></td><td>Un solo número de "libre para gastar" y detección de suscripciones.</td><td>Problemas crónicos de sincronización — justo la causa n.º 1 de abandono.</td></tr>
+        <tr><td><b>Rocket Money</b></td><td>Detección y cancelación de suscripciones. La mejor del rubro.</td><td>El plan gratis te limita a dos categorías. Función de cebo.</td></tr>
+        <tr><td><b>YNAB</b></td><td>"Gastos verdaderos": prorratear lo anual para que no explote en marzo. Y "rodar con los golpes": moverlo de otra categoría en vez de retarte.</td><td>Método exigente que hay que aprender. Nada que aplique a una app de una sola persona.</td></tr>
+        <tr><td><b>Simplifi</b></td><td>Arma el presupuesto solo desde tu historial. Configuración inicial cero.</td><td>Quicken tiene 65 reclamos sin responder en la BBB.</td></tr>
+        <tr><td><b>EveryDollar</b></td><td>Interfaz limpia y visualización de deuda que motiva.</td><td>La sincronización con el banco está en el plan pago. Cobrar por lo único que evita el abandono.</td></tr>
+        <tr><td><b>Cleo</b></td><td>Un chat que te cuenta en qué gastaste, con "modo cargada" incluido.</td><td>Reemplaza las categorías por charla con IA: divertido dos semanas, después no sabés dónde está nada.</td></tr>
+        <tr><td><b>Emma</b></td><td>Agregación y caza de suscripciones olvidadas.</td><td>Depende de agregadores que en Argentina no existen.</td></tr>
+        <tr><td><b>Monarch</b> · <b>Origin</b></td><td>Colaboración de pareja con permisos, planificación e impuestos.</td><td>Nada aplica: sos un solo usuario y los impuestos son de Estados Unidos.</td></tr>
+        <tr><td><b>Albert</b></td><td>—</td><td>El peor ejemplo del lote: cobros no autorizados y baja imposible. Lo que no hay que ser.</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<div class="rule"></div>
+
+<!-- ================= INGESTA ================= -->
+<section class="sec">
+  <span class="eyebrow">Que entre solo y rápido</span>
+  <h2>Cuán rápido puede llegar un movimiento</h2>
+  <p class="lede">Pediste que un pago con Mercado Pago o Personal Pay aparezca en BISHUSHA tan rápido como la notificación del banco. Se puede bajar de treinta minutos a segundos, pero hay un límite duro que conviene saber ahora y no después.</p>
+
+  <ol class="steps">
+    <li>
+      <h4>Hoy: hasta 30 minutos</h4>
+      <p><code>gmail-sync</code> corre cada media hora y pregunta si hay mails nuevos. Un consumo de las 14:02 puede aparecer a las 14:30.</p>
+    </li>
+    <li>
+      <h4>El cambio que hay que hacer: segundos</h4>
+      <p>La API de Gmail tiene <code>users.watch()</code>: en vez de que la app pregunte, <b>Google avisa</b> cuando llega un mail, publicando en un tema de Cloud Pub/Sub que empuja a una Edge Function. El consumo entra en el momento en que el banco manda el aviso — normalmente menos de un minuto después de pasar la tarjeta. Es gratis dentro de la cuota y es el mismo mecanismo que usan las apps que se sienten instantáneas.</p>
+    </li>
+    <li>
+      <h4>Mercado Pago tiene webhooks propios</h4>
+      <p>Además del mail. Están pensados para cobros más que para pagos salientes, así que se usan como refuerzo: lo que llegue por webhook entra al instante, y el mail queda de red de contención con la deduplicación ya resuelta.</p>
+    </li>
+    <li>
+      <h4>Personal Pay: solo mail</h4>
+      <p>No tiene API pública. La única vía es el aviso por correo, que con <code>watch()</code> igual llega en segundos.</p>
+    </li>
+    <li>
+      <h4>El límite duro</h4>
+      <p>Una PWA <b>no puede leer las notificaciones de otras apps del celular</b>. Ni en iOS ni en Android desde el navegador. Así que "que llegue igual que la notificación del banco" se logra por el lado del mail, no interceptando la notificación. En la práctica la diferencia es de segundos y no la vas a notar.</p>
+    </li>
+    <li>
+      <h4>La salida de emergencia</h4>
+      <p>Un Atajo de iOS que mande texto compartido a la app. Si alguna vez un comercio no manda mail, compartís el mensaje al atajo y entra igual. Es el plan B, no el plan A.</p>
+    </li>
+  </ol>
 </section>
 
 <div class="rule"></div>
@@ -1147,7 +1543,190 @@ ol.steps p{font-size:14.5px;color:var(--ink2);line-height:1.5;max-width:60ch}
       <h4>Revisar es la pantalla, no una insignia</h4>
       <p>El contador rojo en la campana entra a un mazo de tarjetas de a una con dos botones grandes. Es la única pantalla de la app diseñada para hacerse con una mano y sin pensar.</p>
     </li>
+    <li>
+      <h4>Las cuotas se confirman aparte de todo lo demás</h4>
+      <p>Es el único dato que, si entra mal, arrastra el error doce meses. Por eso la tarjeta de revisión muestra el monto por cuota, el primer resumen y el último antes de pedir confirmación. Todo lo demás se corrige después sin consecuencias.</p>
+    </li>
+    <li>
+      <h4>Los montos se tapan con un ojo, no la interfaz</h4>
+      <p>Con el ojo cerrado seguís viendo qué cuentas tenés y de cuándo es cada dato: lo único que se difumina son los números. Queda guardado por aparato y hay un ajuste para que arranque siempre tapado.</p>
+    </li>
+    <li>
+      <h4>El sueldo no se pregunta, se aprende</h4>
+      <p>Con paritarias todos los meses, un ingreso fijo cargado a mano queda viejo en treinta días. La app lo calcula de lo que ya entró, proyecta el próximo con el ritmo de los últimos aumentos y separa siempre lo que va por banco de lo que va por sobre.</p>
+    </li>
   </ol>
+</section>
+
+<div class="rule"></div>
+
+<!-- ================= ACENTO ================= -->
+<section class="sec">
+  <span class="eyebrow">El color de la casa</span>
+  <h2>Cuatro acentos, y el índigo no es ninguno</h2>
+  <p class="lede">Tenés razón: el índigo está tomado. Copilot, Notion y media industria cripto lo usan, y en una app de plata lee prestado. El problema es que verde, ámbar y rojo ya están reservados para significar cosas, así que el acento tiene que vivir lejos de esos tres. Estas cuatro cumplen. Están sobre la misma pantalla para que se comparen de verdad.</p>
+
+  <div class="accgrid">
+      <div class="accbox">
+        <div class="frame" style="max-width:none;border-radius:26px;padding:6px">
+          <div class="scr mini" data-app="light" data-acc="tinta">
+            <div class="nav" style="padding-bottom:8px">
+              <div><h1>Hoy</h1></div>
+              <div class="act"><div class="iconbtn"><svg width="16" height="16"><use href="#i-eye"/></svg></div></div>
+            </div>
+            <div class="flow">
+              <div class="seg"><button class="on">Pesos</button><button>Dólares</button></div>
+              <div class="hero-mes" style="padding:14px">
+                <div class="big"><em>$</em>612.400</div>
+                <div class="of">gastado de $ 1.450.000</div>
+                <div class="track"><b style="width:42%"></b><i style="left:40%"></i></div>
+              </div>
+              <div class="grp">
+                <div class="li" style="padding:9px 13px">
+                  <div class="av bra" style="width:28px;height:28px"><svg style="width:15px;height:15px"><use href="#i-card"/></svg></div>
+                  <div class="m"><div class="t" style="font-size:14.5px">¿Con qué pago?</div></div>
+                  <svg class="chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="m9 18 6-6-6-6"/></svg>
+                </div>
+              </div>
+            </div>
+            <nav class="tabs">
+              <span class="tab on"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="m3 10 9-7 9 7v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>Hoy</span>
+              <span class="tab"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h16M4 18h10"/></svg>Gastos</span>
+              <span class="tab"><span class="fab" style="width:38px;height:38px;border-radius:13px"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.7" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span></span>
+              <span class="tab"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10h18M5 6h14a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2z"/></svg>Tarjetas</span>
+              <span class="tab"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 12-9 12s-9-5-9-12a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="2.6"/></svg>Promos</span>
+            </nav>
+          </div>
+        </div>
+        <div class="accmeta">
+          <div class="accn"><span class="accdot" style="background:#14161C"></span>Tinta<code>#14161C</code></div>
+          <p>Sin color. Lo interactivo se distingue por peso y por posición, como en Notas de Apple. Es la más sobria y la más difícil de hacer bien: sin acento, la jerarquía la tiene que sostener enteramente el espaciado.</p>
+        </div>
+      </div>
+      <div class="accbox">
+        <div class="frame" style="max-width:none;border-radius:26px;padding:6px">
+          <div class="scr mini" data-app="light" data-acc="petroleo">
+            <div class="nav" style="padding-bottom:8px">
+              <div><h1>Hoy</h1></div>
+              <div class="act"><div class="iconbtn"><svg width="16" height="16"><use href="#i-eye"/></svg></div></div>
+            </div>
+            <div class="flow">
+              <div class="seg"><button class="on">Pesos</button><button>Dólares</button></div>
+              <div class="hero-mes" style="padding:14px">
+                <div class="big"><em>$</em>612.400</div>
+                <div class="of">gastado de $ 1.450.000</div>
+                <div class="track"><b style="width:42%"></b><i style="left:40%"></i></div>
+              </div>
+              <div class="grp">
+                <div class="li" style="padding:9px 13px">
+                  <div class="av bra" style="width:28px;height:28px"><svg style="width:15px;height:15px"><use href="#i-card"/></svg></div>
+                  <div class="m"><div class="t" style="font-size:14.5px">¿Con qué pago?</div></div>
+                  <svg class="chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="m9 18 6-6-6-6"/></svg>
+                </div>
+              </div>
+            </div>
+            <nav class="tabs">
+              <span class="tab on"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="m3 10 9-7 9 7v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>Hoy</span>
+              <span class="tab"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h16M4 18h10"/></svg>Gastos</span>
+              <span class="tab"><span class="fab" style="width:38px;height:38px;border-radius:13px"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.7" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span></span>
+              <span class="tab"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10h18M5 6h14a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2z"/></svg>Tarjetas</span>
+              <span class="tab"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 12-9 12s-9-5-9-12a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="2.6"/></svg>Promos</span>
+            </nav>
+          </div>
+        </div>
+        <div class="accmeta">
+          <div class="accn"><span class="accdot" style="background:#0D5470"></span>Petróleo<code>#0D5470</code></div>
+          <p>Azul verdoso profundo. Serio sin ser azul de banco, y bien lejos del verde semántico porque tira claramente al azul. La que recomiendo: aguanta los dos temas y no compite con ningún dato.</p>
+        </div>
+      </div>
+      <div class="accbox">
+        <div class="frame" style="max-width:none;border-radius:26px;padding:6px">
+          <div class="scr mini" data-app="light" data-acc="ciruela">
+            <div class="nav" style="padding-bottom:8px">
+              <div><h1>Hoy</h1></div>
+              <div class="act"><div class="iconbtn"><svg width="16" height="16"><use href="#i-eye"/></svg></div></div>
+            </div>
+            <div class="flow">
+              <div class="seg"><button class="on">Pesos</button><button>Dólares</button></div>
+              <div class="hero-mes" style="padding:14px">
+                <div class="big"><em>$</em>612.400</div>
+                <div class="of">gastado de $ 1.450.000</div>
+                <div class="track"><b style="width:42%"></b><i style="left:40%"></i></div>
+              </div>
+              <div class="grp">
+                <div class="li" style="padding:9px 13px">
+                  <div class="av bra" style="width:28px;height:28px"><svg style="width:15px;height:15px"><use href="#i-card"/></svg></div>
+                  <div class="m"><div class="t" style="font-size:14.5px">¿Con qué pago?</div></div>
+                  <svg class="chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="m9 18 6-6-6-6"/></svg>
+                </div>
+              </div>
+            </div>
+            <nav class="tabs">
+              <span class="tab on"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="m3 10 9-7 9 7v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>Hoy</span>
+              <span class="tab"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h16M4 18h10"/></svg>Gastos</span>
+              <span class="tab"><span class="fab" style="width:38px;height:38px;border-radius:13px"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.7" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span></span>
+              <span class="tab"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10h18M5 6h14a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2z"/></svg>Tarjetas</span>
+              <span class="tab"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 12-9 12s-9-5-9-12a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="2.6"/></svg>Promos</span>
+            </nav>
+          </div>
+        </div>
+        <div class="accmeta">
+          <div class="accn"><span class="accdot" style="background:#7D2B52"></span>Ciruela<code>#7D2B52</code></div>
+          <p>Vino oscuro. Es la que más personalidad tiene y ninguna app de finanzas la usa. El riesgo es real: está en la misma familia que el rojo de "excedido", y en una fila apretada se pueden confundir.</p>
+        </div>
+      </div>
+      <div class="accbox">
+        <div class="frame" style="max-width:none;border-radius:26px;padding:6px">
+          <div class="scr mini" data-app="light" data-acc="berenjena">
+            <div class="nav" style="padding-bottom:8px">
+              <div><h1>Hoy</h1></div>
+              <div class="act"><div class="iconbtn"><svg width="16" height="16"><use href="#i-eye"/></svg></div></div>
+            </div>
+            <div class="flow">
+              <div class="seg"><button class="on">Pesos</button><button>Dólares</button></div>
+              <div class="hero-mes" style="padding:14px">
+                <div class="big"><em>$</em>612.400</div>
+                <div class="of">gastado de $ 1.450.000</div>
+                <div class="track"><b style="width:42%"></b><i style="left:40%"></i></div>
+              </div>
+              <div class="grp">
+                <div class="li" style="padding:9px 13px">
+                  <div class="av bra" style="width:28px;height:28px"><svg style="width:15px;height:15px"><use href="#i-card"/></svg></div>
+                  <div class="m"><div class="t" style="font-size:14.5px">¿Con qué pago?</div></div>
+                  <svg class="chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="m9 18 6-6-6-6"/></svg>
+                </div>
+              </div>
+            </div>
+            <nav class="tabs">
+              <span class="tab on"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="m3 10 9-7 9 7v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>Hoy</span>
+              <span class="tab"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h16M4 18h10"/></svg>Gastos</span>
+              <span class="tab"><span class="fab" style="width:38px;height:38px;border-radius:13px"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.7" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span></span>
+              <span class="tab"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10h18M5 6h14a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2z"/></svg>Tarjetas</span>
+              <span class="tab"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 12-9 12s-9-5-9-12a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="2.6"/></svg>Promos</span>
+            </nav>
+          </div>
+        </div>
+        <div class="accmeta">
+          <div class="accn"><span class="accdot" style="background:#4A2D5C"></span>Berenjena<code>#4A2D5C</code></div>
+          <p>Violeta muy oscuro y desaturado. Conserva algo del índigo pero sin el brillo que lo delata: al bajarle la luz y la saturación deja de parecer una app de cripto.</p>
+        </div>
+      </div>
+  </div>
+
+  <div class="notes">
+    <div class="note">
+      <h4>Cómo se decide</h4>
+      <p>Miralas en el celular, de día y de noche, y quedate con la que no te canse. El acento se toca en un solo renglón de <code>tokens.css</code>, así que cambiarlo después no cuesta nada — pero conviene cerrarlo antes de dibujar el ícono de la app.</p>
+    </div>
+    <div class="note">
+      <h4>Por qué no puede ser cualquier color</h4>
+      <p>Verde significa que entró plata, ámbar que algo vence y rojo que te pasaste. Un acento cerca de esos tres hace que el usuario lea significado donde solo hay un botón. Por eso quedan afuera los naranjas, los verdes y los rojos.</p>
+    </div>
+    <div class="note">
+      <h4>El isotipo no cambia</h4>
+      <p>La B va en tinta sobre claro y en blanco sobre oscuro, siempre. El acento aparece en el ícono de la app y en lo que se toca, no en la marca. Así el logo sigue funcionando si más adelante cambiás de color.</p>
+    </div>
+  </div>
 </section>
 
 <div class="rule"></div>
@@ -1325,16 +1904,20 @@ ol.steps p{font-size:14.5px;color:var(--ink2);line-height:1.5;max-width:60ch}
   <h2>Lo que necesito de vos</h2>
   <div class="notes">
     <div class="note">
-      <h4>Referencias puntuales</h4>
-      <p>Ya están auditadas arriba. Si hay alguna que uses de verdad y quieras que mire una pantalla puntual, decime cuál y la reviso en detalle.</p>
+      <h4>Elegir el acento</h4>
+      <p>Miralas en el celular de día y de noche y quedate con una. Recomiendo <b>petróleo</b>: es la única de las cuatro que no compite con ningún color que ya signifique algo. Se cambia en un renglón, pero conviene cerrarlo antes de dibujar el ícono definitivo.</p>
     </div>
     <div class="note">
-      <h4>El índigo</h4>
-      <p><code>#4B41D8</code> es la única decisión de color con personalidad de toda la paleta. Si preferís que la app sea totalmente neutra, se reemplaza por tinta y no se rompe nada.</p>
+      <h4>Los recibos de sueldo</h4>
+      <p>Mandame los últimos <b>seis a doce</b>, en PDF o foto. De cada uno saco período, neto, fecha de acreditación y la parte que va por banco, y de ahí sale la curva de paritarias y la proyección. Decime también cuánto viene por sobre, que en el recibo no figura.</p>
     </div>
     <div class="note">
-      <h4>Cuánto entra por mes</h4>
-      <p>Los porcentajes de "14 % de lo que entra" y el ritmo del presupuesto necesitan un ingreso de referencia. Puede ser fijo, o calculado del promedio de los últimos tres meses.</p>
+      <h4>Cuándo caen las cosas</h4>
+      <p>Día de cierre y de vencimiento de cada tarjeta, y los últimos cuatro dígitos — es lo que matchea los mails con la tarjeta correcta. Y el día en que suele acreditar el sueldo.</p>
+    </div>
+    <div class="note">
+      <h4>Verificación de Google</h4>
+      <p>Es el riesgo n.º 1 de todo el proyecto: mientras la app esté en modo prueba, el permiso de Gmail se cae cada 7 días. Vale la pena decidir ahora si arrancamos el trámite de verificación o si convivimos con reconectar cada semana desde el aviso de la pantalla principal.</p>
     </div>
   </div>
 </section>
@@ -1342,7 +1925,7 @@ ol.steps p{font-size:14.5px;color:var(--ink2);line-height:1.5;max-width:60ch}
 <footer class="foot">
   <div style="display:flex;align-items:center;gap:9px">
     <svg width="19" height="19" viewBox="0 0 100 100" aria-hidden="true"><path style="fill:var(--ink2)" d="M16 13.5A3.5 3.5 0 0 1 19.5 10h8A3.5 3.5 0 0 1 31 13.5v73a3.5 3.5 0 0 1-3.5 3.5h-8A3.5 3.5 0 0 1 16 86.5Z M22 10h24a18 18 0 0 1 0 36H22Z M31 35h15a7 7 0 0 0 0-14H31Z M22 54h46a18 18 0 0 1 0 36H22Z M31 79h37a7 7 0 0 0 0-14H31Z"/></svg>
-    <span>BISHUSHA · segundo pase de diseño</span>
+    <span>BISHUSHA · tercer pase de diseño</span>
   </div>
   <span>Todas las cifras son de ejemplo</span>
 </footer>
