@@ -1,0 +1,122 @@
+/* =====================================================================
+   BISHUSHA — tokens del sistema de diseño
+   Fuente de verdad del color, la tipografía, el espaciado y el radio.
+   Todo lo demás se construye con estas variables. Nunca un valor suelto.
+   Ver diseno/sistema-de-diseno.html para el porqué de cada decisión.
+   ===================================================================== */
+
+:root{
+  /* ---------- superficie ---------- 60 / 30 / 10 */
+  --bg:        #F1F2F5;   /* lienzo, 60 % de la pantalla */
+  --card:      #FFFFFF;   /* tarjetas y listas, 30 % */
+  --fill:      #EDEEF2;   /* campos, chips apagados, pistas de barra */
+  --line:      #E4E5EA;   /* separadores de 1 px */
+
+  /* ---------- tinta ---------- */
+  --tx:        #14161C;   /* principal · 13.9:1 sobre --card */
+  --tx2:       #5C6272;   /* secundario · 5.9:1 — pasa AA en 12 px */
+  --tx3:       #868C9B;   /* terciario · 3.3:1 — SOLO decorativo o >= 18 px */
+
+  /* ---------- marca: lo único que se puede tocar ---------- */
+  --brand:     #4B41D8;
+  --brand-bg:  #EDEBFC;
+
+  /* ---------- semántica: color solo cuando significa algo ---------- */
+  --pos:       #0B7F5A;  --pos-bg: #E3F4EC;  /* entra plata · dentro del tope */
+  --amb:       #9A5D00;  --amb-bg: #FBF0DE;  /* vence pronto · cerca del tope */
+  --neg:       #C1293D;  --neg-bg: #FBE9EB;  /* vencido · excedido */
+
+  /* ---------- elevación ---------- en claro la da la sombra */
+  --elev-1: 0 1px 3px rgba(20,22,30,.07), 0 10px 26px -14px rgba(20,22,30,.22);
+  --elev-2: 0 6px 24px -8px rgba(20,22,30,.26), 0 0 0 .5px rgba(20,22,30,.09);
+
+  /* ---------- tipografía ---------- la del sistema: SF Pro en iOS ---------- */
+  --f: -apple-system, "SF Pro Text", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --f-display: -apple-system, "SF Pro Display", var(--f);
+
+  --t-cifra:  38px;  --t-cifra-w: 800;  --t-cifra-ls: -.038em;
+  --t-titulo: 30px;  --t-titulo-w: 800; --t-titulo-ls: -.032em;
+  --t-sec:    17px;  --t-sec-w: 700;    --t-sec-ls: -.022em;
+  --t-fila:   15.5px;--t-fila-w: 500;   --t-fila-ls: -.014em;
+  --t-apoyo:  12.5px;
+  --t-label:  12px;  /* caja alta, +.06em, peso 600, color --tx2 */
+
+  /* ---------- espaciado ---------- grilla de 4/8, sin valores sueltos ---------- */
+  --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px; --s6: 24px; --s8: 32px; --s12: 48px;
+
+  /* ---------- radio ---------- el hijo nunca más redondeado que el padre ---------- */
+  --r-tarjeta: 16px;
+  --r-interno: 10px;
+  --r-boton:   13px;
+  --r-hoja:    28px;
+  --r-pildora: 999px;
+
+  /* ---------- movimiento ---------- la curva de las hojas de iOS ---------- */
+  --e-entra: cubic-bezier(.32,.72,0,1);
+  --e-sale:  cubic-bezier(.4,0,1,1);
+  --d-micro: 120ms;  --d-panel: 260ms;  --d-hoja: 380ms;
+
+  --safe-b: env(safe-area-inset-bottom, 0px);
+}
+
+/* =====================================================================
+   OSCURO — paleta propia, no el claro invertido.
+   El índigo se aclara: uno saturado vibra sobre negro.
+   La profundidad la dan superficies más claras, no sombras.
+   ===================================================================== */
+@media (prefers-color-scheme: dark){
+  :root:not([data-tema="claro"]){
+    --bg:   #0A0B0F;
+    --card: #16181F;
+    --fill: #20232C;
+    --line: #2A2D37;
+
+    --tx:   #F2F3F7;
+    --tx2:  #9BA1B0;
+    --tx3:  #767C8B;
+
+    --brand:    #9089FF;  --brand-bg: #1E1C3A;
+    --pos:      #3FC08F;  --pos-bg:   #0F2A22;
+    --amb:      #E3A94F;  --amb-bg:   #2C2211;
+    --neg:      #FF6E80;  --neg-bg:   #2E1519;
+
+    --elev-1: 0 1px 3px rgba(0,0,0,.5), 0 10px 26px -14px rgba(0,0,0,.8);
+    --elev-2: 0 6px 24px -8px rgba(0,0,0,.6), 0 0 0 .5px rgba(255,255,255,.07);
+  }
+}
+:root[data-tema="oscuro"]{
+  --bg:#0A0B0F; --card:#16181F; --fill:#20232C; --line:#2A2D37;
+  --tx:#F2F3F7; --tx2:#9BA1B0; --tx3:#767C8B;
+  --brand:#9089FF; --brand-bg:#1E1C3A;
+  --pos:#3FC08F; --pos-bg:#0F2A22;
+  --amb:#E3A94F; --amb-bg:#2C2211;
+  --neg:#FF6E80; --neg-bg:#2E1519;
+  --elev-1: 0 1px 3px rgba(0,0,0,.5), 0 10px 26px -14px rgba(0,0,0,.8);
+  --elev-2: 0 6px 24px -8px rgba(0,0,0,.6), 0 0 0 .5px rgba(255,255,255,.07);
+}
+
+/* =====================================================================
+   Reglas que valen para toda la app y no son negociables.
+   ===================================================================== */
+
+/* Todo lo interactivo se ve cuando lo enfocás con teclado.
+   La versión anterior no tenía una sola regla de foco. */
+:focus-visible{
+  outline: 2px solid var(--brand);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+/* Ningún objetivo táctil por debajo de 44 px, aunque se vea más chico. */
+button, a[role="button"], .toque{ min-height: 44px; min-width: 44px; }
+
+/* Las cifras se alinean en columna. Siempre. */
+.cifra{ font-variant-numeric: tabular-nums; letter-spacing: -.02em; }
+
+/* Nadie marea a nadie. */
+@media (prefers-reduced-motion: reduce){
+  *, *::before, *::after{
+    animation-duration: .01ms !important;
+    transition-duration: .01ms !important;
+  }
+}
