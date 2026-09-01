@@ -134,4 +134,73 @@ t('el reintegro respeta el tope', () => {
   assert.equal(F.reintegroEstimado(50000, { tipo: 'cuotas', valor: 12 }), 0);
 });
 
+// ---------------------------------------------------------------------
+// CICLOS DECLARADOS
+// En Galicia el cierre no cae un dia fijo del mes: en el resumen de agosto/26
+// los cierres son 30-jul, 27-ago y 1-oct. Cuando la tarjeta trae los ciclos
+// leidos del resumen, mandan sobre cierre_dia.
+// ---------------------------------------------------------------------
+console.log('\nCICLOS DECLARADOS');
+
+const GALICIA = {
+  id: 'g', tipo: 'credito', cierre_dia: 27, vencimiento_dia: 4,
+  ciclos: [
+    { cierre: '2026-07-30', vence: '2026-08-07' },
+    { cierre: '2026-08-27', vence: '2026-09-04' },
+    { cierre: '2026-10-01', vence: '2026-10-09' }
+  ]
+};
+
+t('una compra antes del cierre entra en ese resumen', () => {
+  const c = F.cicloDeCompra(d('2026-08-20'), GALICIA);
+  assert.equal(F.fechaISO(c.cierre), '2026-08-27');
+  assert.equal(F.fechaISO(c.vence), '2026-09-04');
+  assert.equal(c.declarado, true);
+});
+t('una compra el dia del cierre entra en el siguiente', () => {
+  const c = F.cicloDeCompra(d('2026-08-27'), GALICIA);
+  assert.equal(F.fechaISO(c.cierre), '2026-10-01');
+});
+t('el 30 de agosto NO cierra el 27 de septiembre: cierra el 1 de octubre', () => {
+  // con cierre_dia = 27 la cuenta daria 2026-09-27, que no existe como cierre
+  const c = F.cicloDeCompra(d('2026-08-30'), GALICIA);
+  assert.equal(F.fechaISO(c.cierre), '2026-10-01');
+  assert.notEqual(F.fechaISO(c.cierre), '2026-09-27');
+});
+t('fuera de los ciclos conocidos vuelve al dia fijo y lo avisa', () => {
+  const c = F.cicloDeCompra(d('2027-05-10'), GALICIA);
+  assert.equal(c.declarado, false);
+  assert.equal(F.fechaISO(c.cierre), '2027-05-27');
+});
+t('sin ciclos declarados se comporta igual que antes', () => {
+  const sinCiclos = { id: 'x', tipo: 'credito', cierre_dia: 27, vencimiento_dia: 4 };
+  const c = F.cicloDeCompra(d('2026-08-20'), sinCiclos);
+  assert.equal(F.fechaISO(c.cierre), '2026-08-27');
+  assert.equal(c.declarado, false);
+});
+t('la primera cuota usa el ciclo declarado', () => {
+  const cr = F.cronograma({ fecha: '2026-08-22', monto: 37400, cuotas: 3 }, GALICIA);
+  assert.equal(F.fechaISO(cr[0].vence), '2026-09-04');
+  assert.equal(cr[0].declarado, true);
+});
+t('la segunda cuota salta al ciclo declarado siguiente, no al mes calendario', () => {
+  const cr = F.cronograma({ fecha: '2026-08-22', monto: 37400, cuotas: 3 }, GALICIA);
+  assert.equal(F.fechaISO(cr[1].cierre), '2026-10-01');
+  assert.equal(F.fechaISO(cr[1].vence), '2026-10-09');
+});
+t('cuando se acaban los ciclos conocidos, extrapola desde el ultimo', () => {
+  const cr = F.cronograma({ fecha: '2026-08-22', monto: 37400, cuotas: 3 }, GALICIA);
+  assert.equal(cr[2].declarado, false);
+  assert.equal(cr.length, 3);
+});
+t('el monto por cuota no cambia por usar ciclos declarados', () => {
+  const cr = F.cronograma({ fecha: '2026-08-22', monto: 37400, cuotas: 3 }, GALICIA);
+  cr.forEach(c => assert.equal(Math.round(c.monto * 100) / 100, 12466.67));
+});
+t('proximoCiclo dice si la fecha es del banco o estimada', () => {
+  assert.equal(F.proximoCiclo(GALICIA, d('2026-08-20')).declarado, true);
+  assert.equal(F.proximoCiclo(GALICIA, d('2027-05-10')).declarado, false);
+});
+
+
 console.log(`\n${ok} pruebas OK`);

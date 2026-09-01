@@ -57,13 +57,53 @@ export function vencimientoDeCierre(cierre, vencDia) {
   return v;
 }
 
+/**
+ * Ciclos leidos del resumen o del mail, en vez de calculados.
+ *
+ * POR QUE: en Galicia el cierre NO cae un dia fijo del mes. En el resumen de
+ * agosto/26 los cierres son 30-jul, 27-ago y 1-oct — todos jueves, con el
+ * vencimiento ocho dias despues, pero separados 28 y 35 dias. Con un
+ * `cierre_dia` fijo la cuenta da mal casi todos los meses.
+ *
+ * Cada resumen publica seis fechas, incluido el ciclo QUE VIENE. Guardarlas
+ * es mas barato y mas exacto que adivinar la regla.
+ *
+ * `tarjeta.ciclos` = [{ cierre:'YYYY-MM-DD', vence:'YYYY-MM-DD' }, ...]
+ * Si no hay ciclos que cubran la fecha, se cae a `cierre_dia` como antes.
+ */
+export function ciclosOrdenados(tarjeta) {
+  return (tarjeta.ciclos || [])
+    .filter(c => c && c.cierre)
+    .map(c => ({ cierre: parseFecha(c.cierre), vence: c.vence ? parseFecha(c.vence) : null }))
+    .sort((a, b) => a.cierre - b.cierre);
+}
+
+/** Ciclo al que entra una compra: el primero cuyo cierre es posterior. */
+export function cicloDeCompra(fecha, tarjeta) {
+  for (const c of ciclosOrdenados(tarjeta)) {
+    if (fecha < c.cierre) {
+      return { cierre: c.cierre,
+               vence: c.vence || vencimientoDeCierre(c.cierre, tarjeta.vencimiento_dia || 10),
+               declarado: true };
+    }
+  }
+  // Fuera de los ciclos conocidos: se vuelve al dia fijo, marcando que es
+  // una estimacion y no un dato del banco.
+  const cierre = cierreDeCompra(fecha, tarjeta.cierre_dia || 1);
+  return { cierre, vence: vencimientoDeCierre(cierre, tarjeta.vencimiento_dia || 10),
+           declarado: false };
+}
+
 /** Proximo cierre y vencimiento a partir de una fecha de referencia. */
 export function proximoCiclo(tarjeta, ref = hoy()) {
-  const cierre = cierreDeCompra(ref, tarjeta.cierre_dia || 1);
-  const vence = vencimientoDeCierre(cierre, tarjeta.vencimiento_dia || 10);
-  return { cierre, vence, diasACierre: dias(ref, cierre), diasAVencimiento: dias(ref, vence) };
+  const { cierre, vence, declarado } = cicloDeCompra(ref, tarjeta);
+  return { cierre, vence, declarado,
+           diasACierre: dias(ref, cierre), diasAVencimiento: dias(ref, vence) };
 }
 export const dias = (a, b) => Math.round((b - a) / 86400000);
+
+/** Cierre de la cuota anterior, para buscar el ciclo siguiente. */
+const cierre0 = (out, primero, k) => out.length ? out[out.length - 1].cierre : primero.cierre;
 
 // ---------------------------------------------------------------------
 // CUOTAS
@@ -83,11 +123,22 @@ export function cronograma(tx, tarjeta, ref = hoy()) {
     return [{ nro: 1, total: 1, monto: Number(tx.monto), cierre: fecha, vence: fecha,
               periodoVenc: periodo(fecha), pendiente: false }];
   }
-  const base = cierreDeCompra(fecha, tarjeta.cierre_dia || 1);
+  // La primera cuota cae en el ciclo que corresponda; de ahi en adelante se
+  // avanza de a un mes desde ESE cierre, no desde el dia fijo de la tarjeta.
+  const primero = cicloDeCompra(fecha, tarjeta);
+  const diaBase = primero.cierre.getDate();
   for (let k = 0; k < n; k++) {
-    const cierre = diaSeguro(base.getFullYear(), base.getMonth() + k, tarjeta.cierre_dia || 1);
-    const vence = vencimientoDeCierre(cierre, tarjeta.vencimiento_dia || 10);
-    out.push({ nro: k + 1, total: n, monto, cierre, vence,
+    let cierre, vence, declarado;
+    if (k === 0) {
+      ({ cierre, vence, declarado } = primero);
+    } else {
+      const sig = ciclosOrdenados(tarjeta).find(c => c.cierre > cierre0(out, primero, k));
+      if (sig) { cierre = sig.cierre; declarado = true;
+                 vence = sig.vence || vencimientoDeCierre(cierre, tarjeta.vencimiento_dia || 10); }
+      else { cierre = diaSeguro(primero.cierre.getFullYear(), primero.cierre.getMonth() + k, diaBase);
+             vence = vencimientoDeCierre(cierre, tarjeta.vencimiento_dia || 10); declarado = false; }
+    }
+    out.push({ nro: k + 1, total: n, monto, cierre, vence, declarado,
                periodoVenc: periodo(vence), pendiente: vence >= ref });
   }
   return out;

@@ -79,6 +79,51 @@ celular, ni en iOS ni en Android. "Que llegue igual que la notificación del
 banco" se resuelve por el lado del mail con `watch()`, no interceptando la
 notificación. La diferencia real es de segundos.
 
+### El cierre de Galicia no cae un día fijo del mes
+
+Sale del resumen de agosto/26, que publica seis fechas en una fila:
+
+```
+cierre 30-jul → vence 07-ago     (jueves → viernes)
+cierre 27-ago → vence 04-sep     (jueves → viernes)
+cierre 01-oct → vence 09-oct     (jueves → viernes)
+```
+
+Días del mes: **30, 27, 1**. Separación: **28 y 35 días**. Siempre jueves, y el
+vencimiento siempre ocho días después. Un `cierre_dia` fijo da mal casi todos
+los meses: con `cierre_dia = 27`, una compra del 30 de agosto se calcularía para
+el 27 de septiembre, que no existe como cierre — cae el 1 de octubre.
+
+La solución no es adivinar la regla: **cada resumen publica el ciclo que viene**.
+`finance.js` ahora acepta `tarjeta.ciclos` con las fechas leídas del resumen y
+las usa por encima de `cierre_dia`; cuando se acaban los ciclos conocidos
+extrapola y marca el resultado como estimado (`declarado: false`), para que la
+app pueda mostrar la diferencia entre un dato del banco y una cuenta propia.
+
+Las dos tarjetas comparten exactamente el mismo ciclo, así que es del banco y
+no del plástico.
+
+### El resumen se lee entero
+
+`js/resumen.js`, 56 pruebas sobre resúmenes reales anonimizados. Galicia emite
+**dos formatos distintos para el mismo mes**: la Visa con fechas `06-06-26` y la
+cuota en la misma fila, la Mastercard con fechas `30-Jul-26` y las cuotas en una
+sección aparte. Trampas que las pruebas fijan:
+
+- `MERPAGO*MELI 07/26` **no** es la cuota 7 de 26: es el nombre del comercio.
+  La cuota se reconoce por la sección, no por el patrón `NN/NN`.
+- En una compra en cuotas, la fecha que imprime el resumen es la de la **compra
+  original**, no la del período.
+- `Microsoft*Xbox G MicrosoftUSD 12,85` — el `USD` viene pegado al comercio, así
+  que `\bUSD\b` no lo encuentra y el consumo entraba como pesos.
+- Galicia repite el comprobante `000001` en filas distintas del mismo día: la
+  clave de deduplicación necesita también el importe.
+- Hay devoluciones de impuesto en negativo (`DEV.IMP. RG 5617`).
+
+El resumen además publica **las cuotas a vencer de los próximos seis meses**,
+que sirven para validar `deudaFutura` contra el propio banco.
+
+
 ## Lo que hay que arreglar del código actual
 
 | Dónde | Qué pasa |

@@ -1,3 +1,9 @@
 node_modules/
 config.js
 .DS_Store
+
+# Documentos personales: recibos y resúmenes reales nunca se commitean.
+# Los fixtures de js/fixtures/ están anonimizados a mano.
+*.pdf
+recibos/
+resumenes/
