@@ -9,7 +9,7 @@ import {
   factorRemunerativo, componerNoRemunerativo, proyectarSueldo, aguinaldo,
   calendarioDeIngresos, sumarMeses,
   pctAcumulado, basicoSegunAcuerdo, fueraDeAcuerdo, sumasVigentes,
-  brutoDeRecibo, netoDeclarado
+  brutoDeRecibo, netoDeclarado, proximoCobro
 } from './sueldo.js';
 
 let ok = 0, fallo = 0;
@@ -399,6 +399,65 @@ t('lo que entra de verdad es banco mas sobre', () => {
   if (s.monto < 3000000) throw new Error('el sobre tiene que estar sumado, dio ' + s.monto);
   igual(s.via, 'mixto');
 });
+
+console.log('\nEL PROXIMO COBRO');
+const HIST_SOBRE = HISTORIA.map((r, i) => ({ ...r, neto: [1852414.58, 1883402.47, 2135500.32, 2026665.38][i],
+                                             sobre: [1400000, 1440000, 1490000, 1532000][i] }));
+const OPC = { acuerdo: ACUERDO, sumas: SUMAS, sobre: 1532000, sobreDesde: '2026-08', diaCobro: 1 };
+
+t('proyecta el período siguiente al último recibo', () =>
+  igual(proximoCobro(HIST_SOBRE, OPC).periodo, '2026-09'));
+t('se cobra el 1 de octubre, que es jueves', () =>
+  igual(proximoCobro(HIST_SOBRE, OPC).fecha, '2026-10-01'));
+t('separa banco de sobre', () => {
+  const p = proximoCobro(HIST_SOBRE, OPC);
+  cerca(p.banco, 1981987, 3000);
+  cerca(p.sobre, 1554253, 3000);
+  cerca(p.total, p.banco + p.sobre, 0.02);
+});
+t('el sobre sube con el mismo aumento que el banco', () => {
+  const p = proximoCobro(HIST_SOBRE, OPC);
+  cerca(p.sobre / 1532000, p.basico / 1228824, 0.002);
+});
+t('compara contra lo que se cobró el mes pasado', () => {
+  const p = proximoCobro(HIST_SOBRE, OPC);
+  cerca(p.anterior.total, 2026665.38 + 1532000, 0.02);
+  if (!(p.diferencia < 0)) throw new Error('octubre tiene que dar menos que septiembre');
+});
+
+console.log('\nPOR QUE CAMBIA');
+t('nombra las vacaciones del mes anterior', () => {
+  const r = proximoCobro(HIST_SOBRE, OPC).porque;
+  if (!r.some(x => /vacaciones/i.test(x.texto))) throw new Error('falta la razón de vacaciones');
+});
+t('nombra el bono que dejó de pagarse', () => {
+  const r = proximoCobro(HIST_SOBRE, OPC).porque;
+  const b = r.find(x => /bono/i.test(x.texto));
+  if (!b) throw new Error('falta el bono');
+  igual(b.tipo, 'baja'); cerca(b.monto, 25000);
+  // el importe va aparte, para que quien muestre decida como formatearlo
+  igual(b.conMonto, true);
+  igual(/\d/.test(b.texto), false, 'el texto no debe traer el numero crudo');
+});
+t('nombra el aumento, aunque el neto baje', () => {
+  const p = proximoCobro(HIST_SOBRE, OPC);
+  const a = p.porque.find(x => x.tipo === 'suba' && /básico sube/.test(x.texto));
+  if (!a) throw new Error('el aumento tiene que aparecer igual');
+  if (!/paritaria ya firmada/.test(a.texto)) throw new Error('deberia decir que está firmado');
+});
+t('sin acuerdo que cubra el mes, lo dice', () => {
+  const viejo = { ...ACUERDO, tramos: [{ periodo: '2026-07', pct: 1.9 }] };
+  const p = proximoCobro(HIST_SOBRE, { ...OPC, acuerdo: viejo });
+  igual(p.conAcuerdo, false);
+  if (!p.porque.some(x => /sin acuerdo firmado|no hay aumento acordado/.test(x.texto)))
+    throw new Error('tiene que avisar que es estimado');
+});
+t('un mes normal seguido de otro normal no inventa razones', () => {
+  const normales = HIST_SOBRE.slice(0, 2);
+  const p = proximoCobro(normales, { ...OPC, sobreDesde: '2026-06' });
+  igual(p.porque.some(x => /vacaciones|aguinaldo/i.test(x.texto)), false);
+});
+t('sin recibos devuelve null en vez de romper', () => igual(proximoCobro([], OPC), null));
 
 console.log(`\n${ok} pruebas OK${fallo ? `, ${fallo} FALLAN` : ''}\n`);
 process.exit(fallo ? 1 : 0);

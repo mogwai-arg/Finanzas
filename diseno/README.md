@@ -253,6 +253,22 @@ Es el **44 % de lo que entra**. Un modelo que solo mire el neto bancario ve
 menos de la mitad de la plata. Sube con el mismo aumento que el banco, así que
 se escala con el básico en vez de quedar congelado.
 
+### El mes que viene, en la Home
+
+Un sueldo puede **bajar aun con aumento**. En octubre entra el tramo de
+septiembre de la paritaria —el básico sube 1,45 %, que suma **$133.069**— pero
+se van los dos días de vacaciones y el bono de $25.000 que traía agosto, y eso
+pesa **$177.746**. Resultado: el neto baja 2,2 %.
+
+Sin explicación, esa caída parece un error de la app y se deja de confiar en el
+número. Por eso `proximoCobro()` devuelve, además de la cifra, **por qué
+cambia**: detecta qué había en el recibo anterior que no se repite, qué sumas
+dejaron de estar vigentes, y nombra el aumento aunque el neto baje.
+
+La tarjeta muestra banco y sobre **separados** —el sobre es el 44 % de lo que
+entra—, la fecha en que caen, y si el cálculo se apoya en una paritaria firmada
+o es una suposición.
+
 ### El cierre de Galicia no cae un día fijo del mes
 
 Sale del resumen de agosto/26, que publica seis fechas en una fila:

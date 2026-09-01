@@ -10,6 +10,7 @@
 import { h, frag, icono, iconoDe } from '../ui.js';
 import { state } from '../db.js';
 import * as F from '../finance.js';
+import * as S from '../sueldo.js';
 import { plataPartida, plata, cuandoVence, diasHasta, hoyISO, aFecha, nombreDe } from '../formato.js';
 import { irA } from '../ruteo.js';
 
@@ -27,6 +28,7 @@ export function vistaHoy(root, { moneda = 'ARS' } = {}) {
       conexionCaida(),
       moneda === 'ARS' ? heroMes(res, hoy, p) : heroDolares(),
       loQueSeViene(hoy, moneda),
+      moneda === 'ARS' ? proximoSueldo() : null,
       presupuesto(res, p),
       antesDeComprar()
     )
@@ -154,12 +156,13 @@ function loQueSeViene(hoy, moneda) {
 
   // Tarjetas: lo que hay que pagar y cuando
   for (const t of state.accounts.filter(a => a.tipo === 'credito' && a.activo !== false)) {
-    const c = F.proximoCiclo(t, hoy);
-    const total = F.totalTarjetaEnPeriodo(state.transactions, t,
-                                          F.periodo(c.vence), moneda);
+    // Primero lo que hay que pagar: un resumen ya cerrado que vence en dias
+    // importa mas que el ciclo que recien empezo a acumular.
+    const c = F.resumenAPagar(t, hoy) || F.proximoCiclo(t, hoy);
+    const total = F.totalTarjetaEnPeriodo(state.transactions, t, F.periodo(c.vence), moneda);
     if (!total) continue;
     items.push({ id: t.id, nombre: t.nombre, monto: total, vence: c.vence,
-                 icono: 'tarjeta', nota: c.declarado ? null: 'estimado',
+                 icono: 'tarjeta', nota: c.declarado ? null : 'estimado',
                  ir: `/tarjetas/${t.id}` });
   }
 
@@ -191,10 +194,89 @@ function loQueSeViene(hoy, moneda) {
         h('div', { class: `av ${d < 0 ? 'neg' : d <= 3 ? 'amb' : ''}` }, icono(it.icono, 17)),
         h('div.m', h('div.t', it.nombre),
           h('div.s', cuandoVence(iso, hoy) + (it.nota ? ` · ${it.nota}` : ''))),
-        h('div.v', plata(it.monto, moneda)));
+        h('div.v', plata(moneda === 'USD' ? it.monto : Math.round(it.monto), moneda)));
     }))
   );
 }
+
+
+// ------------------------------------------------------- proximo sueldo
+/**
+ * Lo que se cobra la proxima vez, en banco y en sobre, con la razon del
+ * cambio. Un sueldo puede BAJAR aun con aumento —si el mes anterior tenia
+ * vacaciones o un bono que no se repite—, y sin explicacion esa caida
+ * parece un error de la app.
+ */
+function proximoSueldo() {
+  const recibos = (state.recibos || []).map(r => ({
+    periodo: r.periodo, basico: Number(r.basico) || 0,
+    remunerativo: Number(r.remunerativo) || 0,
+    noRemunerativo: Number(r.no_remunerativo ?? r.noRemunerativo) || 0,
+    deducciones: Number(r.deducciones) || 0, neto: Number(r.neto) || 0,
+    sobre: Number(r.sobre) || 0, conceptos: r.conceptos || []
+  }));
+  if (recibos.length < 2) return null;
+
+  const ult = recibos[recibos.length - 1];
+  const cobro = S.proximoCobro(recibos, {
+    diaCobro: Number(state.settings?.dia_cobro) || 1,
+    sobre: ult.sobre || Number(state.settings?.sobre_estimado) || 0,
+    sobreDesde: ult.periodo,
+    acuerdo: state.settings?.acuerdo || S.ACUERDO_COMERCIO_JUL_SEP_2026,
+    sumas: state.settings?.sumas || S.SUMAS_COMERCIO_2026
+  });
+  if (!cobro) return null;
+
+  const baja = cobro.diferencia < 0;
+  const razones = cobro.porque.slice(0, 2);
+
+  return h('section',
+    h('div.ghead', 'El mes que viene',
+      h('span.pill.mut', { style: { textTransform: 'none', letterSpacing: '0' } },
+        cobro.conAcuerdo ? 'con paritaria firmada' : 'estimado')),
+    h('div.grp.pad',
+      h('div', { style: { display: 'flex', justifyContent: 'space-between',
+                          alignItems: 'flex-start', gap: '10px' } },
+        h('div',
+          h('div', { class: 'cifra' + (state.ocultarMontos ? ' oculto' : ''),
+                     style: { fontSize: '30px' } }, plata(Math.round(cobro.total))),
+          h('div.small.mut', { style: { marginTop: '4px' } },
+            `entrarían el ${diaMes(cobro.fecha)}`)),
+        h('span', { class: `pill ${baja ? 'amb' : 'pos'}` },
+          h('span', { style: { display: 'grid', transform: baja ? 'rotate(180deg)' : 'none' } },
+            icono('sube', 11)),
+          `${cobro.porcentaje > 0 ? '+' : ''}${cobro.porcentaje.toFixed(1)} %`)),
+
+      // Banco y sobre, separados: el sobre es casi la mitad de lo que entra.
+      h('div', { style: { display: 'flex', gap: '3px', marginTop: '14px', height: '7px' } },
+        h('div', { style: { flex: String(Math.max(1, cobro.banco)), background: 'var(--tx)',
+                            borderRadius: '99px 0 0 99px' } }),
+        cobro.sobre > 0 && h('div', { style: { flex: String(cobro.sobre), background: 'var(--tx3)',
+                                               borderRadius: '0 99px 99px 0' } })),
+      h('div.legend', { style: { marginTop: '9px' } },
+        h('span', 'banco ', h('b', { class: state.ocultarMontos ? 'oculto' : '' },
+          plata(Math.round(cobro.banco)))),
+        cobro.sobre > 0 && h('span', 'sobre ', h('b', { class: state.ocultarMontos ? 'oculto' : '' },
+          plata(Math.round(cobro.sobre))))),
+
+      razones.length ? h('div', {
+        style: { marginTop: '13px', paddingTop: '13px', borderTop: '1px solid var(--line)',
+                 fontSize: '13px', color: 'var(--tx2)', lineHeight: '1.45' } },
+        baja ? 'Da menos que este mes porque ' : 'Cambia porque ',
+        razones.map((r, i) => frag(i > 0 ? ', y ' : '',
+          r.conMonto ? `${r.texto} (${plata(Math.round(r.monto))})` : r.texto)), '.') : null,
+
+      h('div.small', { style: { color: 'var(--tx3)', marginTop: '9px' } },
+        cobro.conAcuerdo
+          ? 'Cálculo estimativo, con el aumento ya acordado.'
+          : 'Cálculo estimativo: todavía no hay paritaria firmada para ese mes.'))
+  );
+}
+
+const diaMes = iso => {
+  const [, m, d] = iso.split('-').map(Number);
+  return `${d}/${m}`;
+};
 
 // ------------------------------------------------------- presupuesto
 function presupuesto(res, p) {
@@ -214,17 +296,20 @@ function presupuesto(res, p) {
         h('div', { style: { display: 'flex', justifyContent: 'space-between',
                             alignItems: 'baseline', gap: '10px' } },
           h('span', { style: { fontSize: '14.5px', fontWeight: '500', letterSpacing: '-.012em' } }, nom),
-          h('span.small.mut', h('b', { style: { color: 'var(--tx)' } }, plata(b.gastado)),
+          h('span.small.mut', h('b', { style: { color: 'var(--tx)' } }, plata(Math.round(b.gastado))),
             ` de ${plata(b.tope)}`)),
         // Avance en tinta, exceso en ambar. Nunca verde ni rojo: el tablero
         // en rojo hace que uno se autodefina como malo con la plata.
         h('div.mini',
-          h('b', { class: b.pct >= 80 ? 'al' : '', style: { flex: String(Math.max(1, dentro)) } }),
-          exceso > 0 && h('s', { style: { flex: String(exceso) } })),
+          dentro > 0 && h('b', { class: b.pct >= 80 ? 'al' : '',
+                                 style: { flex: String(dentro) } }),
+          exceso > 0 && h('s', { style: { flex: String(exceso) } }),
+          // sin este tramo vacio el unico hijo ocupa todo y la barra se ve llena
+          b.restante > 0 && h('span', { style: { flex: String(b.restante) } })),
         excedido && h('div', {
           style: { display: 'flex', alignItems: 'center', gap: '5px', fontSize: '12.5px',
                    color: 'var(--amb)', fontWeight: '600', marginTop: '7px' } },
-          `${plata(exceso)} de más`, icono('chev', 13))
+          `${plata(Math.round(exceso))} de más`, icono('chev', 13))
       );
     }))
   );

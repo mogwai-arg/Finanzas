@@ -89,14 +89,14 @@ function filaPresupuesto(b) {
     h('div', { style: { display: 'flex', justifyContent: 'space-between',
                         alignItems: 'baseline', gap: '10px' } },
       h('span', { style: { fontSize: '14.5px', fontWeight: '500' } }, nom),
-      h('span.small.mut', h('b', { style: { color: 'var(--tx)' } }, plata(b.gastado)),
+      h('span.small.mut', h('b', { style: { color: 'var(--tx)' } }, plata(Math.round(b.gastado))),
         ` de ${plata(b.tope)}`)),
     h('div.mini',
       h('b', { class: b.pct >= 80 ? 'al' : '', style: { flex: String(Math.max(1, dentro)) } }),
       exceso > 0 && h('s', { style: { flex: String(exceso) } })),
     exceso > 0 && h('div', {
       style: { fontSize: '12.5px', color: 'var(--amb)', fontWeight: '600', marginTop: '7px' } },
-      `${plata(exceso)} de más`),
+      `${plata(Math.round(exceso))} de más`),
     exceso === 0 && b.restante > 0 && h('div.small.mut', { style: { marginTop: '7px' } },
-      `quedan ${plata(b.restante)}`));
+      `quedan ${plata(Math.round(b.restante))}`));
 }

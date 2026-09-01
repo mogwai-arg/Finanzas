@@ -323,6 +323,94 @@ export function calendarioDeIngresos(recibos, { meses = 6, diaCobro = 1,
   return out.sort((a, b) => a.fecha < b.fecha ? -1 : 1);
 }
 
+
+// ---------------------------------------------------------------------
+// EL PROXIMO COBRO
+// ---------------------------------------------------------------------
+
+/**
+ * Que se cobra la proxima vez, separado en banco y sobre, y POR QUE cambia
+ * contra el cobro anterior.
+ *
+ * El "por que" no es adorno. Un sueldo puede bajar aun con aumento: en agosto
+ * de 2026 el basico sube 1,45 % —el tramo de septiembre del acuerdo, que suma
+ * $ 133.069— pero se van los dos dias de vacaciones y el bono de $ 25.000, que
+ * pesan $ 177.746. El neto baja 2,2 %. Sin explicacion, esa caida parece un
+ * error de la app y se deja de confiar en el numero.
+ */
+export function proximoCobro(recibos, { diaCobro = 1, sobre = 0, sobreDesde = null,
+                                        acuerdo = null, sumas = null, ritmo = null,
+                                        sumasFijas = 0, habil = true, feriados = [] } = {}) {
+  const rs = porPeriodo(recibos).filter(r => r.basico > 0);
+  if (!rs.length) return null;
+
+  const cal = calendarioDeIngresos(recibos, { meses: 1, diaCobro, sobre, sobreDesde,
+                                              acuerdo, sumas, ritmo, sumasFijas,
+                                              habil, feriados, juntos: true });
+  const fila = cal.find(x => x.concepto === 'Sueldo');
+  if (!fila) return null;
+
+  const proy = proyectarSueldo(recibos, { meses: 1, acuerdo, sumas, ritmo, sumasFijas })[0];
+  const ult = rs[rs.length - 1];
+  const sobreAnterior = Number(ult.sobre || 0);
+  const totalAnterior = Number(ult.neto || 0) + sobreAnterior;
+
+  return {
+    periodo: proy.periodo,
+    fecha: fila.fecha,
+    banco: fila.banco != null ? fila.banco : fila.monto,
+    sobre: fila.efectivo || 0,
+    total: fila.monto,
+    basico: proy.basico,
+    conAcuerdo: !!proy.conAcuerdo,
+    anterior: { periodo: ult.periodo, banco: Number(ult.neto || 0),
+                sobre: sobreAnterior, total: totalAnterior },
+    diferencia: redondear(fila.monto - totalAnterior),
+    porcentaje: totalAnterior ? redondear(((fila.monto / totalAnterior) - 1) * 100) : 0,
+    porque: porQueCambia(ult, proy, { acuerdo, sumas })
+  };
+}
+
+/**
+ * Las razones del cambio, en castellano y ordenadas por peso.
+ * Solo se nombra lo que efectivamente cambio entre un recibo y el otro.
+ */
+function porQueCambia(anterior, proyectado, { acuerdo, sumas }) {
+  const out = [];
+
+  if (esAtipico(anterior)) {
+    const conceptos = (anterior.conceptos || []).join(' ').toUpperCase();
+    if (/VACACION/.test(conceptos)) out.push({ tipo: 'baja', texto: 'el mes pasado tenía vacaciones, que se pagan aparte' });
+    if (/AGUINALDO/.test(conceptos)) out.push({ tipo: 'baja', texto: 'el mes pasado incluía aguinaldo' });
+    if (/RETROACT/.test(conceptos)) out.push({ tipo: 'baja', texto: 'el mes pasado traía un retroactivo' });
+  }
+
+  // Sumas que se dejaron de pagar o que empiezan
+  for (const s of sumas || []) {
+    const antes = (!s.desde || s.desde <= anterior.periodo) && (!s.hasta || s.hasta >= anterior.periodo);
+    const ahora = (!s.desde || s.desde <= proyectado.periodo) && (!s.hasta || s.hasta >= proyectado.periodo);
+    // El texto va sin el importe: quien muestra decide como formatearlo.
+    const nombre = (s.concepto || 'una suma fija').toLowerCase();
+    if (antes && !ahora) out.push({ tipo: 'baja', monto: Number(s.monto),
+      texto: `el ${nombre} dejó de pagarse`, conMonto: true });
+    if (!antes && ahora) out.push({ tipo: 'suba', monto: Number(s.monto),
+      texto: `empieza a pagarse el ${nombre}`, conMonto: true });
+  }
+
+  // El aumento de paritaria
+  if (anterior.basico && proyectado.basico > anterior.basico) {
+    const pct = ((proyectado.basico / anterior.basico) - 1) * 100;
+    out.push({ tipo: 'suba', texto: proyectado.conAcuerdo
+      ? `el básico sube ${pct.toFixed(1)} % por la paritaria ya firmada`
+      : `el básico sube ${pct.toFixed(1)} % estimado, sin acuerdo firmado todavía` });
+  }
+
+  if (!out.length && !proyectado.conAcuerdo) {
+    out.push({ tipo: 'aviso', texto: 'no hay aumento acordado para este mes' });
+  }
+  return out;
+}
+
 // ---------------------------------------------------------------------
 export const redondear = n => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
 
