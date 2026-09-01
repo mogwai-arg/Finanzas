@@ -231,14 +231,24 @@ export function financiacion(fecha, tarjetas) {
 // MES CORRIENTE
 // ---------------------------------------------------------------------
 
-/** Gastos e ingresos del periodo por fecha de operacion (no de vencimiento). */
+/**
+ * Gastos e ingresos del periodo por fecha de operacion (no de vencimiento).
+ *
+ * Las TRANSFERENCIAS quedan afuera y no es un detalle: el extracto del 01/09
+ * muestra $ 823.133 saliendo de la cuenta, pero solo $ 84.453 son gasto. Los
+ * $ 715.580 de "transferencia a cuentas propias" y los $ 23.100 de compra de
+ * dolares siguen siendo plata suya, solo cambio de lugar. Contarlas infla el
+ * gasto del dia diez veces, y despues se cuentan DE NUEVO cuando esa plata se
+ * gasta desde la billetera.
+ */
 export function resumenMes(txs, per, moneda = 'ARS') {
-  let gastos = 0, ingresos = 0, reintegros = 0;
+  let gastos = 0, ingresos = 0, reintegros = 0, movido = 0;
   const porCategoria = {};
   for (const tx of txs) {
     if (tx.moneda !== moneda) continue;
     if (periodo(parseFecha(tx.fecha)) !== per) continue;
     const m = Number(tx.monto);
+    if (tx.tipo === 'transferencia') { movido += m; continue; }
     if (tx.tipo === 'ingreso') { ingresos += m; continue; }
     gastos += m;
     reintegros += Number(tx.reintegro || 0);
@@ -247,8 +257,49 @@ export function resumenMes(txs, per, moneda = 'ARS') {
   }
   return {
     gastos: round2(gastos), ingresos: round2(ingresos), reintegros: round2(reintegros),
+    movido: round2(movido),          // transferencias: informativo, no es gasto
     balance: round2(ingresos - gastos), porCategoria
   };
+}
+
+/**
+ * Saldo de una cuenta a una fecha.
+ *
+ * Una transferencia resta en la cuenta de origen y suma en la de destino. Si
+ * cambia de moneda —comprar dolares es una transferencia de una cuenta en pesos
+ * a una en dolares— el destino usa `monto_destino`, y de ahi sale el tipo de
+ * cambio real de la operacion sin tener que preguntarlo.
+ */
+export function saldoDeCuenta(cuenta, txs, ref = hoy(), inicial = 0) {
+  let saldo = Number(inicial) || 0;
+  for (const tx of txs) {
+    if (parseFecha(tx.fecha) > ref) continue;
+    const propio = tx.account_id === cuenta.id;
+    const destino = tx.destino_account_id === cuenta.id;
+    if (!propio && !destino) continue;
+
+    if (tx.tipo === 'transferencia') {
+      if (propio) saldo -= Number(tx.monto);
+      if (destino) saldo += Number(tx.monto_destino != null ? tx.monto_destino : tx.monto);
+      continue;
+    }
+    if (!propio) continue;
+    // Una compra con tarjeta de credito no toca el saldo de la cuenta: sale
+    // cuando se paga el resumen, no cuando se compra.
+    if (cuenta.tipo === 'credito') continue;
+    if (tx.tipo === 'ingreso') saldo += Number(tx.monto);
+    else saldo -= Number(tx.monto);
+  }
+  return round2(saldo);
+}
+
+/** Tipo de cambio implicito de una transferencia entre monedas. */
+export function tipoDeCambio(tx) {
+  if (tx.tipo !== 'transferencia' || !tx.monto_destino) return null;
+  if (!tx.moneda_destino || tx.moneda_destino === tx.moneda) return null;
+  const a = Number(tx.monto), b = Number(tx.monto_destino);
+  if (!a || !b) return null;
+  return { de: tx.moneda, a: tx.moneda_destino, valor: round2(a / b) };
 }
 
 /** Recurrentes del periodo con estado de pago. */

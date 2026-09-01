@@ -79,13 +79,50 @@ celular, ni en iOS ni en Android. "Que llegue igual que la notificación del
 banco" se resuelve por el lado del mail con `watch()`, no interceptando la
 notificación. La diferencia real es de segundos.
 
+### Una transferencia no es un gasto
+
+Es el error clásico de las apps de gastos y aparece en el extracto del 01/09:
+
+| | |
+|---|---:|
+| Salió de la cuenta | $ 823.133 |
+| **Gasto real** (servicios) | **$ 84.453** |
+| Transferencias a billeteras propias | $ 715.580 |
+| Compra de dólares | $ 23.100 |
+
+Contar todo como gasto **infla el día diez veces**. Y peor: cuando esos
+$715.580 se gasten desde Mercado Pago, se cuentan **otra vez**.
+
+Por eso `transactions.tipo` gana `'transferencia'`, con `destino_account_id`.
+Resta en la cuenta de origen y suma en la de destino, y queda fuera del gasto
+del mes — informada aparte como `movido`.
+
+**Comprar dólares es una transferencia entre monedas**: de una cuenta en pesos a
+una en dólares, con `monto_destino` y `moneda_destino`. De la relación entre los
+dos importes sale el **tipo de cambio real de esa operación**, sin preguntarlo ni
+buscar la cotización del día. Los $23.100 por US$15,55 dan $1.485,53.
+
+### Dónde está la plata, con datos reales
+
+| | | |
+|---|---:|---:|
+| Galicia | $ 1.203.532 | 37,3 % |
+| Mercado Pago | $ 398.664 | 12,3 % |
+| Personal Pay | $ 94.961 | 2,9 % |
+| Efectivo (sobre) | $ 1.532.000 | 47,4 % |
+| **Total** | **$ 3.229.157** | |
+
+Casi la mitad de la plata es efectivo que ninguna sincronización va a ver. Es
+la mejor justificación del "conté la billetera: hay $X" de la hoja de ruta.
+
+
 ### Tres tarjetas, dos ciclos: por eso "¿con qué pago?" vale
 
 | Tarjeta | Cierra | Vence | Límite |
 |---|---|---|---|
 | Galicia Visa ·9817 | 27/08 → 01/10 | 04/09 → 09/10 | $7.000.000 |
 | Galicia Mastercard | 27/08 → 01/10 | 04/09 → 09/10 | $7.000.000 |
-| Mercado Pago | **05/09** → 05/10 | por confirmar | $2.555.000 |
+| Mercado Pago | **05/09** → 05/10 | **10/09** → 10/10 | $2.555.000 |
 
 Con dos ciclos distintos, **la misma compra cambia de mes según la tarjeta**:
 

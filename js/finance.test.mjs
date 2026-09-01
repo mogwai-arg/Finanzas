@@ -286,4 +286,93 @@ t('avisa cuando la fecha sale de los ciclos declarados', () => {
 });
 
 
+// ---------------------------------------------------------------------
+// TRANSFERENCIAS
+// Del extracto real del 01/09: de $ 823.133 que salieron de la cuenta,
+// solo $ 84.453 son gasto. El resto cambio de lugar, no se gasto.
+// ---------------------------------------------------------------------
+console.log('\nTRANSFERENCIAS');
+
+const GAL = { id: 'gal', tipo: 'cuenta', moneda: 'ARS' };
+const MPW = { id: 'mpw', tipo: 'billetera', moneda: 'ARS' };
+const PP  = { id: 'pp',  tipo: 'billetera', moneda: 'ARS' };
+const USD = { id: 'usd', tipo: 'cuenta', moneda: 'USD' };
+
+const DIA1 = [
+  { id: 'h', fecha: '2026-09-01', tipo: 'ingreso', moneda: 'ARS', monto: 2026665.38,
+    account_id: 'gal', descripcion: 'Acreditamiento de haberes' },
+  { id: 't1', fecha: '2026-09-01', tipo: 'transferencia', moneda: 'ARS', monto: 280000,
+    account_id: 'gal', destino_account_id: 'mpw' },
+  { id: 't2', fecha: '2026-09-01', tipo: 'transferencia', moneda: 'ARS', monto: 62780,
+    account_id: 'gal', destino_account_id: 'pp' },
+  { id: 't3', fecha: '2026-09-01', tipo: 'transferencia', moneda: 'ARS', monto: 372800,
+    account_id: 'gal', destino_account_id: 'mpw' },
+  { id: 's1', fecha: '2026-09-01', tipo: 'gasto', moneda: 'ARS', monto: 20581.06, account_id: 'gal' },
+  { id: 's2', fecha: '2026-09-01', tipo: 'gasto', moneda: 'ARS', monto: 37784.00, account_id: 'gal' },
+  { id: 's3', fecha: '2026-09-01', tipo: 'gasto', moneda: 'ARS', monto: 26087.98, account_id: 'gal' },
+  { id: 'd1', fecha: '2026-09-01', tipo: 'transferencia', moneda: 'ARS', monto: 23100,
+    account_id: 'gal', destino_account_id: 'usd', monto_destino: 15.55, moneda_destino: 'USD' }
+];
+
+t('el gasto del dia son $ 84.453, no $ 823.133', () => {
+  const r = F.resumenMes(DIA1, '2026-09');
+  assert.equal(r.gastos, 84453.04);
+});
+t('las transferencias se informan aparte, no como gasto', () => {
+  const r = F.resumenMes(DIA1, '2026-09');
+  assert.equal(r.movido, 738680);          // 715.580 a billeteras + 23.100 a dolares
+});
+t('contarlas como gasto inflaria el dia casi diez veces', () => {
+  const r = F.resumenMes(DIA1, '2026-09');
+  assert.equal(Math.round((r.gastos + r.movido) / r.gastos), 10);
+});
+t('el ingreso no se ve afectado', () => {
+  assert.equal(F.resumenMes(DIA1, '2026-09').ingresos, 2026665.38);
+});
+t('una transferencia no cae en ninguna categoria', () => {
+  const r = F.resumenMes(DIA1, '2026-09');
+  assert.equal(Object.values(r.porCategoria).reduce((a, b) => a + b, 0), 84453.04);
+});
+
+t('el saldo de Galicia despues del dia 1', () => {
+  assert.equal(F.saldoDeCuenta(GAL, DIA1, d('2026-09-01')), 1203532.34);
+});
+t('lo transferido aparece en la billetera de destino', () => {
+  assert.equal(F.saldoDeCuenta(MPW, DIA1, d('2026-09-01')), 652800);   // 280.000 + 372.800
+  assert.equal(F.saldoDeCuenta(PP, DIA1, d('2026-09-01')), 62780);
+});
+t('la plata no se crea ni se destruye: los saldos suman el ingreso menos el gasto', () => {
+  const total = [GAL, MPW, PP].reduce((s, c) => s + F.saldoDeCuenta(c, DIA1, d('2026-09-01')), 0);
+  const usd = F.saldoDeCuenta(USD, DIA1, d('2026-09-01'));
+  assert.equal(F.round2(total), F.round2(2026665.38 - 84453.04 - 23100));
+  assert.equal(usd, 15.55);
+});
+t('comprar dolares deja el importe en dolares del otro lado', () => {
+  assert.equal(F.saldoDeCuenta(USD, DIA1, d('2026-09-01')), 15.55);
+});
+t('de la transferencia entre monedas sale el tipo de cambio', () => {
+  const tc = F.tipoDeCambio(DIA1.find(x => x.id === 'd1'));
+  assert.equal(tc.de, 'ARS'); assert.equal(tc.a, 'USD');
+  assert.equal(tc.valor, 1485.53);
+});
+t('una transferencia en la misma moneda no tiene tipo de cambio', () => {
+  assert.equal(F.tipoDeCambio(DIA1.find(x => x.id === 't1')), null);
+});
+t('un gasto comun tampoco', () => {
+  assert.equal(F.tipoDeCambio(DIA1.find(x => x.id === 's1')), null);
+});
+t('el saldo respeta la fecha de corte', () => {
+  assert.equal(F.saldoDeCuenta(GAL, DIA1, d('2026-08-31')), 0);
+});
+t('un saldo inicial se suma', () => {
+  assert.equal(F.saldoDeCuenta(GAL, DIA1, d('2026-09-01'), 100000), 1303532.34);
+});
+t('una compra con tarjeta NO baja el saldo de la cuenta', () => {
+  const txs = [{ id: 'c', fecha: '2026-09-02', tipo: 'gasto', moneda: 'ARS',
+                 monto: 50000, account_id: 'tc' }];
+  const tc = { id: 'tc', tipo: 'credito' };
+  assert.equal(F.saldoDeCuenta(tc, txs, d('2026-09-03')), 0);
+});
+
+
 console.log(`\n${ok} pruebas OK`);
