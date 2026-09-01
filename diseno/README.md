@@ -1,6 +1,6 @@
 # BISHUSHA — diseño y hoja de ruta
 
-Estado al 01/09/2026. Cuarto pase de diseño, sin implementar todavía.
+Estado al 01/09/2026. Diseño cerrado y **primera versión de la app construida**.
 
 - **Sistema visual completo:** [`sistema-de-diseno.html`](sistema-de-diseno.html) — abrilo en el navegador.
   Logo, tokens, doce pantallas en claro y oscuro, el comparador de acentos con
@@ -9,6 +9,36 @@ Estado al 01/09/2026. Cuarto pase de diseño, sin implementar todavía.
 - **Marca:** [`../marca/`](../marca/)
 
 ---
+
+## La app
+
+Construida sobre los cuatro módulos de lógica. Se prueba sin backend:
+
+```bash
+npm run serve      # y abrir http://localhost:8080
+npm test           # 210 pruebas
+```
+
+| Archivo | Qué es |
+|---|---|
+| `css/tokens.css` · `css/app.css` | Sistema de diseño y capa de componentes |
+| `js/ui.js` | Helpers de DOM, set de íconos, hojas con foco atrapado |
+| `js/ruteo.js` · `js/app.js` | Router por hash, barra de pestañas, despacho |
+| `js/formato.js` | Cómo se muestran plata y fechas. Un solo lugar |
+| `js/vistas/*.js` | Hoy · Revisar · ¿Con qué pago? · Dónde está · Gastos · Tarjetas · Mes · Promos · Ajustes |
+| `js/demo.js` | Datos de ejemplo con la forma real: tres tarjetas, dos ciclos, cuatro cuentas |
+
+### Bugs que aparecieron al correrla
+
+- **Saldos duplicados.** `saldoDeCuenta` sumaba todos los movimientos, incluso
+  los anteriores a la fecha del saldo declarado — que ya los tiene adentro.
+  Ahora acepta una fecha de corte. Los saldos dan exactos contra el extracto.
+- **La tarjeta mostraba el resumen equivocado.** El 1 de septiembre mostraba el
+  ciclo en curso (cierra el 1/10) y escondía el resumen cerrado que vence el
+  4/9 — justo la plata que hay que pagar esa semana. `resumenAPagar()` lo
+  resuelve.
+- **El ritmo del mes no sirve el día 1.** Los gastos fijos caen todos juntos y
+  el porcentaje se dispara. La comparación aparece recién a partir del día 5.
 
 ## Lo decidido
 

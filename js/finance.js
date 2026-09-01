@@ -94,6 +94,22 @@ export function cicloDeCompra(fecha, tarjeta) {
            declarado: false };
 }
 
+/**
+ * El resumen CERRADO que todavia no vencio, si hay uno.
+ *
+ * No es lo mismo que el proximo ciclo: el 1 de septiembre el resumen que hay
+ * que pagar cerro el 27 de agosto y vence el 4 de septiembre, mientras el
+ * ciclo en curso recien cierra el 1 de octubre. Mostrar solo el segundo
+ * esconde justamente la plata que hay que pagar esta semana.
+ */
+export function resumenAPagar(tarjeta, ref = hoy()) {
+  for (const c of ciclosOrdenados(tarjeta)) {
+    const vence = c.vence || vencimientoDeCierre(c.cierre, tarjeta.vencimiento_dia || 10);
+    if (c.cierre <= ref && vence >= ref) return { cierre: c.cierre, vence, declarado: true };
+  }
+  return null;
+}
+
 /** Proximo cierre y vencimiento a partir de una fecha de referencia. */
 export function proximoCiclo(tarjeta, ref = hoy()) {
   const { cierre, vence, declarado } = cicloDeCompra(ref, tarjeta);
@@ -269,11 +285,19 @@ export function resumenMes(txs, per, moneda = 'ARS') {
  * cambia de moneda —comprar dolares es una transferencia de una cuenta en pesos
  * a una en dolares— el destino usa `monto_destino`, y de ahi sale el tipo de
  * cambio real de la operacion sin tener que preguntarlo.
+ *
+ * `inicial` es un saldo tomado del banco y `desde` la fecha de ese saldo. Los
+ * movimientos anteriores a esa fecha NO se suman: ya estan adentro del numero.
  */
-export function saldoDeCuenta(cuenta, txs, ref = hoy(), inicial = 0) {
+export function saldoDeCuenta(cuenta, txs, ref = hoy(), inicial = 0, desde = null) {
   let saldo = Number(inicial) || 0;
+  // `desde` es la fecha del saldo declarado. Todo lo anterior ya esta contado
+  // adentro de ese numero; volver a sumarlo duplica el saldo.
+  const corte = desde ? parseFecha(desde) : null;
   for (const tx of txs) {
-    if (parseFecha(tx.fecha) > ref) continue;
+    const f = parseFecha(tx.fecha);
+    if (f > ref) continue;
+    if (corte && f < corte) continue;
     const propio = tx.account_id === cuenta.id;
     const destino = tx.destino_account_id === cuenta.id;
     if (!propio && !destino) continue;

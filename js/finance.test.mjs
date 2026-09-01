@@ -375,4 +375,39 @@ t('una compra con tarjeta NO baja el saldo de la cuenta', () => {
 });
 
 
+console.log('\nSALDO CON CORTE Y RESUMEN A PAGAR');
+t('un saldo declarado no vuelve a sumar lo anterior a su fecha', () => {
+  const txs = [
+    { id: 'a', fecha: '2026-08-20', tipo: 'gasto', moneda: 'ARS', monto: 500000, account_id: 'gal' },
+    { id: 'b', fecha: '2026-09-02', tipo: 'gasto', moneda: 'ARS', monto: 100000, account_id: 'gal' }
+  ];
+  // saldo del banco al 01/09: ya tiene adentro el gasto del 20/08
+  const s = F.saldoDeCuenta(GAL, txs, d('2026-09-05'), 1000000, '2026-09-01');
+  assert.equal(s, 900000);
+});
+t('sin fecha de corte se cuenta todo, como antes', () => {
+  const txs = [{ id: 'a', fecha: '2026-08-20', tipo: 'gasto', moneda: 'ARS', monto: 500000, account_id: 'gal' }];
+  assert.equal(F.saldoDeCuenta(GAL, txs, d('2026-09-05'), 1000000), 500000);
+});
+t('un movimiento del mismo dia del corte SI cuenta', () => {
+  const txs = [{ id: 'a', fecha: '2026-09-01', tipo: 'gasto', moneda: 'ARS', monto: 100000, account_id: 'gal' }];
+  assert.equal(F.saldoDeCuenta(GAL, txs, d('2026-09-05'), 1000000, '2026-09-01'), 900000);
+});
+
+t('el 1 de septiembre hay un resumen cerrado esperando pago', () => {
+  const r = F.resumenAPagar(GALICIA, d('2026-09-01'));
+  assert.equal(F.fechaISO(r.cierre), '2026-08-27');
+  assert.equal(F.fechaISO(r.vence), '2026-09-04');
+});
+t('el ciclo en curso es otro: cierra el 1 de octubre', () => {
+  assert.equal(F.fechaISO(F.proximoCiclo(GALICIA, d('2026-09-01')).cierre), '2026-10-01');
+});
+t('pasado el vencimiento ya no hay resumen a pagar', () => {
+  assert.equal(F.resumenAPagar(GALICIA, d('2026-09-06')), null);
+});
+t('el dia del vencimiento todavia cuenta', () => {
+  assert.ok(F.resumenAPagar(GALICIA, d('2026-09-04')));
+});
+
+
 console.log(`\n${ok} pruebas OK`);

@@ -1,8 +1,8 @@
 // =====================================================================
-// db.js — capa de datos: Supabase + cache local + cola offline
-// =====================================================================
+// db.js — capa de datos: Supabase + cache local + cola offline.
 // supabase-js va empaquetado en vendor/ para que la PWA no dependa de
 // ningun CDN y funcione tambien sin conexion.
+// =====================================================================
 const CFG = window.CONFIG || {};
 export const DEMO = !!CFG.DEMO;
 
@@ -10,8 +10,8 @@ const stub = {
   auth: { getSession: async () => ({ data: { session: null } }),
           onAuthStateChange: () => ({ data: { subscription: { unsubscribe() {} } } }),
           signInWithOtp: async () => ({ error: null }), signOut: async () => {} },
-  from: () => ({ select: async () => ({ data: [] }), upsert: async () => ({}),
-                 delete: () => ({ eq: async () => ({}) }) })
+  from: () => ({ select: () => ({ gt: async () => ({ data: [] }), then: r => r({ data: [] }) }),
+                 upsert: async () => ({}), delete: () => ({ eq: async () => ({}) }) })
 };
 export const sb = DEMO ? stub
   : (await import('../vendor/supabase.js')).createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY, {
@@ -19,18 +19,21 @@ export const sb = DEMO ? stub
     });
 
 export const TABLAS = ['accounts', 'categories', 'transactions', 'recurrings',
-  'recurring_payments', 'budgets', 'promos', 'promo_sucursales', 'reglas',
-  'integrations', 'notificaciones', 'settings'];
+  'recurring_payments', 'budgets', 'promos', 'promo_usos', 'promo_sucursales', 'reglas',
+  'integrations', 'notificaciones', 'recibos', 'settings'];
 
-const CACHE_KEY = 'fin.cache.v1';
-const COLA_KEY = 'fin.cola.v1';
+const CACHE_KEY = 'bishusha.cache.v1';
+const COLA_KEY  = 'bishusha.cola.v1';
+const ROTAS_KEY = 'bishusha.rotas.v1';
+const MAX_INTENTOS = 5;
 
 export const state = {
   user: null,
   accounts: [], categories: [], transactions: [], recurrings: [],
-  recurring_payments: [], budgets: [], promos: [], promo_sucursales: [],
-  reglas: [], integrations: [], notificaciones: [], settings: {},
-  online: navigator.onLine, sincronizando: false, ultimaSync: null
+  recurring_payments: [], budgets: [], promos: [], promo_usos: [], promo_sucursales: [],
+  reglas: [], integrations: [], notificaciones: [], recibos: [], settings: {},
+  online: navigator.onLine, sincronizando: false, ultimaSync: null,
+  ocultarMontos: false
 };
 
 const subs = new Set();
@@ -40,11 +43,10 @@ export const emit = () => subs.forEach(fn => fn());
 // ------------------------------------------------------------------ cache
 function guardarCache() {
   try {
-    const d = {};
+    const d = { ultimaSync: state.ultimaSync };
     for (const t of TABLAS) d[t] = state[t];
-    d.ultimaSync = state.ultimaSync;
     localStorage.setItem(CACHE_KEY, JSON.stringify(d));
-  } catch (e) { console.warn('cache', e); }
+  } catch (e) { console.warn('cache lleno', e); }
 }
 export function cargarCache() {
   try {
@@ -57,23 +59,61 @@ export function cargarCache() {
 }
 
 // ------------------------------------------------------------- cola offline
-const leerCola = () => JSON.parse(localStorage.getItem(COLA_KEY) || '[]');
-const escribirCola = c => localStorage.setItem(COLA_KEY, JSON.stringify(c));
-export const pendientes = () => leerCola().length;
+const leer = k => { try { return JSON.parse(localStorage.getItem(k) || '[]'); } catch { return []; } };
+const escribir = (k, v) => localStorage.setItem(k, JSON.stringify(v));
 
-function encolar(op) { const c = leerCola(); c.push(op); escribirCola(c); }
+export const pendientes = () => leer(COLA_KEY).length;
+export const fallidas   = () => leer(ROTAS_KEY);
 
-export async function flushCola() {
-  if (!navigator.onLine) return;
-  let cola = leerCola();
-  while (cola.length) {
-    const op = cola[0];
-    try {
-      if (op.accion === 'upsert') await sb.from(op.tabla).upsert(op.fila);
-      else if (op.accion === 'delete') await sb.from(op.tabla).delete().eq('id', op.id);
-    } catch (e) { console.warn('cola bloqueada', e); return; }
-    cola.shift(); escribirCola(cola);
+function encolar(op) {
+  const c = leer(COLA_KEY);
+  // Una fila que se guarda dos veces no necesita subir dos veces.
+  const i = c.findIndex(x => x.accion === op.accion && x.tabla === op.tabla &&
+                             (x.fila?.id || x.id) === (op.fila?.id || op.id));
+  if (i >= 0) c[i] = { ...op, intentos: c[i].intentos || 0 }; else c.push({ ...op, intentos: 0 });
+  escribir(COLA_KEY, c);
+}
+
+/**
+ * Vacia la cola de escrituras pendientes.
+ *
+ * La version anterior hacia `return` en el catch: UNA fila que fallara
+ * congelaba la sincronizacion para siempre, y con ella toda la app. Ahora
+ * cada operacion se reintenta hasta cinco veces y despues se aparta en un
+ * cajon de fallidas que se puede ver y reintentar desde Ajustes. La cola
+ * nunca se bloquea, y nada se pierde en silencio.
+ */
+export async function flushCola({ reintentarFallidas = false } = {}) {
+  if (DEMO || !navigator.onLine) return;
+  if (reintentarFallidas) {
+    const rotas = leer(ROTAS_KEY);
+    if (rotas.length) {
+      escribir(COLA_KEY, [...leer(COLA_KEY), ...rotas.map(r => ({ ...r, intentos: 0 }))]);
+      escribir(ROTAS_KEY, []);
+    }
   }
+
+  let cola = leer(COLA_KEY);
+  const quedan = [], rotas = leer(ROTAS_KEY);
+
+  for (const op of cola) {
+    try {
+      const { error } = op.accion === 'upsert'
+        ? await sb.from(op.tabla).upsert(op.fila)
+        : await sb.from(op.tabla).delete().eq('id', op.id);
+      if (error) throw new Error(error.message);
+    } catch (e) {
+      const intentos = (op.intentos || 0) + 1;
+      if (intentos >= MAX_INTENTOS) {
+        rotas.push({ ...op, intentos, error: String(e.message || e), cuando: new Date().toISOString() });
+        console.warn('operacion apartada tras', intentos, 'intentos', op.tabla, e);
+      } else {
+        quedan.push({ ...op, intentos });
+      }
+    }
+  }
+  escribir(COLA_KEY, quedan);
+  escribir(ROTAS_KEY, rotas);
 }
 
 // ------------------------------------------------------------------- auth
@@ -91,11 +131,8 @@ export async function sesion() {
   state.user = data.session?.user || null;
   return state.user;
 }
-export async function enviarMagicLink(email) {
-  return sb.auth.signInWithOtp({
-    email, options: { emailRedirectTo: window.location.origin + window.location.pathname }
-  });
-}
+export const enviarMagicLink = email => sb.auth.signInWithOtp({
+  email, options: { emailRedirectTo: location.origin + location.pathname } });
 export async function salir() {
   await sb.auth.signOut();
   localStorage.removeItem(CACHE_KEY);
@@ -103,20 +140,42 @@ export async function salir() {
 }
 
 // ------------------------------------------------------------------- sync
-export async function sincronizar() {
+/**
+ * Sincroniza por DIFERENCIA, no bajando las tablas enteras.
+ *
+ * La version anterior hacia select('*') de las doce tablas en cada arranque.
+ * A los dos años son miles de filas en cada apertura. Con `updated_at` en
+ * todas las tablas (migracion 003) alcanza con pedir lo que cambio.
+ */
+export async function sincronizar(opciones = {}) {
   if (DEMO) { state.ultimaSync = new Date().toISOString(); return; }
   if (!state.user || state.sincronizando) return;
   state.sincronizando = true; emit();
+  const desde = opciones.completa ? null : state.ultimaSync;
+  const empezo = new Date().toISOString();
+
   try {
-    await flushCola();
-    const res = await Promise.all(TABLAS.map(t => sb.from(t).select('*')));
+    await flushCola(opciones);
+    const res = await Promise.all(TABLAS.map(t => {
+      const q = sb.from(t).select('*');
+      return desde ? q.gt('updated_at', desde) : q;
+    }));
+
     TABLAS.forEach((t, i) => {
-      const { data, error } = res[i];
+      const { data, error } = res[i] || {};
       if (error) { console.warn(t, error.message); return; }
-      state[t] = t === 'settings' ? (data[0] || {}) : data;
+      if (!data) return;
+      if (t === 'settings') { if (data[0]) state.settings = data[0]; return; }
+      if (!desde) { state[t] = data; return; }
+      // Diferencial: se pisa lo que cambio y se agrega lo nuevo.
+      const idx = new Map(state[t].map(f => [f.id, f]));
+      for (const fila of data) idx.set(fila.id, fila);
+      state[t] = [...idx.values()];
     });
-    state.ultimaSync = new Date().toISOString();
+    state.ultimaSync = empezo;
     guardarCache();
+  } catch (e) {
+    console.warn('sync', e);
   } finally {
     state.sincronizando = false; emit();
   }
@@ -133,10 +192,11 @@ export async function guardar(tabla, fila) {
   const nueva = { ...fila };
   if (!nueva.id) nueva.id = uuid();
   nueva.user_id = state.user.id;
+  nueva.updated_at = new Date().toISOString();
 
-  const lista = state[tabla];
   if (tabla === 'settings') state.settings = { ...state.settings, ...nueva };
   else {
+    const lista = state[tabla] || (state[tabla] = []);
     const i = lista.findIndex(x => x.id === nueva.id);
     if (i >= 0) lista[i] = { ...lista[i], ...nueva }; else lista.unshift(nueva);
   }
@@ -144,25 +204,29 @@ export async function guardar(tabla, fila) {
 
   if (DEMO) return nueva;
   if (navigator.onLine) {
-    const { error } = await sb.from(tabla).upsert(nueva);
-    if (error) { console.warn('upsert', tabla, error.message); encolar({ accion: 'upsert', tabla, fila: nueva }); }
+    try {
+      const { error } = await sb.from(tabla).upsert(nueva);
+      if (error) throw new Error(error.message);
+    } catch (e) { encolar({ accion: 'upsert', tabla, fila: nueva }); }
   } else encolar({ accion: 'upsert', tabla, fila: nueva });
   return nueva;
 }
 
 export async function borrar(tabla, id) {
-  state[tabla] = state[tabla].filter(x => x.id !== id);
+  state[tabla] = (state[tabla] || []).filter(x => x.id !== id);
   guardarCache(); emit();
   if (DEMO) return;
   if (navigator.onLine) {
-    const { error } = await sb.from(tabla).delete().eq('id', id);
-    if (error) encolar({ accion: 'delete', tabla, id });
+    try {
+      const { error } = await sb.from(tabla).delete().eq('id', id);
+      if (error) throw new Error(error.message);
+    } catch { encolar({ accion: 'delete', tabla, id }); }
   } else encolar({ accion: 'delete', tabla, id });
 }
 
 // ------------------------------------------------------------------ export
 export function exportarJSON() {
-  const d = { exportado: new Date().toISOString(), version: 1 };
+  const d = { app: 'bishusha', exportado: new Date().toISOString(), version: 2 };
   for (const t of TABLAS) { if (t === 'integrations') continue; d[t] = state[t]; }
   return JSON.stringify(d, null, 2);
 }
@@ -174,9 +238,9 @@ export async function importarJSON(texto) {
     if (t === 'integrations' || !Array.isArray(d[t])) continue;
     for (const fila of d[t]) { await guardar(t, { ...fila, user_id: state.user.id }); n++; }
   }
-  await sincronizar();
+  await sincronizar({ completa: true });
   return n;
 }
 
-window.addEventListener('online', () => { state.online = true; emit(); sincronizar(); });
-window.addEventListener('offline', () => { state.online = false; emit(); });
+addEventListener('online', () => { state.online = true; emit(); sincronizar(); });
+addEventListener('offline', () => { state.online = false; emit(); });

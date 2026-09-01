@@ -1,112 +1,225 @@
 // =====================================================================
-// demo.js — datos de ejemplo para probar la app sin Supabase.
-// Se activa con DEMO:true en config.js. Todo queda en este navegador.
+// demo.js — datos de ejemplo para probar la app sin backend.
+// Las cifras copian la forma de un caso real: tres tarjetas con dos ciclos
+// distintos, cuatro lugares donde vive la plata, sueldo en banco mas sobre,
+// y dolares aparte. Los nombres y numeros son inventados.
 // =====================================================================
-const hoy = new Date();
-const iso = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-const dias = n => { const d = new Date(hoy); d.setDate(d.getDate() + n); return iso(d); };
-/** Dia `k` del mes corriente, sin pasarse de hoy: asi la demo siempre muestra numeros. */
-const esteMes = k => {
-  const d = new Date(hoy.getFullYear(), hoy.getMonth(), Math.min(k, hoy.getDate()));
-  return iso(d);
-};
 
-const CAT = {
-  super: 'c1', serv: 'c2', cole: 'c3', comb: 'c4', gastro: 'c5', salud: 'c6',
-  hogar: 'c7', entre: 'c8', sueldo: 'c9'
-};
+const id = n => `demo-${n}`;
 
 export const DEMO = {
   accounts: [
-    { id: 'a1', nombre: 'Visa Galicia', tipo: 'credito', banco: 'Galicia', marca: 'visa',
-      ultimos4: '4821', moneda: 'ARS', cierre_dia: 20, vencimiento_dia: 30, limite: 2400000, activo: true },
-    { id: 'a2', nombre: 'Mastercard Galicia', tipo: 'credito', banco: 'Galicia', marca: 'mastercard',
-      ultimos4: '7310', moneda: 'ARS', cierre_dia: 8, vencimiento_dia: 18, limite: 900000, activo: true },
-    { id: 'a3', nombre: 'Mercado Pago', tipo: 'billetera', moneda: 'ARS', activo: true },
-    { id: 'a4', nombre: 'Efectivo', tipo: 'efectivo', moneda: 'ARS', activo: true }
+    { id: id('gal'), nombre: 'Galicia', tipo: 'cuenta', banco: 'Galicia', moneda: 'ARS',
+      color: '#1B3A6B', orden: 1, activo: true, saldo_inicial: 0, saldo_al: '2026-09-01' },
+    { id: id('mpw'), nombre: 'Mercado Pago', tipo: 'billetera', moneda: 'ARS',
+      color: '#00A3E0', orden: 2, activo: true, saldo_inicial: 0, saldo_al: '2026-09-01' },
+    { id: id('pp'), nombre: 'Personal Pay', tipo: 'billetera', moneda: 'ARS',
+      color: '#7B2FF7', orden: 3, activo: true, saldo_inicial: 32181.28, saldo_al: '2026-09-01' },
+    { id: id('efe'), nombre: 'Efectivo', tipo: 'efectivo', moneda: 'ARS',
+      color: '#4B7A5B', orden: 4, activo: true, saldo_inicial: 0, saldo_al: '2026-09-01' },
+
+    { id: id('visa'), nombre: 'Galicia Visa', tipo: 'credito', banco: 'Galicia', marca: 'visa',
+      ultimos4: '9817', moneda: 'ARS', limite: 7000000, cierre_dia: 27, vencimiento_dia: 4,
+      color: '#2A2F52', orden: 5, activo: true,
+      ciclos: [{ cierre: '2026-07-30', vence: '2026-08-07' },
+               { cierre: '2026-08-27', vence: '2026-09-04' },
+               { cierre: '2026-10-01', vence: '2026-10-09' }] },
+    { id: id('mc'), nombre: 'Galicia Mastercard', tipo: 'credito', banco: 'Galicia', marca: 'mastercard',
+      ultimos4: '6513', moneda: 'ARS', limite: 7000000, cierre_dia: 27, vencimiento_dia: 4,
+      color: '#0F5C63', orden: 6, activo: true,
+      ciclos: [{ cierre: '2026-07-30', vence: '2026-08-07' },
+               { cierre: '2026-08-27', vence: '2026-09-04' },
+               { cierre: '2026-10-01', vence: '2026-10-09' }] },
+    { id: id('mpc'), nombre: 'Mercado Pago crédito', tipo: 'credito', marca: 'mastercard',
+      ultimos4: '4402', moneda: 'ARS', limite: 2555000, cierre_dia: 5, vencimiento_dia: 10,
+      color: '#00539C', orden: 7, activo: true,
+      ciclos: [{ cierre: '2026-09-05', vence: '2026-09-10' },
+               { cierre: '2026-10-05', vence: '2026-10-10' }] },
+
+    { id: id('wb'), nombre: 'Wallbit', tipo: 'cuenta', moneda: 'USD',
+      color: '#25382B', orden: 8, activo: true, saldo_inicial: 4840, saldo_al: '2026-09-01' },
+    { id: id('usd'), nombre: 'Dólares billete', tipo: 'efectivo', moneda: 'USD',
+      color: '#3D5A45', orden: 9, activo: true, saldo_inicial: 1184.45, saldo_al: '2026-09-01' }
   ],
+
   categories: [
-    { id: CAT.super, nombre: 'Supermercado', tipo: 'gasto', color: '#2fa96b', presupuesto: 450000 },
-    { id: CAT.serv, nombre: 'Servicios', tipo: 'gasto', color: '#e0a83b', presupuesto: 180000 },
-    { id: CAT.cole, nombre: 'Colegio / Educacion', tipo: 'gasto', color: '#7a5cf0' },
-    { id: CAT.comb, nombre: 'Combustible / Transporte', tipo: 'gasto', color: '#2f6fed', presupuesto: 120000 },
-    { id: CAT.gastro, nombre: 'Gastronomia', tipo: 'gasto', color: '#e0603b', presupuesto: 150000 },
-    { id: CAT.salud, nombre: 'Salud', tipo: 'gasto', color: '#3bb6e0' },
-    { id: CAT.hogar, nombre: 'Hogar', tipo: 'gasto', color: '#9a6b4f' },
-    { id: CAT.entre, nombre: 'Entretenimiento', tipo: 'gasto', color: '#d13b8a', presupuesto: 60000 },
-    { id: CAT.sueldo, nombre: 'Sueldo', tipo: 'ingreso', color: '#2fa96b' }
+    { id: id('c1'), nombre: 'Supermercado', tipo: 'gasto', color: '#0B7F5A', orden: 1 },
+    { id: id('c2'), nombre: 'Gastronomía', tipo: 'gasto', color: '#9A5D00', orden: 2 },
+    { id: id('c3'), nombre: 'Combustible', tipo: 'gasto', color: '#0D5470', orden: 3 },
+    { id: id('c4'), nombre: 'Servicios', tipo: 'gasto', color: '#5C6272', orden: 4 },
+    { id: id('c5'), nombre: 'Salud', tipo: 'gasto', color: '#C1293D', orden: 5 },
+    { id: id('c6'), nombre: 'Colegio', tipo: 'gasto', color: '#4B3A8F', orden: 6 },
+    { id: id('c7'), nombre: 'Suscripciones', tipo: 'gasto', color: '#2F6F8F', orden: 7 },
+    { id: id('c8'), nombre: 'Hogar', tipo: 'gasto', color: '#8A6B4F', orden: 8 },
+    { id: id('c9'), nombre: 'Transporte', tipo: 'gasto', color: '#6B7280', orden: 9 },
+    { id: id('c10'), nombre: 'Otros', tipo: 'gasto', color: '#868C9B', orden: 10 },
+    { id: id('i1'), nombre: 'Sueldo', tipo: 'ingreso', color: '#0B7F5A', orden: 1 },
+    { id: id('i2'), nombre: 'Extras', tipo: 'ingreso', color: '#0D5470', orden: 2 }
   ],
+
   transactions: [
-    { id: 't1', fecha: esteMes(28), descripcion: 'Coto', comercio: 'Coto Caballito', monto: 86400, moneda: 'ARS',
-      tipo: 'gasto', account_id: 'a1', category_id: CAT.super, cuotas: 1, reintegro: 17280,
-      fuente: 'gmail', revisado: false, confianza: 90, created_at: esteMes(28) },
-    { id: 't2', fecha: esteMes(26), descripcion: 'Shell', comercio: 'Shell Rivadavia', monto: 42000, moneda: 'ARS',
-      tipo: 'gasto', account_id: 'a1', category_id: CAT.comb, cuotas: 1, fuente: 'gmail', revisado: false,
-      confianza: 88, created_at: esteMes(26) },
-    { id: 't3', fecha: esteMes(22), descripcion: 'Frávega', comercio: 'Frávega', monto: 720000, moneda: 'ARS',
-      tipo: 'gasto', account_id: 'a1', category_id: CAT.hogar, cuotas: 12, fuente: 'manual', revisado: true,
-      created_at: esteMes(22) },
-    { id: 't4', fecha: esteMes(19), descripcion: 'Farmacity', comercio: 'Farmacity', monto: 31500, moneda: 'ARS',
-      tipo: 'gasto', account_id: 'a2', category_id: CAT.salud, cuotas: 1, fuente: 'gmail', revisado: true,
-      created_at: esteMes(19) },
-    { id: 't5', fecha: esteMes(15), descripcion: 'Netflix', comercio: 'Netflix', monto: 12.99, moneda: 'USD',
-      tipo: 'gasto', account_id: 'a1', category_id: CAT.entre, cuotas: 1, fuente: 'gmail', revisado: true,
-      created_at: esteMes(15) },
-    { id: 't6', fecha: esteMes(24), descripcion: 'Rappi', comercio: 'Rappi', monto: 28900, moneda: 'ARS',
-      tipo: 'gasto', account_id: 'a3', category_id: CAT.gastro, cuotas: 1, fuente: 'mercadopago',
-      revisado: true, created_at: esteMes(24) },
-    { id: 't7', fecha: esteMes(12), descripcion: 'Carrefour', comercio: 'Carrefour Express', monto: 43800,
-      moneda: 'ARS', tipo: 'gasto', account_id: 'a2', category_id: CAT.super, cuotas: 1, fuente: 'gmail',
-      revisado: true, created_at: esteMes(12) },
-    { id: 't8', fecha: esteMes(5), descripcion: 'Sueldo', comercio: 'Sueldo', monto: 2350000, moneda: 'ARS',
-      tipo: 'ingreso', account_id: null, category_id: CAT.sueldo, cuotas: 1, fuente: 'manual',
-      revisado: true, created_at: esteMes(5) },
-    { id: 't9', fecha: esteMes(27), descripcion: 'Kiosco', comercio: 'Kiosco', monto: 4500, moneda: 'ARS',
-      tipo: 'gasto', account_id: 'a4', category_id: CAT.gastro, cuotas: 1, fuente: 'manual',
-      revisado: true, created_at: esteMes(27) },
-    { id: 't10', fecha: dias(-40), descripcion: 'Dexter', comercio: 'Dexter', monto: 189000, moneda: 'ARS',
-      tipo: 'gasto', account_id: 'a1', category_id: CAT.hogar, cuotas: 6, fuente: 'manual',
-      revisado: true, created_at: dias(-40) }
+    // ---- el dia que entro el sueldo: ingreso, transferencias y servicios
+    { id: id('t1'), fecha: '2026-09-01', descripcion: 'Acreditamiento de haberes', comercio: 'Sueldo',
+      monto: 2026665.38, moneda: 'ARS', tipo: 'ingreso', account_id: id('gal'),
+      category_id: id('i1'), cuotas: 1, fuente: 'banco', revisado: true },
+    { id: id('t2'), fecha: '2026-09-01', descripcion: 'Sueldo en sobre', comercio: 'Sueldo',
+      monto: 1532000, moneda: 'ARS', tipo: 'ingreso', account_id: id('efe'),
+      category_id: id('i1'), cuotas: 1, fuente: 'manual', revisado: true },
+    { id: id('t3'), fecha: '2026-09-01', descripcion: 'A Mercado Pago', monto: 652800, moneda: 'ARS',
+      tipo: 'transferencia', account_id: id('gal'), destino_account_id: id('mpw'),
+      cuotas: 1, fuente: 'banco', revisado: true },
+    { id: id('t4'), fecha: '2026-09-01', descripcion: 'A Personal Pay', monto: 62780, moneda: 'ARS',
+      tipo: 'transferencia', account_id: id('gal'), destino_account_id: id('pp'),
+      cuotas: 1, fuente: 'banco', revisado: true },
+    { id: id('t5'), fecha: '2026-09-01', descripcion: 'Compra de dólares', monto: 23100, moneda: 'ARS',
+      tipo: 'transferencia', account_id: id('gal'), destino_account_id: id('usd'),
+      monto_destino: 15.55, moneda_destino: 'USD', cuotas: 1, fuente: 'banco', revisado: true },
+    { id: id('t6'), fecha: '2026-09-01', descripcion: 'Edesur', comercio: 'Edesur', monto: 20581.06,
+      moneda: 'ARS', tipo: 'gasto', account_id: id('gal'), category_id: id('c4'),
+      cuotas: 1, fuente: 'banco', revisado: true },
+    { id: id('t7'), fecha: '2026-09-01', descripcion: 'Metrogas', comercio: 'Metrogas', monto: 37784,
+      moneda: 'ARS', tipo: 'gasto', account_id: id('gal'), category_id: id('c4'),
+      cuotas: 1, fuente: 'banco', revisado: true },
+    { id: id('t8'), fecha: '2026-09-01', descripcion: 'Aysa', comercio: 'Aysa', monto: 26087.98,
+      moneda: 'ARS', tipo: 'gasto', account_id: id('gal'), category_id: id('c4'),
+      cuotas: 1, fuente: 'banco', revisado: true },
+
+    // ---- consumos del resumen de la Visa que cerro el 27/08
+    { id: id('t9'), fecha: '2026-06-06', descripcion: 'Naked', comercio: 'Naked', monto: 228783,
+      moneda: 'ARS', tipo: 'gasto', account_id: id('visa'), category_id: id('c10'),
+      cuotas: 3, fuente: 'resumen', revisado: true },
+    { id: id('t10'), fecha: '2026-08-04', descripcion: 'Colegio', comercio: 'Colegio Juan Bautista',
+      monto: 548589.62, moneda: 'ARS', tipo: 'gasto', account_id: id('visa'),
+      category_id: id('c6'), cuotas: 1, fuente: 'resumen', revisado: true },
+    { id: id('t11'), fecha: '2026-08-04', descripcion: 'OSDE', comercio: 'OSDE', monto: 302006.09,
+      moneda: 'ARS', tipo: 'gasto', account_id: id('visa'), category_id: id('c5'),
+      cuotas: 1, fuente: 'resumen', revisado: true },
+    { id: id('t12'), fecha: '2026-08-22', descripcion: 'Juguetería', comercio: 'Somos Los Juguetes',
+      monto: 37400.04, moneda: 'ARS', tipo: 'gasto', account_id: id('visa'),
+      category_id: id('c10'), cuotas: 3, fuente: 'resumen', revisado: true },
+    { id: id('t13'), fecha: '2026-08-04', descripcion: 'Xbox Game Pass', comercio: 'Microsoft',
+      monto: 12.85, moneda: 'USD', tipo: 'gasto', account_id: id('visa'),
+      category_id: id('c7'), cuotas: 1, fuente: 'resumen', revisado: true },
+
+    // ---- consumos del resumen de la Mastercard
+    { id: id('t14'), fecha: '2026-08-02', descripcion: 'Old Bridge', comercio: 'Old Bridge',
+      monto: 78800.04, moneda: 'ARS', tipo: 'gasto', account_id: id('mc'),
+      category_id: id('c8'), cuotas: 3, fuente: 'resumen', revisado: true },
+    { id: id('t15'), fecha: '2026-08-10', descripcion: 'Melo', comercio: 'Melo Da Costa',
+      monto: 186000, moneda: 'ARS', tipo: 'gasto', account_id: id('mc'),
+      category_id: id('c8'), cuotas: 3, fuente: 'resumen', revisado: true },
+
+    // ---- lo que entro solo y esta sin revisar
+    { id: id('r1'), fecha: '2026-09-01', descripcion: 'COTO CICSA', comercio: 'Coto', monto: 48200,
+      moneda: 'ARS', tipo: 'gasto', account_id: id('visa'), category_id: id('c1'),
+      cuotas: 1, fuente: 'gmail', revisado: false, confianza: 92 },
+    { id: id('r2'), fecha: '2026-09-01', descripcion: 'YPF FULL', comercio: 'YPF', monto: 52000,
+      moneda: 'ARS', tipo: 'gasto', account_id: id('mc'), category_id: id('c3'),
+      cuotas: 1, fuente: 'gmail', revisado: false, confianza: 95 },
+    { id: id('r3'), fecha: '2026-09-01', descripcion: 'MERPAGO*SPOTIFY', comercio: 'Spotify',
+      monto: 8999, moneda: 'ARS', tipo: 'gasto', account_id: id('mpc'), category_id: id('c7'),
+      cuotas: 1, fuente: 'gmail', revisado: false, confianza: 88 },
+    { id: id('r4'), fecha: '2026-08-31', descripcion: 'FRAVEGA SACIEI', comercio: 'Frávega',
+      monto: 1546800, moneda: 'ARS', tipo: 'gasto', account_id: id('visa'), category_id: id('c8'),
+      cuotas: 12, fuente: 'gmail', revisado: false, confianza: 74 },
+    { id: id('r5'), fecha: '2026-08-31', descripcion: 'OPENAI *CHATGPT', comercio: 'OpenAI',
+      monto: 20, moneda: 'USD', tipo: 'gasto', account_id: id('wb'), category_id: id('c7'),
+      cuotas: 1, fuente: 'gmail', revisado: false, confianza: 90 },
+    { id: id('r6'), fecha: '2026-08-30', descripcion: 'PEDIDOSYA', comercio: 'PedidosYa',
+      monto: 22059, moneda: 'ARS', tipo: 'gasto', account_id: id('mc'), category_id: id('c2'),
+      cuotas: 1, fuente: 'gmail', revisado: false, confianza: 91 },
+
+    // gastos hechos desde las billeteras despues de recibir la transferencia
+    { id: id('w1'), fecha: '2026-09-01', descripcion: 'Supermercado', comercio: 'Coto',
+      monto: 154136.23, moneda: 'ARS', tipo: 'gasto', account_id: id('mpw'),
+      category_id: id('c1'), cuotas: 1, fuente: 'manual', revisado: true },
+    { id: id('w2'), fecha: '2026-09-01', descripcion: 'Nafta', comercio: 'YPF',
+      monto: 100000, moneda: 'ARS', tipo: 'gasto', account_id: id('mpw'),
+      category_id: id('c3'), cuotas: 1, fuente: 'manual', revisado: true }
   ],
+
   recurrings: [
-    { id: 'r1', nombre: 'Colegio', monto_estimado: 340000, moneda: 'ARS', dia_vencimiento: 10,
-      category_id: CAT.cole, variable: false, activo: true },
-    { id: 'r2', nombre: 'Luz (Edesur)', monto_estimado: 78000, moneda: 'ARS', dia_vencimiento: 18,
-      category_id: CAT.serv, variable: true, activo: true },
-    { id: 'r3', nombre: 'Gas (Metrogas)', monto_estimado: 45000, moneda: 'ARS', dia_vencimiento: 22,
-      category_id: CAT.serv, variable: true, activo: true },
-    { id: 'r4', nombre: 'Internet + cable', monto_estimado: 62000, moneda: 'ARS', dia_vencimiento: 5,
-      category_id: CAT.serv, variable: false, activo: true },
-    { id: 'r5', nombre: 'Prepaga', monto_estimado: 290000, moneda: 'ARS', dia_vencimiento: 12,
-      category_id: CAT.salud, variable: false, activo: true }
+    { id: id('rc1'), nombre: 'Colegio', monto_estimado: 548590, moneda: 'ARS', dia_vencimiento: 10,
+      category_id: id('c6'), account_id: id('visa'), variable: false, activo: true, orden: 1 },
+    { id: id('rc2'), nombre: 'OSDE', monto_estimado: 302006, moneda: 'ARS', dia_vencimiento: 15,
+      category_id: id('c5'), account_id: id('visa'), variable: false, activo: true, orden: 2 },
+    { id: id('rc3'), nombre: 'Edesur', monto_estimado: 20581, moneda: 'ARS', dia_vencimiento: 1,
+      category_id: id('c4'), account_id: id('gal'), variable: true, activo: true, orden: 3 },
+    { id: id('rc4'), nombre: 'Metrogas', monto_estimado: 37784, moneda: 'ARS', dia_vencimiento: 1,
+      category_id: id('c4'), account_id: id('gal'), variable: true, activo: true, orden: 4 },
+    { id: id('rc5'), nombre: 'Aysa', monto_estimado: 26088, moneda: 'ARS', dia_vencimiento: 1,
+      category_id: id('c4'), account_id: id('gal'), variable: true, activo: true, orden: 5 },
+    { id: id('rc6'), nombre: 'Spotify', monto_estimado: 8999, moneda: 'ARS', dia_vencimiento: 12,
+      category_id: id('c7'), account_id: id('mpc'), variable: false, activo: true, orden: 6 }
   ],
+
   recurring_payments: [
-    { id: 'p1', recurring_id: 'r4', periodo: iso(hoy).slice(0, 7), monto: 62000, pagado_at: dias(-2) }
+    { id: id('rp1'), recurring_id: id('rc3'), periodo: '2026-09', monto: 20581.06,
+      pagado_at: '2026-09-01T12:00:00Z', transaction_id: id('t6') },
+    { id: id('rp2'), recurring_id: id('rc4'), periodo: '2026-09', monto: 37784,
+      pagado_at: '2026-09-01T12:00:00Z', transaction_id: id('t7') },
+    { id: id('rp3'), recurring_id: id('rc5'), periodo: '2026-09', monto: 26087.98,
+      pagado_at: '2026-09-01T12:00:00Z', transaction_id: id('t8') }
   ],
-  budgets: [],
+
+  budgets: [
+    { id: id('b1'), periodo: '2026-09', category_id: id('c1'), monto: 260000, moneda: 'ARS' },
+    { id: id('b2'), periodo: '2026-09', category_id: id('c2'), monto: 180000, moneda: 'ARS' },
+    { id: id('b3'), periodo: '2026-09', category_id: id('c3'), monto: 140000, moneda: 'ARS' },
+    { id: id('b4'), periodo: '2026-09', category_id: id('c7'), monto: 40000, moneda: 'ARS' },
+    { id: id('b5'), periodo: '2026-09', category_id: id('c10'), monto: 120000, moneda: 'ARS' }
+  ],
+
   promos: [
-    { id: 'pr1', titulo: '20% de reintegro en supermercados', comercio: 'Coto', rubro: 'supermercado',
-      emisor: 'galicia', tipo: 'reintegro', valor: 20, tope: 20000, tope_periodo: 'semanal',
-      dias: [3], medio_pago: 'Tarjeta Galicia Visa', canal: 'presencial', activa: true, favorita: true,
-      marcas: ['Coto'], osm_filtro: 'shop=supermarket' },
-    { id: 'pr2', titulo: '25% de ahorro en Rappi los sábados', comercio: 'Rappi', rubro: 'gastronomia',
-      emisor: 'galicia', tipo: 'descuento', valor: 25, tope: 12000, dias: [6],
-      medio_pago: 'Tarjeta de crédito Galicia Visa', canal: 'online', activa: true, marcas: [] },
-    { id: 'pr3', titulo: '20% de reintegro en farmacias online', comercio: 'Farmacias adheridas',
-      rubro: 'farmacia', emisor: 'modo', tipo: 'reintegro', valor: 20, tope: 16000, tope_periodo: 'semanal',
-      dias: [], medio_pago: 'MODO con tarjeta de crédito', canal: 'online', activa: true,
-      vigencia_hasta: '2026-09-29', marcas: [], osm_filtro: 'amenity=pharmacy' },
-    { id: 'pr4', titulo: '15% en farmacias del barrio', comercio: 'Farmacity', rubro: 'farmacia',
-      emisor: 'galicia', tipo: 'reintegro', valor: 15, tope: 10000, dias: [1, 2, 3, 4, 5],
-      medio_pago: 'Tarjeta Galicia', canal: 'presencial', activa: true,
-      marcas: ['Farmacity', 'Simplicity'], osm_filtro: 'amenity=pharmacy' },
-    { id: 'pr5', titulo: '20% de reintegro en combustible', comercio: 'YPF', rubro: 'combustible',
-      emisor: 'modo', tipo: 'reintegro', valor: 20, tope: 15000, dias: [1, 2],
-      medio_pago: 'MODO', canal: 'presencial', activa: true, marcas: ['YPF'], osm_filtro: 'amenity=fuel' },
-    { id: 'pr6', titulo: '12 cuotas sin interés en electro', comercio: 'Frávega', rubro: 'electro',
-      emisor: 'galicia', tipo: 'cuotas', valor: 12, dias: [], medio_pago: 'Tarjeta Galicia',
-      canal: 'ambos', activa: true, marcas: ['Frávega'], osm_filtro: 'shop=electronics' }
+    { id: id('p1'), titulo: 'Coto', comercio: 'Coto', rubro: 'supermercado', emisor: 'galicia',
+      tipo: 'reintegro', valor: 25, tope: 20000, tope_periodo: 'mensual', dias: [3, 6],
+      medio_pago: 'Galicia Visa', canal: 'presencial', activa: true, favorita: true,
+      osm_filtro: 'shop=supermarket', marcas: ['Coto'] },
+    { id: id('p2'), titulo: 'Shell', comercio: 'Shell', rubro: 'combustible', emisor: 'modo',
+      tipo: 'reintegro', valor: 15, tope: 8000, tope_periodo: 'mensual', dias: [],
+      medio_pago: 'MODO', canal: 'presencial', activa: true, favorita: false,
+      osm_filtro: 'amenity=fuel', marcas: ['Shell'] },
+    { id: id('p3'), titulo: 'Farmacity', comercio: 'Farmacity', rubro: 'salud', emisor: 'modo',
+      tipo: 'reintegro', valor: 20, tope: 15000, tope_periodo: 'mensual', dias: [4],
+      medio_pago: 'MODO', canal: 'presencial', activa: true, favorita: false,
+      osm_filtro: 'amenity=pharmacy', marcas: ['Farmacity'] }
   ],
-  promo_sucursales: [], reglas: [], integrations: [], notificaciones: [],
-  settings: { usd_ref: 0, alert_pct: 80 }
+
+  promo_usos: [
+    { id: id('pu1'), promo_id: id('p1'), periodo: '2026-09', usado: 12400 }
+  ],
+
+  recibos: [
+    { id: id('s1'), periodo: '2026-05', basico: 1161167, remunerativo: 2126368.23,
+      no_remunerativo: 144295.56, deducciones: 418249.21, neto: 1852414.58,
+      pagado_el: '2026-06-01', sobre: 1400000, conceptos: ['SUELDO MENSUAL', 'ADIC. EMPRESA'] },
+    { id: id('s2'), periodo: '2026-06', basico: 1179445, remunerativo: 2164862.50,
+      no_remunerativo: 144295.56, deducciones: 425755.59, neto: 1883402.47,
+      pagado_el: '2026-07-01', sobre: 1440000, conceptos: ['SUELDO MENSUAL', 'DIFERENCIA SAC'] },
+    { id: id('s3'), periodo: '2026-07', basico: 1204135, remunerativo: 2429014.35,
+      no_remunerativo: 184121.81, deducciones: 477635.84, neto: 2135500.32,
+      pagado_el: '2026-08-03', sobre: 1490000, conceptos: ['SUELDO MENSUAL', 'VACACIONES'] },
+    { id: id('s4'), periodo: '2026-08', basico: 1228824, remunerativo: 2301786.41,
+      no_remunerativo: 172849.90, deducciones: 447970.93, neto: 2026665.38,
+      pagado_el: '2026-09-01', sobre: 1532000, conceptos: ['SUELDO MENSUAL', 'VACACIONES'] }
+  ],
+
+  reglas: [
+    { id: id('g1'), patron: 'coto', category_id: id('c1'), prioridad: 10, veces_usada: 14 },
+    { id: id('g2'), patron: 'ypf|shell|axion', category_id: id('c3'), prioridad: 10, veces_usada: 9 },
+    { id: id('g3'), patron: 'pedidosya|mostaza|mcdonald', category_id: id('c2'), prioridad: 8, veces_usada: 22 }
+  ],
+
+  notificaciones: [
+    { id: id('n1'), tipo: 'carga_auto', titulo: '6 movimientos para revisar',
+      cuerpo: 'Entraron solos desde Gmail', leida: false, created_at: '2026-09-01T14:02:00Z' }
+  ],
+
+  integrations: [],
+  promo_sucursales: [],
+
+  settings: {
+    usd_ref: 1485, alert_pct: 80, dia_cobro: 1, sobre_estimado: 1532000,
+    sumas_fijas_nr: 120000, ocultar_montos: false
+  }
 };
