@@ -96,6 +96,7 @@ lo fijan) y la decisión de guardar una compra en cuotas como una sola fila.
 ## Cambios de modelo que piden las pantallas nuevas
 
 ```sql
+recibos           -- HECHO. Ver supabase/migrations/003_recibos.sql
 promo_usos        -- una fila por promo y período con el reintegro acumulado.
                   -- Sin esto, "25 % de reintegro" es publicidad y no un dato.
 cotizaciones      -- fecha, tipo (oficial/MEP/tarjeta) y valor, de dolarapi.com.
@@ -104,6 +105,7 @@ transactions      -- + reintegro_estado: esperado / acreditado / no_llego + fech
                   -- + updated_at (con trigger) para sincronizar por diferencia
 recurrings        -- + periodicidad: mensual / bimestral / semestral / anual
                   -- (el seguro anual aporta su doceava parte al presupuesto)
+updated_at        -- HECHO, con trigger, en 003_recibos.sql
 reglas            -- + condiciones compuestas: comercio + rango de monto + cuenta
 ```
 
@@ -126,7 +128,7 @@ reglas            -- + condiciones compuestas: comercio + rango de monto + cuent
 
 ### 3 — Argentina
 - [ ] **Cotización en vivo** desde `dolarapi.com` (gratis, sin clave).
-- [ ] **Ingreso aprendido, no cargado.** Paritarias todos los meses: la app calcula el sueldo de lo que ya entró, proyecta el próximo con el ritmo de los últimos aumentos, separa banco de sobre y anticipa el aguinaldo.
+- [x] **Ingreso aprendido, no cargado.** `js/sueldo.js` con 37 pruebas: ritmo de paritaria, proyección, aguinaldo y calendario de cobros. Falta la pantalla.
 - [ ] **Dónde está la plata.** Saldo por lugar — Galicia, Mercado Pago, Personal Pay, efectivo, Wallbit, billete — porque con seis lugares el total no te dice si podés pagar algo mañana.
 - [ ] **Gmail `users.watch()` + Pub/Sub** para bajar la ingesta de 30 minutos a segundos.
 - [ ] **Aviso de reconexión** de primer nivel cuando Google corta el permiso.
