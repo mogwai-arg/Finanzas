@@ -1,10 +1,10 @@
 # BISHUSHA — diseño y hoja de ruta
 
-Estado al 01/09/2026. Tercer pase de diseño, sin implementar todavía.
+Estado al 01/09/2026. Cuarto pase de diseño, sin implementar todavía.
 
 - **Sistema visual completo:** [`sistema-de-diseno.html`](sistema-de-diseno.html) — abrilo en el navegador.
-  Logo, tokens, doce pantallas en claro y oscuro, cuatro acentos a elegir,
-  auditoría del código actual y comparación con diez apps de referencia.
+  Logo, tokens, doce pantallas en claro y oscuro, el comparador de acentos con
+  la decisión tomada, auditoría del código actual y comparación con diez apps.
 - **Tokens listos para usar:** [`../css/tokens.css`](../css/tokens.css)
 - **Marca:** [`../marca/`](../marca/)
 
@@ -16,7 +16,7 @@ Estado al 01/09/2026. Tercer pase de diseño, sin implementar todavía.
 |---|---|---|
 | Estética | iOS nativo: título grande, listas agrupadas, tipografía del sistema | Es el aparato donde la vas a usar. Jakob's law: lo que ya sabés usar |
 | Color | Gris y blanco. Verde, ámbar y rojo solo con significado | Si algo tiene color, es porque hay que mirarlo |
-| Acento | **Sin definir.** Cuatro candidatos en el comparador; recomendado: petróleo `#0D5470` | El índigo está tomado por Copilot y media industria cripto |
+| Acento | **Petróleo `#0D5470`** | A 36° de tono del verde (el semántico más cercano) y a más de 155° del ámbar y del rojo. 8,3:1 sobre blanco |
 | Íconos | Trazo plano de 1.85, sin emojis | Los emojis rompen el registro iOS y cambian de dibujo según el aparato |
 | Tipografía | La del sistema (SF Pro), seis tamaños | Una app de plata que espera una fuente web se siente lenta antes de mostrar un número |
 | Navegación | Hoy · Gastos · **+** · Tarjetas · Promos | Cuatro destinos y el alta en el centro, donde llega el pulgar |
@@ -51,6 +51,28 @@ renglón perdido en Ajustes.
 | Gmail `users.watch()` + Cloud Pub/Sub → Edge Function | **segundos** | a implementar |
 | Webhooks de Mercado Pago | instantáneo | refuerzo, el mail queda de respaldo |
 | Personal Pay | solo mail | no tiene API pública |
+
+### El permiso de Gmail: resuelto sin trámite
+
+El permiso caducaba cada 7 días **no por falta de verificación**, sino porque la
+pantalla de consentimiento está en estado *Testing*. Google además tiene una
+**excepción de uso personal**: una app que no se comparte con nadie, o que usan
+menos de 100 personas que conocés, queda exenta de la verificación *y de la
+auditoría de seguridad*, aun pidiendo permisos restringidos como leer Gmail.
+
+Entonces el paso es uno solo: pasar la app de **Testing a In production** en la
+consola de Google Cloud. La primera vez aparece la pantalla de "Google no
+verificó esta aplicación" y se entra por *Configuración avanzada → Ir a (no
+seguro)*. Desde ahí el permiso no caduca más.
+
+Si la consola frena la publicación con permisos restringidos, el plan B es
+mejor que el A: **Cloudflare Email Routing con un Email Worker**. Una regla de
+Gmail reenvía los avisos de Galicia, MODO, Mercado Pago y Personal Pay a una
+casilla de dominio propio, y un Worker los parsea al llegar. Sin OAuth, sin
+caducidad, sin verificación, y más rápido que la API. Cuesta un dominio.
+
+El aviso de reconexión de un tap **se construye igual**: el permiso puede caerse
+por otras razones, y cuando se cae, el 68 % abandona.
 
 **Límite duro:** una PWA no puede leer las notificaciones de otras apps del
 celular, ni en iOS ni en Android. "Que llegue igual que la notificación del
@@ -135,6 +157,7 @@ esta app sea propia. Lo que sí tienen resuelto es el trabajo aburrido:
 
 ## Pendiente de definir
 
-- **El índigo.** Es la única decisión de color con personalidad. Si se prefiere una app totalmente neutra, se reemplaza por tinta.
+- **Publicar la app en Google Cloud** (Testing → In production). Necesita tu cuenta.
+
 - **Cuánto entra por mes.** Los porcentajes de "14 % de lo que entra" y el ritmo del presupuesto necesitan un ingreso de referencia: fijo, o el promedio de los últimos tres meses.
 - **El logotipo** está compuesto en Archivo 800 con `letter-spacing: -0.05em`. Para producción hay que convertirlo a curvas.

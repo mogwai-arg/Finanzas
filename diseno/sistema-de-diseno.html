@@ -9,7 +9,7 @@
   --ground:#EDEEF2; --panel:#FFFFFF; --panel2:#F6F7F9;
   --edge:#DFE0E7; --edge-soft:#E9EAEF;
   --ink:#15171E; --ink2:#585E70; --ink3:#888D9D;
-  --brand:#4B41D8; --brand-soft:#EEECFC;
+  --brand:#0D5470; --brand-soft:#E1EDF3;
   --pos:#0B7F5A; --neg:#C1293D; --amb:#9A5D00;
   --shadow:0 1px 2px rgba(20,22,30,.05), 0 8px 24px -12px rgba(20,22,30,.16);
   --f-disp:"Archivo","Helvetica Neue",Arial,sans-serif;
@@ -20,7 +20,7 @@
     --ground:#0C0D12; --panel:#14161C; --panel2:#191C23;
     --edge:#272A33; --edge-soft:#1F222A;
     --ink:#ECEEF3; --ink2:#99A0AF; --ink3:#6B7180;
-    --brand:#9089FF; --brand-soft:#1D1B36;
+    --brand:#59B8D6; --brand-soft:#102C36;
     --pos:#3FC08F; --neg:#FF6E80; --amb:#DFA24B;
     --shadow:0 1px 2px rgba(0,0,0,.4), 0 8px 24px -12px rgba(0,0,0,.7);
   }
@@ -29,7 +29,7 @@
   --ground:#0C0D12; --panel:#14161C; --panel2:#191C23;
   --edge:#272A33; --edge-soft:#1F222A;
   --ink:#ECEEF3; --ink2:#99A0AF; --ink3:#6B7180;
-  --brand:#9089FF; --brand-soft:#1D1B36;
+  --brand:#59B8D6; --brand-soft:#102C36;
   --pos:#3FC08F; --neg:#FF6E80; --amb:#DFA24B;
   --shadow:0 1px 2px rgba(0,0,0,.4), 0 8px 24px -12px rgba(0,0,0,.7);
 }
@@ -152,7 +152,7 @@ a{color:var(--brand)}
 .scr{
   --ap-bg:#F1F2F5; --ap-card:#FFFFFF; --ap-line:#E4E5EA; --ap-fill:#EDEEF2;
   --ap-tx:#14161C; --ap-tx2:#5C6272; --ap-tx3:#868C9B;
-  --ap-brand:#4B41D8; --ap-brand-bg:#EDEBFC;
+  --ap-brand:#0D5470; --ap-brand-bg:#E1EDF3; --ap-brand-solid:#0D5470;
   --ap-pos:#0B7F5A; --ap-pos-bg:#E3F4EC;
   --ap-neg:#C1293D; --ap-neg-bg:#FBE9EB;
   --ap-amb:#9A5D00; --ap-amb-bg:#FBF0DE;
@@ -166,7 +166,7 @@ a{color:var(--brand)}
 .scr[data-app="dark"]{
   --ap-bg:#0A0B0F; --ap-card:#16181F; --ap-line:#2A2D37; --ap-fill:#20232C;
   --ap-tx:#F2F3F7; --ap-tx2:#9BA1B0; --ap-tx3:#767C8B;
-  --ap-brand:#9089FF; --ap-brand-bg:#1E1C3A;
+  --ap-brand:#59B8D6; --ap-brand-bg:#102C36; --ap-brand-solid:#17728C;
   --ap-pos:#3FC08F; --ap-pos-bg:#0F2A22;
   --ap-neg:#FF6E80; --ap-neg-bg:#2E1519;
   --ap-amb:#E3A94F; --ap-amb-bg:#2C2211;
@@ -190,7 +190,7 @@ a{color:var(--brand)}
 .nav .act{display:flex;gap:8px;align-items:center;padding-bottom:3px}
 .iconbtn{width:32px;height:32px;border-radius:50%;background:none;display:grid;place-items:center;
          color:var(--ap-brand);flex:none;position:relative}
-.iconbtn.on{background:var(--ap-brand);color:#fff}
+.iconbtn.on{background:var(--ap-brand-solid);color:#fff}
 .iconbtn .badge{position:absolute;top:-2px;right:-2px;min-width:17px;height:17px;border-radius:9px;
   background:var(--ap-neg);color:#fff;font-size:10.5px;font-weight:700;display:grid;place-items:center;
   padding:0 4px;border:2px solid var(--ap-bg)}
@@ -284,8 +284,9 @@ a{color:var(--brand)}
 .tab{display:flex;flex-direction:column;align-items:center;gap:3px;color:var(--ap-tx3);
   font-size:10px;font-weight:500;letter-spacing:-.01em;min-width:0;flex:1;text-align:center}
 .tab.on{color:var(--ap-brand);font-weight:600}
-.tab .fab{width:44px;height:44px;border-radius:15px;background:var(--ap-brand);color:#fff;
-  display:grid;place-items:center;margin-top:-6px;box-shadow:0 6px 16px -6px var(--ap-brand)}
+.tab .fab{width:44px;height:44px;border-radius:15px;background:var(--ap-brand-solid);color:#fff;
+  display:grid;place-items:center;margin-top:-6px;
+  box-shadow:0 6px 16px -8px color-mix(in srgb,var(--ap-brand-solid) 70%,transparent)}
 
 /* mazo de revision */
 .deck{position:relative;padding:6px 0 0;flex:1;display:flex;flex-direction:column}
@@ -314,7 +315,7 @@ a{color:var(--brand)}
 .calc .amtin span{color:var(--ap-tx3)}
 .opt{background:var(--ap-card);border-radius:16px;padding:14px;position:relative}
 .opt + .opt{margin-top:9px}
-.opt.best{box-shadow:0 0 0 2px var(--ap-brand)}
+.opt.best{box-shadow:0 0 0 2px var(--ap-brand-solid)}
 .opt .r1{display:flex;align-items:center;gap:10px}
 .opt .nm{font-weight:600;font-size:15.5px;letter-spacing:-.015em;flex:1}
 .opt .fin{font-size:12.5px;color:var(--ap-tx2);margin-top:8px;display:flex;justify-content:space-between;gap:10px}
@@ -373,11 +374,11 @@ a{color:var(--brand)}
 /* acentos candidatos — el comparador los aplica por atributo */
 .scr[data-acc="tinta"]    {--ap-brand:#14161C;--ap-brand-bg:#E7E8EE}
 .scr[data-acc="petroleo"] {--ap-brand:#0D5470;--ap-brand-bg:#E1EDF3}
-.scr[data-acc="ciruela"]  {--ap-brand:#7D2B52;--ap-brand-bg:#F8E7EF}
+.scr[data-acc="ciruela"]  {--ap-brand:#0D5470;--ap-brand-bg:#E1EDF3}
 .scr[data-acc="berenjena"]{--ap-brand:#4A2D5C;--ap-brand-bg:#F0E9F4}
 .scr[data-app="dark"][data-acc="tinta"]    {--ap-brand:#F2F3F7;--ap-brand-bg:#262932}
 .scr[data-app="dark"][data-acc="petroleo"] {--ap-brand:#59B8D6;--ap-brand-bg:#102C36}
-.scr[data-app="dark"][data-acc="ciruela"]  {--ap-brand:#E0729E;--ap-brand-bg:#331520}
+.scr[data-app="dark"][data-acc="ciruela"]  {--ap-brand:#59B8D6;--ap-brand-bg:#102C36}
 .scr[data-app="dark"][data-acc="berenjena"]{--ap-brand:#B892CE;--ap-brand-bg:#241A2B}
 .scr.mini{height:348px;border-radius:24px}
 .scr.mini .nav{padding:20px 16px 10px}
@@ -457,7 +458,7 @@ ol.steps p{font-size:14.5px;color:var(--ink2);line-height:1.5;max-width:60ch}
   </div>
   <p class="tag">Sistema de diseño y arquitectura de pantallas para una PWA de finanzas personales. Cobrás en dólares, gastás en pesos, pagás en cuotas — <b>y anotás lo menos posible.</b></p>
   <div class="meta">
-    <span>Tercer pase · 01/09/2026</span>
+    <span>Cuarto pase · 01/09/2026</span>
     <span>iOS-nativo, mobile-first</span>
     <span>12 pantallas · claro y oscuro</span>
     <span>390 × 844 pt</span>
@@ -516,7 +517,7 @@ ol.steps p{font-size:14.5px;color:var(--ink2);line-height:1.5;max-width:60ch}
     </div>
     <div class="note">
       <h4>Qué no hacer</h4>
-      <p>No estirarlo, no agregarle sombra, no ponerlo en degradé, no separar las letras. El único color alternativo del isotipo es el índigo de marca en fondo claro.</p>
+      <p>No estirarlo, no agregarle sombra, no ponerlo en degradé, no separar las letras. El único color alternativo del isotipo es el petróleo de marca en fondo claro.</p>
     </div>
   </div>
 </section>
@@ -527,17 +528,17 @@ ol.steps p{font-size:14.5px;color:var(--ink2);line-height:1.5;max-width:60ch}
 <section class="sec">
   <span class="eyebrow">Sistema</span>
   <h2>El color solo aparece cuando significa algo</h2>
-  <p class="lede">La app es gris y blanca. Verde, rojo y ámbar están reservados para plata que entra, plata que se pasa y algo que vence. El índigo es lo único que se puede tocar. Si algo tiene color, es porque hay que mirarlo.</p>
+  <p class="lede">La app es gris y blanca. Verde, ámbar y rojo están reservados para <b>hechos</b>: plata que entró, algo que vence pronto, algo que ya venció. Nunca para calificar cómo gastás. El petróleo es lo único que se puede tocar. Si algo tiene color, es porque hay que mirarlo.</p>
 
   <div class="swatches">
     <div class="sw"><div class="chip" style="background:#F1F2F5"></div><div class="body"><div class="nm">Fondo</div><div class="hx">#F1F2F5</div><div class="use">El lienzo. 60 % de la pantalla.</div></div></div>
     <div class="sw"><div class="chip" style="background:#FFFFFF;border-bottom:1px solid var(--edge)"></div><div class="body"><div class="nm">Superficie</div><div class="hx">#FFFFFF</div><div class="use">Tarjetas y listas. 30 %.</div></div></div>
     <div class="sw"><div class="chip" style="background:#14161C"></div><div class="body"><div class="nm">Tinta</div><div class="hx">#14161C</div><div class="use">Texto y botón primario. 13.9:1</div></div></div>
     <div class="sw"><div class="chip" style="background:#5C6272"></div><div class="body"><div class="nm">Tinta 2</div><div class="hx">#5C6272</div><div class="use">Secundario. 5.9:1 — pasa AA.</div></div></div>
-    <div class="sw"><div class="chip" style="background:#4B41D8"></div><div class="body"><div class="nm">Índigo</div><div class="hx">#4B41D8</div><div class="use">Lo interactivo. ~5 % de píxeles.</div></div></div>
-    <div class="sw"><div class="chip" style="background:#0B7F5A"></div><div class="body"><div class="nm">Verde</div><div class="hx">#0B7F5A</div><div class="use">Entra plata · dentro del presupuesto.</div></div></div>
+    <div class="sw"><div class="chip" style="background:#0D5470"></div><div class="body"><div class="nm">Petróleo</div><div class="hx">#0D5470</div><div class="use">Lo interactivo. ~5 % de píxeles.</div></div></div>
+    <div class="sw"><div class="chip" style="background:#0B7F5A"></div><div class="body"><div class="nm">Verde</div><div class="hx">#0B7F5A</div><div class="use">Entró plata. Un hecho, no un premio.</div></div></div>
     <div class="sw"><div class="chip" style="background:#9A5D00"></div><div class="body"><div class="nm">Ámbar</div><div class="hx">#9A5D00</div><div class="use">Vence pronto · cerca del tope.</div></div></div>
-    <div class="sw"><div class="chip" style="background:#C1293D"></div><div class="body"><div class="nm">Rojo</div><div class="hx">#C1293D</div><div class="use">Vencido · excedido. Nunca decorativo.</div></div></div>
+    <div class="sw"><div class="chip" style="background:#C1293D"></div><div class="body"><div class="nm">Rojo</div><div class="hx">#C1293D</div><div class="use">Vencido. Nunca para "te pasaste".</div></div></div>
   </div>
 
   <div class="typescale">
@@ -1112,7 +1113,7 @@ ol.steps p{font-size:14.5px;color:var(--ink2);line-height:1.5;max-width:60ch}
           <span class="tab"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 12-9 12s-9-5-9-12a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="2.6"/></svg>Promos</span>
         </nav>
       </div></div>
-      <p class="why">El oscuro no es el claro invertido: el índigo se aclara a #9089FF porque un índigo saturado vibra sobre negro, y la profundidad la dan superficies más claras, no sombras. Las barras de presupuesto siguen distinguiéndose <em>por posición además de por color</em>.</p>
+      <p class="why">El oscuro no es el claro invertido. El petróleo se aclara a #59B8D6 para el texto, pero los rellenos sólidos usan un tono intermedio: si el botón se pintara del mismo celeste que las letras, quedaría de neón. La profundidad la dan superficies más claras, no sombras. Las barras de presupuesto siguen distinguiéndose <em>por posición además de por color</em>.</p>
     </div>
 
     <!-- ---------- ESTADOS ---------- -->
@@ -1481,6 +1482,38 @@ ol.steps p{font-size:14.5px;color:var(--ink2);line-height:1.5;max-width:60ch}
 
 <div class="rule"></div>
 
+<!-- ================= GOOGLE ================= -->
+<section class="sec">
+  <span class="eyebrow">El riesgo n.º 1, resuelto</span>
+  <h2>No hace falta el trámite largo</h2>
+  <p class="lede">Decidiste hacer la verificación de Google para no reconectar cada semana, y el razonamiento es correcto: reconectar todos los jueves te iba a hacer abandonar la app. Pero el trámite completo — con auditoría de seguridad anual paga — <b>no te corresponde</b>. Google tiene una excepción explícita para uso personal.</p>
+
+  <ol class="steps">
+    <li>
+      <h4>Por qué caducaba cada 7 días</h4>
+      <p>No es por no estar verificada: es porque la pantalla de consentimiento está en estado <b>"Testing"</b>. Google caduca a los 7 días todos los permisos que emite una app en pruebas. Es lo único que causa el problema.</p>
+    </li>
+    <li>
+      <h4>La excepción de uso personal</h4>
+      <p>Google considera que una app es de uso personal si <b>no se comparte con nadie, o la usan menos de 100 personas que conocés</b>. En ese caso queda exenta de la verificación <em>y de la auditoría de seguridad</em>, aun pidiendo permisos restringidos como leer Gmail. Es exactamente tu caso: un usuario, vos.</p>
+    </li>
+    <li>
+      <h4>Lo que hay que hacer, entonces</h4>
+      <p>Pasar la app de <b>"Testing" a "In production"</b> en la consola de Google Cloud. Nada más. La primera vez que entres vas a ver una pantalla de "Google no verificó esta aplicación": entrás por <em>Configuración avanzada → Ir a (no seguro)</em>, una sola vez. Desde ahí el permiso no caduca más hasta que vos lo revoques.</p>
+    </li>
+    <li>
+      <h4>Si la consola no te deja publicar</h4>
+      <p>Google a veces exige verificación para publicar con permisos restringidos. Si te frena, el plan B es mejor que el A: <b>Cloudflare Email Routing con un Email Worker</b>. Ponés una regla en Gmail que reenvíe los avisos de Galicia, MODO, Mercado Pago y Personal Pay a una casilla de un dominio propio, y un Worker los recibe y los parsea apenas llegan. Sin OAuth, sin caducidad, sin verificación, y <b>más rápido que la API de Gmail</b>. Cuesta un dominio, unos quince dólares al año. Lo único que ganaría el camino de Google es no tener que comprar el dominio.</p>
+    </li>
+    <li>
+      <h4>Lo que igual hay que construir</h4>
+      <p>El aviso de reconexión de un tap en la pantalla principal <b>se hace igual</b>. Aunque el permiso no caduque solo, se puede caer: si cambiás la contraseña de Google, si revocás el acceso sin querer, si Google detecta algo raro. Y cuando se cae, el 68 % de la gente abandona en vez de reconectar. La app tiene que darse cuenta antes que vos.</p>
+    </li>
+  </ol>
+</section>
+
+<div class="rule"></div>
+
 <!-- ================= INGESTA ================= -->
 <section class="sec">
   <span class="eyebrow">Que entre solo y rápido</span>
@@ -1563,8 +1596,8 @@ ol.steps p{font-size:14.5px;color:var(--ink2);line-height:1.5;max-width:60ch}
 <!-- ================= ACENTO ================= -->
 <section class="sec">
   <span class="eyebrow">El color de la casa</span>
-  <h2>Cuatro acentos, y el índigo no es ninguno</h2>
-  <p class="lede">Tenés razón: el índigo está tomado. Copilot, Notion y media industria cripto lo usan, y en una app de plata lee prestado. El problema es que verde, ámbar y rojo ya están reservados para significar cosas, así que el acento tiene que vivir lejos de esos tres. Estas cuatro cumplen. Están sobre la misma pantalla para que se comparen de verdad.</p>
+  <h2>Petróleo</h2>
+  <p class="lede"><b>Elegido: petróleo <code style="font-family:ui-monospace,monospace;font-size:15px">#0D5470</code>.</b> El índigo quedó afuera porque está tomado por Copilot y media industria cripto. De los cuatro candidatos, petróleo es el único que no compite con ningún color que ya signifique algo: está a 36° de tono del verde — el más cercano de los tres semánticos — y a más de 155° del ámbar y del rojo. Contrasta 8,3:1 sobre blanco y 7,8:1 sobre el fondo oscuro. Las otras tres quedan acá como registro de lo que se descartó y por qué.</p>
 
   <div class="accgrid">
       <div class="accbox">
@@ -1635,8 +1668,8 @@ ol.steps p{font-size:14.5px;color:var(--ink2);line-height:1.5;max-width:60ch}
           </div>
         </div>
         <div class="accmeta">
-          <div class="accn"><span class="accdot" style="background:#0D5470"></span>Petróleo<code>#0D5470</code></div>
-          <p>Azul verdoso profundo. Serio sin ser azul de banco, y bien lejos del verde semántico porque tira claramente al azul. La que recomiendo: aguanta los dos temas y no compite con ningún dato.</p>
+          <div class="accn"><span class="accdot" style="background:#0D5470"></span>Petróleo <span class="pill pos" style="font-size:11px;padding:2px 7px;background:#E1EDF3;color:#0D5470;margin-left:2px">Elegido</span><code>#0D5470</code></div>
+          <p>Azul verdoso profundo. Serio sin ser azul de banco, y bien lejos del verde semántico porque tira claramente al azul. <b>El elegido.</b> Aguanta los dos temas y no compite con ningún dato.</p>
         </div>
       </div>
       <div class="accbox">
@@ -1671,8 +1704,8 @@ ol.steps p{font-size:14.5px;color:var(--ink2);line-height:1.5;max-width:60ch}
           </div>
         </div>
         <div class="accmeta">
-          <div class="accn"><span class="accdot" style="background:#7D2B52"></span>Ciruela<code>#7D2B52</code></div>
-          <p>Vino oscuro. Es la que más personalidad tiene y ninguna app de finanzas la usa. El riesgo es real: está en la misma familia que el rojo de "excedido", y en una fila apretada se pueden confundir.</p>
+          <div class="accn"><span class="accdot" style="background:#0D5470"></span>Ciruela<code>#0D5470</code></div>
+          <p>Vino oscuro. Es la que más personalidad tiene y ninguna app de finanzas la usa. Descartado: está a solo 21° de tono del rojo de "vencido" — en una fila apretada se confunden. Para usarla habría que correr el rojo a ladrillo.</p>
         </div>
       </div>
       <div class="accbox">
@@ -1708,7 +1741,7 @@ ol.steps p{font-size:14.5px;color:var(--ink2);line-height:1.5;max-width:60ch}
         </div>
         <div class="accmeta">
           <div class="accn"><span class="accdot" style="background:#4A2D5C"></span>Berenjena<code>#4A2D5C</code></div>
-          <p>Violeta muy oscuro y desaturado. Conserva algo del índigo pero sin el brillo que lo delata: al bajarle la luz y la saturación deja de parecer una app de cripto.</p>
+          <p>Violeta muy oscuro y desaturado. Conserva algo del índigo pero sin el brillo que lo delata. Descartada por lo mismo que el índigo: sigue leyendo a violeta de producto tecnológico.</p>
         </div>
       </div>
   </div>
@@ -1750,7 +1783,7 @@ ol.steps p{font-size:14.5px;color:var(--ink2);line-height:1.5;max-width:60ch}
         <tr>
           <td><b>Foco de teclado</b><br><span style="color:var(--ink3);font-size:12.5px">styles.css</span></td>
           <td>No hay una sola regla <code style="font-family:ui-monospace,monospace;font-size:12px">:focus-visible</code>. Con teclado no se ve dónde estás parado.</td>
-          <td>Anillo índigo de 2 px con 3 px de separación en todo lo interactivo.</td>
+          <td>Anillo petróleo de 2 px con 3 px de separación en todo lo interactivo.</td>
           <td><span class="tag crit">Bloquea</span></td>
         </tr>
         <tr>
@@ -1904,8 +1937,8 @@ ol.steps p{font-size:14.5px;color:var(--ink2);line-height:1.5;max-width:60ch}
   <h2>Lo que necesito de vos</h2>
   <div class="notes">
     <div class="note">
-      <h4>Elegir el acento</h4>
-      <p>Miralas en el celular de día y de noche y quedate con una. Recomiendo <b>petróleo</b>: es la única de las cuatro que no compite con ningún color que ya signifique algo. Se cambia en un renglón, pero conviene cerrarlo antes de dibujar el ícono definitivo.</p>
+      <h4>Que lo veas en el celular</h4>
+      <p>Petróleo está aplicado en todas las pantallas de arriba. Miralo de noche también: es el momento en que un acento se cae. Si algo no cierra, se cambia en un renglón de <code>tokens.css</code>.</p>
     </div>
     <div class="note">
       <h4>Los recibos de sueldo</h4>
@@ -1916,8 +1949,8 @@ ol.steps p{font-size:14.5px;color:var(--ink2);line-height:1.5;max-width:60ch}
       <p>Día de cierre y de vencimiento de cada tarjeta, y los últimos cuatro dígitos — es lo que matchea los mails con la tarjeta correcta. Y el día en que suele acreditar el sueldo.</p>
     </div>
     <div class="note">
-      <h4>Verificación de Google</h4>
-      <p>Es el riesgo n.º 1 de todo el proyecto: mientras la app esté en modo prueba, el permiso de Gmail se cae cada 7 días. Vale la pena decidir ahora si arrancamos el trámite de verificación o si convivimos con reconectar cada semana desde el aviso de la pantalla principal.</p>
+      <h4>Publicar la app en Google</h4>
+      <p>Es un cambio de un campo en la consola de Google Cloud, y necesita tu cuenta. Cuando lo hagas, avisame y confirmamos que el permiso deje de caducar. Si la consola te frena, compramos un dominio y vamos por Cloudflare.</p>
     </div>
   </div>
 </section>
@@ -1925,7 +1958,7 @@ ol.steps p{font-size:14.5px;color:var(--ink2);line-height:1.5;max-width:60ch}
 <footer class="foot">
   <div style="display:flex;align-items:center;gap:9px">
     <svg width="19" height="19" viewBox="0 0 100 100" aria-hidden="true"><path style="fill:var(--ink2)" d="M16 13.5A3.5 3.5 0 0 1 19.5 10h8A3.5 3.5 0 0 1 31 13.5v73a3.5 3.5 0 0 1-3.5 3.5h-8A3.5 3.5 0 0 1 16 86.5Z M22 10h24a18 18 0 0 1 0 36H22Z M31 35h15a7 7 0 0 0 0-14H31Z M22 54h46a18 18 0 0 1 0 36H22Z M31 79h37a7 7 0 0 0 0-14H31Z"/></svg>
-    <span>BISHUSHA · tercer pase de diseño</span>
+    <span>BISHUSHA · cuarto pase de diseño</span>
   </div>
   <span>Todas las cifras son de ejemplo</span>
 </footer>

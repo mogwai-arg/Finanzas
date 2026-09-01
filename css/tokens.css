@@ -17,14 +17,18 @@
   --tx2:       #5C6272;   /* secundario · 5.9:1 — pasa AA en 12 px */
   --tx3:       #868C9B;   /* terciario · 3.3:1 — SOLO decorativo o >= 18 px */
 
-  /* ---------- marca: lo único que se puede tocar ---------- */
-  --brand:     #4B41D8;
-  --brand-bg:  #EDEBFC;
+  /* ---------- marca: lo único que se puede tocar ----------
+     Petróleo. Elegido sobre tinta, ciruela y berenjena.
+     Está a 36° de tono del verde semántico — el más cercano de los tres —
+     y a más de 155° del ámbar y del rojo. Ningún dato compite con él. */
+  --brand:     #0D5470;   /* texto, iconos, enlaces */
+  --brand-bg:  #E1EDF3;
+  --brand-solid: #0D5470; /* relleno de botones solidos */
 
   /* ---------- semántica: color solo cuando significa algo ---------- */
   --pos:       #0B7F5A;  --pos-bg: #E3F4EC;  /* entra plata · dentro del tope */
   --amb:       #9A5D00;  --amb-bg: #FBF0DE;  /* vence pronto · cerca del tope */
-  --neg:       #C1293D;  --neg-bg: #FBE9EB;  /* vencido · excedido */
+  --neg:       #C1293D;  --neg-bg: #FBE9EB;  /* vencido. NUNCA para "te pasaste" */
 
   /* ---------- elevación ---------- en claro la da la sombra */
   --elev-1: 0 1px 3px rgba(20,22,30,.07), 0 10px 26px -14px rgba(20,22,30,.22);
@@ -75,7 +79,7 @@
     --tx2:  #9BA1B0;
     --tx3:  #767C8B;
 
-    --brand:    #9089FF;  --brand-bg: #1E1C3A;
+    --brand:    #59B8D6;  --brand-bg: #102C36;  --brand-solid: #17728C;
     --pos:      #3FC08F;  --pos-bg:   #0F2A22;
     --amb:      #E3A94F;  --amb-bg:   #2C2211;
     --neg:      #FF6E80;  --neg-bg:   #2E1519;
@@ -87,7 +91,7 @@
 :root[data-tema="oscuro"]{
   --bg:#0A0B0F; --card:#16181F; --fill:#20232C; --line:#2A2D37;
   --tx:#F2F3F7; --tx2:#9BA1B0; --tx3:#767C8B;
-  --brand:#9089FF; --brand-bg:#1E1C3A;
+  --brand:#59B8D6; --brand-bg:#102C36; --brand-solid:#17728C;
   --pos:#3FC08F; --pos-bg:#0F2A22;
   --amb:#E3A94F; --amb-bg:#2C2211;
   --neg:#FF6E80; --neg-bg:#2E1519;
