@@ -1,10 +1,11 @@
 // =====================================================================
 // vistas/mes.js — gastos fijos y presupuesto del mes.
 // =====================================================================
-import { h, icono, iconoDe, hoja, aviso } from '../ui.js';
-import { state, guardar } from '../db.js';
+import { h, icono, iconoDe, hoja, aviso, select } from '../ui.js';
+import { state, guardar, borrar } from '../db.js';
 import * as F from '../finance.js';
-import { plata, cuandoVence, nombreDe, fechaISO, hoyISO, aNumero as num } from '../formato.js';
+import { plata, cuandoVence, nombreDe, fechaISO, hoyISO, etiquetaCuenta,
+         aNumero as num } from '../formato.js';
 import { irA } from '../ruteo.js';
 import { formRecurrente, formPresupuesto } from './formularios.js';
 
@@ -109,7 +110,10 @@ function apoyo(r, iso, hoy) {
 
 async function togglePago(r, periodo) {
   if (r.pagado) {
-    await guardar('recurring_payments', { ...r.pago, pagado_at: null });
+    // El pago habia creado un gasto: si se desmarca, ese gasto tambien se va.
+    // Dejarlo seria un alquiler pagado que sigue descontando de la cuenta.
+    if (r.pago?.transaction_id) await borrar('transactions', r.pago.transaction_id);
+    await guardar('recurring_payments', { ...r.pago, pagado_at: null, transaction_id: null });
     aviso(`${r.nombre} vuelve a estar pendiente`);
     return;
   }
@@ -117,16 +121,26 @@ async function togglePago(r, periodo) {
 }
 
 /**
- * Marcar pagado diciendo cuanto se pago de verdad.
+ * Marcar pagado diciendo cuanto se pago de verdad, y de donde salio.
  *
  * El alquiler vale 850 dolares pero se pagan 900 para no romper billetes: lo
  * que vale no cambia, los 50 quedan a favor del mes que viene. Por eso el
  * monto siempre se puede editar, no solo en los gastos marcados como
  * variables.
+ *
+ * Y marcar pagado tiene que MOVER la plata: antes solo anotaba el pago en la
+ * ficha del gasto fijo, asi que el alquiler quedaba pagado pero no aparecia
+ * en Gastos ni bajaba el saldo de ninguna cuenta. Ahora crea el gasto y lo
+ * deja atado al pago, para poder deshacerlo entero.
  */
 function formPago(r, periodo) {
+  const cuentas = state.accounts.filter(a => a.activo !== false);
   const campo = h('input', { type: 'text', inputmode: 'decimal',
                              value: String(r.sugerido || r.valor || ''), 'aria-label': 'Monto pagado' });
+  const cFecha = h('input', { type: 'date', value: hoyISO() });
+  const cCuenta = select([{ value: '', label: 'No mover ninguna cuenta' },
+                          ...cuentas.map(a => ({ value: a.id, label: etiquetaCuenta(a) }))],
+                         { value: r.account_id || cuentaPorDefecto(cuentas, r.moneda) });
   const nuevoSaldo = h('div.small.mut', { style: { marginTop: '-10px', lineHeight: '1.45' } });
 
   const recalcular = () => {
@@ -145,17 +159,44 @@ function formPago(r, periodo) {
   const cerrar = hoja(`¿Cuánto pagaste de ${r.nombre}?`, h('div',
     h('div.f', h('label', 'Monto'), campo),
     nuevoSaldo,
+    h('div.f', { style: { marginTop: '16px' } }, h('label', 'Cuándo'), cFecha),
+    h('div.f', h('label', 'Con qué pagaste'), cCuenta,
+      h('div.small.mut', { style: { marginTop: '6px', lineHeight: '1.45' } },
+        'Queda como un gasto en esa cuenta: aparece en Gastos y baja el saldo. ',
+        'Si pagaste con tarjeta de crédito, entra en el resumen y sale cuando lo pagues.')),
     h('button.btn', { style: { marginTop: '16px' }, onclick: async () => {
       const monto = num(campo.value);
       if (!monto) { campo.focus(); aviso('Falta el monto'); return; }
+
+      let tx = r.pago?.transaction_id
+        ? state.transactions.find(t => t.id === r.pago.transaction_id) : null;
+      if (cCuenta.value) {
+        tx = await guardar('transactions', {
+          ...(tx || {}),
+          fecha: cFecha.value || hoyISO(),
+          descripcion: r.nombre, comercio: r.nombre,
+          monto, moneda: r.moneda, tipo: 'gasto',
+          account_id: cCuenta.value, category_id: r.category_id || null,
+          cuotas: 1, fuente: 'manual', origen: 'gasto fijo', revisado: true
+        });
+      } else if (tx) { await borrar('transactions', tx.id); tx = null; }
+
       await guardar('recurring_payments', {
         ...(r.pago || {}), recurring_id: r.id, periodo, monto,
+        transaction_id: tx ? tx.id : null,
         pagado_at: new Date().toISOString() });
+
       const queda = Math.round((r.saldo + monto - r.valor) * 100) / 100;
       cerrar();
       aviso(queda ? `${r.nombre} pagado · ${plata(Math.abs(queda), r.moneda)} ${queda > 0 ? 'a favor' : 'en contra'}`
                   : `${r.nombre} pagado`);
     } }, 'Marcar pagado')));
+}
+
+/** La primera cuenta de esa moneda que no sea una tarjeta de credito. */
+function cuentaPorDefecto(cuentas, moneda = 'ARS') {
+  const c = cuentas.find(a => a.tipo !== 'credito' && (a.moneda || 'ARS') === moneda);
+  return (c || cuentas[0] || {}).id || '';
 }
 
 
