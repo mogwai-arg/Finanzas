@@ -13,7 +13,16 @@ pegando código, no carpetas. Las funciones originales importan de `_shared/`,
 así que pegadas tal cual no arrancan. Acá ya vienen con eso adentro.
 
 Es el camino sin terminal: **Edge Functions → Deploy a new function → Via
-Editor**, pegar, desplegar. Nada más.
+Editor**, pegar, desplegar.
+
+**El nombre va cambiado antes de desplegar.** El panel lo llena con uno al azar
+—`rapid-process`, `smooth-function`— y ese nombre *es la URL*. Cambiar la
+etiqueta después no la mueve: la función queda en `/functions/v1/rapid-process`
+y la app la busca en `/functions/v1/oauth-start`. Si ya pasó, hay que borrarla
+y crearla de nuevo; no se puede renombrar.
+
+Al terminar, la lista tiene que mostrar URLs que terminen exactamente con el
+nombre de cada función.
 
 ## Cuál es cuál
 

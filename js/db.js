@@ -154,8 +154,11 @@ export async function conectar(proveedor) {
     if (r.status === 404) throw new Error('falta');
   } catch (e) {
     if (e.message === 'falta') {
-      throw new Error('Todavía no está subida la función oauth-start. Mirá el paso 2 ' +
-                      'de la Fase 4 en el README.');
+      // El panel de Supabase crea la funcion con un nombre al azar —'rapid-process'—
+      // y ese nombre es la URL. Cambiarle la etiqueta despues no la mueve.
+      throw new Error('No encuentro oauth-start. Fijate en Supabase → Edge Functions ' +
+                      'que la URL termine exactamente en /oauth-start: si termina en ' +
+                      'otra cosa, hay que borrarla y crearla de nuevo con ese nombre.');
     }
     // Cualquier otro problema de red no deberia frenar el intento.
   }

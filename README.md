@@ -121,10 +121,22 @@ Es el camino corto si no tenés Node instalado.
    `SUPABASE_URL` y `SUPABASE_SERVICE_ROLE_KEY` ya están: los pone Supabase.
 
 2. **Las funciones.** Una por una: **Edge Functions → Deploy a new function →
-   Via Editor**, poner el nombre exacto, borrar el ejemplo, y pegar el archivo
-   de [`supabase/para-pegar/`](supabase/para-pegar/) que corresponde. Ese
+   Via Editor**, borrar el ejemplo, y pegar el archivo de
+   [`supabase/para-pegar/`](supabase/para-pegar/) que corresponde. Ese
    contenido ya trae adentro lo que la función importa de `_shared/`, que es
    justamente lo que el editor del panel no sabe resolver.
+
+   **El nombre hay que cambiarlo ANTES de desplegar.** El panel lo llena con
+   uno al azar —`rapid-process`, `smooth-function`— y ese nombre *es la URL*.
+   Ponerle la etiqueta correcta después no mueve la URL: queda en
+   `/functions/v1/rapid-process` y la app no la encuentra. Si ya pasó, la
+   única salida es borrar la función y crearla de nuevo.
+
+   Cuando terminás, la lista tiene que mostrar URLs que terminen exactamente
+   en `/oauth-start`, `/oauth-callback`, `/gmail-sync`, `/mp-sync` y
+   `/cron-avisos`. En `oauth-callback` es todavía más importante: esa URL
+   está registrada en Google como destino del permiso, y si no coincide
+   Google corta antes de empezar.
 
    En `oauth-start` y `oauth-callback` hay que **apagar Verify JWT**: las abre
    el navegador durante el permiso, cuando todavía no hay sesión.
