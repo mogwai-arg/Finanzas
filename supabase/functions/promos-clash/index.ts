@@ -31,12 +31,28 @@ Deno.serve(async (req) => {
 
   try {
     const r = await fetch(`https://promos.clash.com.ar/${rubro}/`, {
-      headers: { 'user-agent': 'BISHUSHA/1.0 (app personal de finanzas)' }
+      // Un user-agent de navegador: con uno propio varios sitios contestan
+      // una pagina de desafio en vez del contenido, y desde el telefono eso
+      // se ve igual que "no hay promos".
+      headers: {
+        'user-agent': 'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126 Mobile Safari/537.36',
+        'accept': 'text/html,application/xhtml+xml',
+        'accept-language': 'es-AR,es;q=0.9'
+      }
     });
     if (!r.ok) return json({ error: `clash contestó ${r.status}` }, 502);
 
-    const promos = leerPromosClash(await r.text());
-    return json({ rubro, promos, cuando: new Date().toISOString() });
+    const html = await r.text();
+    const promos = leerPromosClash(html);
+    // Cuando no sale ninguna hay que poder distinguir "hoy no hay" de "la
+    // pagina cambio" o "nos contestaron otra cosa", sin tener que estar
+    // mirando los registros de la funcion.
+    const revision = promos.length ? undefined : {
+      bytes: html.length,
+      bloques: (html.match(/data-pid="/g) || []).length,
+      titulo: html.match(/<title[^>]*>([^<]*)</i)?.[1]?.trim() ?? null
+    };
+    return json({ rubro, promos, revision, cuando: new Date().toISOString() });
   } catch (e) {
     return json({ error: String(e) }, 502);
   }

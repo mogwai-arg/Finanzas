@@ -214,7 +214,12 @@ export async function mirarBandeja() {
   return d;
 }
 
-/** Las promos vigentes de un rubro, traidas por la funcion. */
+/**
+ * Las promos vigentes de un rubro: { promos, revision }.
+ *
+ * Devuelve el sobre entero y no solo la lista porque cuando la lista viene
+ * vacia lo unico util es lo otro: que contesto el sitio.
+ */
 export async function traerPromos(rubro) {
   if (!FUNCTIONS_URL) throw new Error('Falta FUNCTIONS_URL en la configuración.');
   const t = await token();
@@ -226,7 +231,7 @@ export async function traerPromos(rubro) {
   if (r.status === 404) throw new Error('Falta subir la función promos-clash.');
   const d = await r.json().catch(() => null);
   if (!r.ok || !d || d.error) throw new Error(d?.error || 'No pude traer las promos.');
-  return d.promos || [];
+  return { promos: d.promos || [], revision: d.revision || null };
 }
 
 // ------------------------------------------------------------------- auth

@@ -63,7 +63,8 @@ export function vistaPromos(root) {
                                  onclick: () => formPromo(p) },
       h('div', { style: { display: 'flex', alignItems: 'flex-start', gap: '11px' } },
         h('div', { class: 'cifra' + (aplicaHoy ? ' pos' : ''), style: { fontSize: '22px' } },
-          `${p.valor}%`),
+          Number.isFinite(Number(p.valor)) && Number(p.valor) > 0
+            ? `${Number(p.valor)}${p.tipo === 'cuotas' ? '×' : '%'}` : '—'),
         h('div', { style: { flex: '1', minWidth: '0' } },
           h('div', { style: { fontWeight: '600', fontSize: '15.5px', letterSpacing: '-.015em' } },
             p.titulo),
@@ -207,9 +208,11 @@ function hojaTraer() {
   async function cargar() {
     lista.replaceChildren(h('div.small.mut', 'Buscando…'));
     try {
-      const todas = await traerPromos(rubro);
+      const { promos: todas, revision } = await traerPromos(rubro);
       const mias = F.promosQueTePuedenServir(todas, state.accounts);
       const resto = todas.filter(p => !mias.includes(p)).sort(F.ordenPromo);
+
+      if (!todas.length) { lista.replaceChildren(nadaQueMostrar(revision)); return; }
 
       lista.replaceChildren(
         mias.length
@@ -225,30 +228,60 @@ function hojaTraer() {
         String(e.message || e)));
     }
   }
+
+  /**
+   * Cuando no vuelve ninguna, decir por que.
+   *
+   * "No hay promos" y "la página cambió y no la sé leer" se ven igual en la
+   * pantalla y no son lo mismo: el sobre trae con que se topó la función.
+   */
+  function nadaQueMostrar(revision) {
+    const bloques = revision?.bloques ?? 0;
+    return h('div.grp.pad', h('div.small.mut', { style: { lineHeight: '1.55' } },
+      bloques > 0
+        ? `Clash contestó con ${bloques} promos pero no pude leerlas: cambió cómo arma la página. Avisame y lo corrijo.`
+        : revision
+          ? `Clash no devolvió promos de este rubro (${revision.bytes} bytes${revision.titulo ? `, "${revision.titulo}"` : ''}).`
+          : 'No hay promos vigentes en este rubro.'));
+  }
+
   cargar();
 }
 
 /** Una promo traída, con el botón para guardarla como propia. */
 function fila(p) {
   const dias = p.dias?.length ? p.dias.map(d => DIAS[d]).join(' y ') : 'todos los días';
+  const titulo = String(p.comercio || p.emisor || 'Promo').replace(/\b\w/g, c => c.toUpperCase());
+  // Number() y no p.valor a secas: un campo vacío escribía "null%" en la
+  // cifra más grande de la fila.
+  const valor = Number(p.valor);
+  const cifra = Number.isFinite(valor) && valor > 0
+    ? (p.tipo === 'cuotas' ? `${valor}×` : `${valor}%`) : '—';
+
   return h('div.li',
     h('div', { class: 'cifra' + (p.tipo === 'reintegro' ? ' pos' : ''),
-               style: { fontSize: '19px', flex: 'none', minWidth: '48px' } }, `${p.valor}%`),
+               style: { fontSize: '19px', flex: 'none', minWidth: '48px' } }, cifra),
     h('div.m',
-      h('div.t', String(p.comercio || '').replace(/\b\w/g, c => c.toUpperCase())),
+      h('div.t', titulo),
       h('div.s', [p.tipo, p.emisor, dias].filter(Boolean).join(' · ')),
+      p.medios?.length ? h('div.s', { style: { color: 'var(--tx3)' } },
+        p.medios.join(' · ').toLowerCase()) : null,
       p.nota ? h('div.s', { style: { color: 'var(--tx3)' } }, p.nota) : null,
       p.tope ? h('div.s', { style: { color: 'var(--tx3)' } },
-        `tope ${plata(p.tope)}${p.topePeriodo ? ' por mes' : ''}`) : null),
+        `tope ${plata(p.tope)}${p.topePeriodo === 'semanal' ? ' por semana'
+                              : p.topePeriodo ? ' por mes' : ''}`) : null),
     h('button.iconbtn', { 'aria-label': 'Guardarla', onclick: async e => {
       const b = e.currentTarget; b.disabled = true;
       await guardar('promos', {
-        titulo: `${p.comercio} ${p.valor}%`, comercio: p.comercio,
-        valor: p.valor, tipo: p.tipo, emisor: p.emisor,
-        tope: p.tope, tope_periodo: p.topePeriodo || 'mensual',
-        dias: p.dias || [], medio_pago: p.emisor, rubro: 'otros', canal: 'ambos',
+        titulo: `${titulo} ${cifra}`, comercio: p.comercio || null,
+        valor: Number.isFinite(valor) ? valor : null,
+        tipo: p.tipo === 'cuotas' ? 'cuotas' : p.tipo || 'descuento',
+        emisor: p.emisor || 'otro',
+        tope: p.tope || null, tope_periodo: p.topePeriodo || 'mensual',
+        dias: p.dias || [], medio_pago: (p.medios || []).join(', ') || p.emisor,
+        rubro: 'otros', canal: 'ambos',
         url: p.url || null, notas: p.nota || null,
-        marcas: [p.comercio], activa: true, favorita: false
+        marcas: p.comercio ? [p.comercio] : [], activa: true, favorita: false
       });
       aviso('Guardada');
     } }, icono('mas', 18)));
