@@ -9,8 +9,10 @@
     "build": "node build-web.mjs",
     "iconos": "node build-iconos.mjs"
   },
-  "dependencies": {
-    "@supabase/supabase-js": "^2.112.4",
+  "devDependencies": {
     "esbuild": "^0.28.2"
+  },
+  "engines": {
+    "node": ">=20"
   }
 }

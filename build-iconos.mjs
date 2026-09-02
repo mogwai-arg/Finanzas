@@ -1,6 +1,7 @@
 // =====================================================================
 // build-iconos.mjs — genera los PNG del icono a partir del isotipo.
-//   node build-iconos.mjs
+//   npm i -D playwright && node build-iconos.mjs
+// Se corre a mano cuando cambia el logo, no en cada deploy.
 // El navegador rasteriza el SVG, asi que no hace falta ninguna libreria
 // de imagenes: se dibuja igual que en la app.
 // =====================================================================
