@@ -1,0 +1,78 @@
+// oauth-callback — generado por build-funciones.mjs, no editar a mano.
+// El original vive en supabase/functions/oauth-callback/index.ts
+
+// supabase/functions/_shared/comun.ts
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
+var admin = () => createClient(
+  Deno.env.get("SUPABASE_URL"),
+  Deno.env.get("SUPABASE_SERVICE_ROLE_KEY"),
+  { auth: { persistSession: false } }
+);
+var CORS = {
+  "Access-Control-Allow-Origin": Deno.env.get("APP_URL") ?? "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Methods": "GET, POST, OPTIONS"
+};
+
+// supabase/functions/oauth-callback/index.ts
+var REDIRECT = (p) => `${Deno.env.get("FUNCTIONS_URL")}/oauth-callback?proveedor=${p}`;
+var APP = Deno.env.get("APP_URL") ?? "/";
+Deno.serve(async (req) => {
+  const url = new URL(req.url);
+  const prov = url.searchParams.get("proveedor") ?? "gmail";
+  const code = url.searchParams.get("code");
+  const jwt = url.searchParams.get("state") ?? "";
+  if (!code) return Response.redirect(`${APP}#/ajustes?error=sin_code`, 302);
+  const sb = admin();
+  const { data: u } = await sb.auth.getUser(jwt);
+  if (!u.user) return Response.redirect(`${APP}#/ajustes?error=sesion`, 302);
+  try {
+    let tok, cuenta = "";
+    if (prov === "gmail") {
+      tok = await (await fetch("https://oauth2.googleapis.com/token", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+          code,
+          client_id: Deno.env.get("GOOGLE_CLIENT_ID"),
+          client_secret: Deno.env.get("GOOGLE_CLIENT_SECRET"),
+          redirect_uri: REDIRECT("gmail"),
+          grant_type: "authorization_code"
+        })
+      })).json();
+      if (tok.error) throw new Error(tok.error_description || tok.error);
+      const perfil = await (await fetch(
+        "https://gmail.googleapis.com/gmail/v1/users/me/profile",
+        { headers: { Authorization: `Bearer ${tok.access_token}` } }
+      )).json();
+      cuenta = perfil.emailAddress ?? "";
+    } else {
+      tok = await (await fetch("https://api.mercadopago.com/oauth/token", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          client_id: Deno.env.get("MP_CLIENT_ID"),
+          client_secret: Deno.env.get("MP_CLIENT_SECRET"),
+          grant_type: "authorization_code",
+          code,
+          redirect_uri: REDIRECT("mercadopago")
+        })
+      })).json();
+      if (tok.error) throw new Error(tok.message || tok.error);
+      cuenta = String(tok.user_id ?? "");
+    }
+    await sb.from("integrations").upsert({
+      user_id: u.user.id,
+      proveedor: prov === "gmail" ? "gmail" : "mercadopago",
+      cuenta,
+      access_token: tok.access_token,
+      refresh_token: tok.refresh_token ?? null,
+      expira_at: new Date(Date.now() + (tok.expires_in ?? 3600) * 1e3).toISOString(),
+      activo: true,
+      ultimo_error: null
+    }, { onConflict: "user_id,proveedor" });
+    return Response.redirect(`${APP}#/ajustes?ok=${prov}`, 302);
+  } catch (e) {
+    return Response.redirect(`${APP}#/ajustes?error=${encodeURIComponent(String(e))}`, 302);
+  }
+});

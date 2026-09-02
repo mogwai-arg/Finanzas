@@ -7,6 +7,7 @@
     "serve": "python3 -m http.server 8080",
     "demo": "node build-demo.mjs",
     "build": "node build-web.mjs",
+    "funciones": "node build-funciones.mjs",
     "iconos": "node build-iconos.mjs"
   },
   "devDependencies": {

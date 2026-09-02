@@ -100,7 +100,38 @@ colegio, la luz, el gas, la prepaga. Con eso ya tenés el "qué me falta pagar".
 
 ### Subir las Edge Functions
 
-Con la [CLI de Supabase](https://supabase.com/docs/guides/cli):
+Hay dos caminos. Los dos dejan lo mismo andando.
+
+#### Sin terminal, desde el panel
+
+Es el camino corto si no tenés Node instalado.
+
+1. **Los secretos.** Panel de Supabase → **Edge Functions → Secrets → Add new
+   secret**. Uno por uno:
+
+   | Nombre | Valor |
+   |---|---|
+   | `GOOGLE_CLIENT_ID` | el de la consola de Google |
+   | `GOOGLE_CLIENT_SECRET` | el de la consola de Google |
+   | `MP_CLIENT_ID` | el de Mercado Pago (o vacío por ahora) |
+   | `MP_CLIENT_SECRET` | el de Mercado Pago (o vacío por ahora) |
+   | `FUNCTIONS_URL` | `https://<TU-PROJECT-REF>.supabase.co/functions/v1` |
+   | `APP_URL` | `https://<TU-APP>.pages.dev` |
+
+   `SUPABASE_URL` y `SUPABASE_SERVICE_ROLE_KEY` ya están: los pone Supabase.
+
+2. **Las funciones.** Una por una: **Edge Functions → Deploy a new function →
+   Via Editor**, poner el nombre exacto, borrar el ejemplo, y pegar el archivo
+   de [`supabase/para-pegar/`](supabase/para-pegar/) que corresponde. Ese
+   contenido ya trae adentro lo que la función importa de `_shared/`, que es
+   justamente lo que el editor del panel no sabe resolver.
+
+   En `oauth-start` y `oauth-callback` hay que **apagar Verify JWT**: las abre
+   el navegador durante el permiso, cuando todavía no hay sesión.
+
+Si tocás el código de una función, `npm run funciones` regenera esos archivos.
+
+#### Con la CLI
 
 ```bash
 supabase login
