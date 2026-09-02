@@ -16,11 +16,19 @@ Deno.serve(async (req) => {
   const prov = corte > 0 ? state.slice(0, corte)
                          : (url.searchParams.get('proveedor') ?? 'gmail');
   const jwt = corte > 0 ? state.slice(corte + 1) : state;
-  if (!code) return Response.redirect(`${APP}#/ajustes?error=sin_code`, 302);
+  if (!code) {
+    // Cuando no hay code, el que sabe por que es Google: puede venir un
+    // access_denied porque se toco "Volver a seguridad" en la pantalla de app
+    // sin verificar. Decir 'sin_code' escondia justamente el motivo.
+    const motivo = url.searchParams.get('error_description') ||
+                   url.searchParams.get('error') || 'no vino el código';
+    return Response.redirect(`${APP}#/ajustes?error=${encodeURIComponent(motivo)}`, 302);
+  }
 
   const sb = admin();
   const { data: u } = await sb.auth.getUser(jwt);
-  if (!u.user) return Response.redirect(`${APP}#/ajustes?error=sesion`, 302);
+  if (!u.user) return Response.redirect(
+    `${APP}#/ajustes?error=${encodeURIComponent('la sesión no llegó hasta acá; volvé a entrar y probá de nuevo')}`, 302);
 
   try {
     let tok: any, cuenta = '';
@@ -32,7 +40,7 @@ Deno.serve(async (req) => {
           client_secret: Deno.env.get('GOOGLE_CLIENT_SECRET')!,
           redirect_uri: REDIRECT, grant_type: 'authorization_code' })
       })).json();
-      if (tok.error) throw new Error(tok.error_description || tok.error);
+      if (tok.error) throw new Error(`Google: ${tok.error_description || tok.error}`);
       const perfil = await (await fetch('https://gmail.googleapis.com/gmail/v1/users/me/profile',
         { headers: { Authorization: `Bearer ${tok.access_token}` } })).json();
       cuenta = perfil.emailAddress ?? '';

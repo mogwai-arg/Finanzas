@@ -24,10 +24,16 @@ Deno.serve(async (req) => {
   const corte = state.indexOf("|");
   const prov = corte > 0 ? state.slice(0, corte) : url.searchParams.get("proveedor") ?? "gmail";
   const jwt = corte > 0 ? state.slice(corte + 1) : state;
-  if (!code) return Response.redirect(`${APP}#/ajustes?error=sin_code`, 302);
+  if (!code) {
+    const motivo = url.searchParams.get("error_description") || url.searchParams.get("error") || "no vino el c\xF3digo";
+    return Response.redirect(`${APP}#/ajustes?error=${encodeURIComponent(motivo)}`, 302);
+  }
   const sb = admin();
   const { data: u } = await sb.auth.getUser(jwt);
-  if (!u.user) return Response.redirect(`${APP}#/ajustes?error=sesion`, 302);
+  if (!u.user) return Response.redirect(
+    `${APP}#/ajustes?error=${encodeURIComponent("la sesi\xF3n no lleg\xF3 hasta ac\xE1; volv\xE9 a entrar y prob\xE1 de nuevo")}`,
+    302
+  );
   try {
     let tok, cuenta = "";
     if (prov === "gmail") {
@@ -42,7 +48,7 @@ Deno.serve(async (req) => {
           grant_type: "authorization_code"
         })
       })).json();
-      if (tok.error) throw new Error(tok.error_description || tok.error);
+      if (tok.error) throw new Error(`Google: ${tok.error_description || tok.error}`);
       const perfil = await (await fetch(
         "https://gmail.googleapis.com/gmail/v1/users/me/profile",
         { headers: { Authorization: `Bearer ${tok.access_token}` } }

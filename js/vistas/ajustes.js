@@ -14,6 +14,8 @@ export function vistaAjustes(root) {
   const cola = pendientes(), rotas = fallidas();
 
   root.append(h('div.flow',
+    avisoOAuth(),
+
     rotas.length ? h('div.aviso.amb',
       h('div.av.amb', icono('rayo', 17)),
       h('div.txt',
@@ -183,4 +185,20 @@ function filaProveedor(p) {
                              'Desconectar')) return;
         await desconectar(p.id); aviso('Desconectado');
       } }, icono('cerrar', 17))));
+}
+
+/** El motivo por el que fallo el ultimo permiso, hasta que se resuelva. */
+function avisoOAuth() {
+  let msg = null;
+  try { msg = localStorage.getItem('bishusha.oauth.error'); } catch { /* modo privado */ }
+  if (!msg) return null;
+  return h('div.aviso.amb',
+    h('div.av.amb', icono('rayo', 17)),
+    h('div.txt',
+      h('div.tt', 'No se pudo conectar'),
+      h('div.ds', msg.slice(0, 300)),
+      h('button.btn.sec', { style: { marginTop: '12px' }, onclick: () => {
+        try { localStorage.removeItem('bishusha.oauth.error'); } catch { /* nada */ }
+        irA('/ajustes'); location.reload();
+      } }, 'Entendido')));
 }

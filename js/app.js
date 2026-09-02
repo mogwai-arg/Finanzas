@@ -136,9 +136,16 @@ function avisarVueltaDeOAuth() {
 
   const nombre = p => p === 'mercadopago' ? 'Mercado Pago' : 'Gmail';
   location.hash = h.slice(0, i);        // limpiar, para no repetirlo al recargar
+  // Un aviso se va en tres segundos, y el motivo de que falle un permiso es
+  // justo lo que hay que poder leer con calma: queda guardado hasta que se
+  // conecte bien o se descarte a mano.
+  try {
+    if (ok) localStorage.removeItem('bishusha.oauth.error');
+    else localStorage.setItem('bishusha.oauth.error', error);
+  } catch { /* modo privado */ }
   setTimeout(() => {
     if (ok) { aviso(`${nombre(ok)} conectado`); sincronizar().catch(() => {}); }
-    else aviso('No se pudo conectar: ' + error.slice(0, 120));
+    else aviso('No se pudo conectar');
   }, 400);
 }
 
