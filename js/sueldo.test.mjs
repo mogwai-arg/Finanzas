@@ -87,7 +87,15 @@ t('el bruto es ~1,83 veces el basico', () => cerca(factorRemunerativo(NORMALES),
 t('los meses con vacaciones no ensucian el factor', () => {
   cerca(factorRemunerativo(HISTORIA), factorRemunerativo(NORMALES), 0.001);
 });
-t('sin meses tipicos devuelve 0 y no NaN', () => igual(factorRemunerativo([HISTORIA[2]]), 0));
+t('sin ningun recibo con el bruto devuelve 0 y no NaN', () => {
+  igual(factorRemunerativo([]), 0);
+  igual(factorRemunerativo([{ periodo: '2026-08', basico: 1240000, neto: 2000000 }]), 0);
+});
+t('con un solo mes atipico se aprende de el, que es mejor que no aprender', () => {
+  // Antes daba 0 y el sueldo proyectado se caia a las sumas fijas.
+  const f = factorRemunerativo([HISTORIA[2]]);
+  if (!(f > 1.5)) throw new Error(`esperaba aprender algo, dio ${f}`);
+});
 
 console.log('\nSUMAS FIJAS');
 t('separa lo fijo de lo que escala', () => {
@@ -509,6 +517,48 @@ t('sin vigencia declarada valen siempre', () => {
   cerca(sumasVigentes(s, '2030-01'), 100000);
 });
 t('una lista vacía no rompe', () => igual(sumasDeclaradas(null).length, 0));
+
+t('con todos los recibos atípicos igual proyecta un sueldo, no las migajas', () => {
+  // Junio trae aguinaldo y agosto vacaciones: los dos atípicos. Antes el
+  // factor básico→bruto daba cero y el sueldo proyectado quedaba en las sumas
+  // fijas: $ 141.375 en vez de dos millones.
+  const recibos = [
+    { periodo: '2026-06', basico: 1200000, remunerativo: 2400000, noRemunerativo: 145000,
+      neto: 2135500, conceptos: ['AGUINALDO'] },
+    { periodo: '2026-08', basico: 1240000, remunerativo: 2480000, noRemunerativo: 145000,
+      neto: 2026665, conceptos: ['VACACIONES'] }
+  ];
+  if (!(factorRemunerativo(recibos) > 1.5)) throw new Error('el factor no se aprendió');
+  const p = proyectarSueldo(recibos, { meses: 1 })[0];
+  if (!(p.neto > 1800000)) throw new Error(`neto proyectado demasiado bajo: ${p.neto}`);
+  igual(p.sinBruto, false, 'sinBruto');
+});
+
+t('sin el bruto cargado, escala el último neto en vez de inventar', () => {
+  const recibos = [
+    { periodo: '2026-07', basico: 1200000, noRemunerativo: 145000, neto: 2000000 },
+    { periodo: '2026-08', basico: 1240000, noRemunerativo: 145000, neto: 2060000 }
+  ];
+  const p = proyectarSueldo(recibos, { meses: 1 })[0];
+  igual(p.sinBruto, true, 'sinBruto');
+  // El básico sube ~3,3 %: el neto proyectado tiene que acompañar, no caerse.
+  if (!(p.neto > 2060000 && p.neto < 2200000)) throw new Error(`neto raro: ${p.neto}`);
+});
+
+t('avisa cuando la cuenta se hizo con menos de lo que necesita', () => {
+  const recibos = [
+    { periodo: '2026-06', basico: 1200000, remunerativo: 2400000, noRemunerativo: 145000,
+      neto: 2135500, sobre: 1530000, conceptos: ['AGUINALDO'] },
+    { periodo: '2026-08', basico: 1240000, remunerativo: 2480000, noRemunerativo: 145000,
+      neto: 2026665, sobre: 1530000, conceptos: ['VACACIONES'] }
+  ];
+  const c = proximoCobro(recibos, { sobre: 1530000, sobreDesde: '2026-08' });
+  igual(c.soloAtipicos, true, 'soloAtipicos');
+  if (!c.porque.some(x => /atípicos/.test(x.texto))) throw new Error('no avisa que son atípicos');
+  // Y el número tiene que ser creíble: nada de caer a la mitad.
+  if (!(c.banco > 1800000)) throw new Error(`banco: ${c.banco}`);
+  if (Math.abs(c.porcentaje) >= 25) throw new Error(`variación irreal: ${c.porcentaje} %`);
+});
 
 console.log(`\n${ok} pruebas OK${fallo ? `, ${fallo} FALLAN` : ''}\n`);
 process.exit(fallo ? 1 : 0);

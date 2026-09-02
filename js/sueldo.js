@@ -102,9 +102,15 @@ export function ritmoParitaria(recibos) {
  * antiguedad y presentismo en un solo numero. Solo mira meses tipicos.
  */
 export function factorRemunerativo(recibos) {
-  const rs = porPeriodo(recibos).filter(r => !esAtipico(r) && r.basico > 0 && r.remunerativo > 0);
-  if (!rs.length) return 0;
-  return rs.reduce((s, r) => s + r.remunerativo / r.basico, 0) / rs.length;
+  const sirve = r => r.basico > 0 && r.remunerativo > 0;
+  const tipicos = porPeriodo(recibos).filter(r => !esAtipico(r) && sirve(r));
+  // Sin ningun mes tipico se aprende igual de los atipicos. Un mes con
+  // vacaciones infla la relacion y da un numero un poco alto; cero la
+  // destruye y deja el sueldo proyectado en las sumas fijas y nada mas, que
+  // es como decirle a alguien que va a cobrar 141.000 en vez de 2.000.000.
+  const base = tipicos.length ? tipicos : porPeriodo(recibos).filter(sirve);
+  if (!base.length) return 0;
+  return base.reduce((s, r) => s + r.remunerativo / r.basico, 0) / base.length;
 }
 
 /**
@@ -113,7 +119,10 @@ export function factorRemunerativo(recibos) {
  * proyeccion no las infle. Ignorar esto sobreestima el neto todos los meses.
  */
 export function componerNoRemunerativo(recibos, sumasFijas = 0, sumas = null) {
-  const rs = porPeriodo(recibos).filter(r => !esAtipico(r) && r.basico > 0);
+  const tipicos = porPeriodo(recibos).filter(r => !esAtipico(r) && r.basico > 0);
+  // Misma razon que en factorRemunerativo: mejor aprender de un mes atipico
+  // que no aprender nada.
+  const rs = tipicos.length ? tipicos : porPeriodo(recibos).filter(r => r.basico > 0);
   if (!rs.length) return { fijo: sumasFijas, escala: 0, basicoBase: 0 };
   const ult = rs[rs.length - 1];
   // Con sumas declaradas, la parte fija es la que estaba vigente EN ESE MES.
@@ -271,10 +280,17 @@ export function proyectarSueldo(recibos, { meses = 6, ritmo = null, sumasFijas =
       ? sumasVigentes(sumas, periodo) + (nr.basicoBase ? nr.escala * (basico / nr.basicoBase) : 0)
       : nr.fijo + (nr.basicoBase ? nr.escala * (basico / nr.basicoBase) : 0);
 
+    // Sin la relacion basico/bruto no se puede reconstruir el neto de sus
+    // partes: se escala el ultimo neto conocido con el mismo aumento. Es
+    // grueso, pero es del orden correcto, y se marca para poder decirlo.
+    const cuentas = k > 0
+      ? netoDeRecibo({ remunerativo, noRemunerativo })
+      : { remunerativo: 0, noRemunerativo, deducciones: 0,
+          neto: redondear((Number(ult.neto) || 0) * (basico / ult.basico)) };
+
     out.push({
-      periodo, basico: redondear(basico),
-      ...netoDeRecibo({ remunerativo, noRemunerativo }),
-      estimado: true, conAcuerdo
+      periodo, basico: redondear(basico), ...cuentas,
+      estimado: true, conAcuerdo, sinBruto: !(k > 0)
     });
   }
   return out;
@@ -383,6 +399,19 @@ export function proximoCobro(recibos, { diaCobro = 1, sobre = 0, sobreDesde = nu
   const sobreAnterior = Number(ult.sobre || 0);
   const totalAnterior = Number(ult.neto || 0) + sobreAnterior;
 
+  // Cuando la cuenta se hace con menos de lo que necesita, hay que decirlo:
+  // un numero flojo sin aviso se lee igual que uno firme, y este es el que
+  // decide si el mes cierra.
+  const porque = porQueCambia(ult, proy, { acuerdo, sumas });
+  if (!rs.some(r => !esAtipico(r))) {
+    porque.push({ tipo: 'aviso', texto: 'todos los recibos cargados son meses atípicos ' +
+      '(vacaciones, aguinaldo): cargá uno normal y la cuenta se afina' });
+  }
+  if (proy.sinBruto) {
+    porque.push({ tipo: 'aviso', texto: 'ningún recibo trae el bruto remunerativo, ' +
+      'así que escalo el último neto con el aumento' });
+  }
+
   return {
     periodo: proy.periodo,
     fecha: fila.fecha,
@@ -395,7 +424,9 @@ export function proximoCobro(recibos, { diaCobro = 1, sobre = 0, sobreDesde = nu
                 sobre: sobreAnterior, total: totalAnterior },
     diferencia: redondear(fila.monto - totalAnterior),
     porcentaje: totalAnterior ? redondear(((fila.monto / totalAnterior) - 1) * 100) : 0,
-    porque: porQueCambia(ult, proy, { acuerdo, sumas })
+    sinBruto: !!proy.sinBruto,
+    soloAtipicos: !rs.some(r => !esAtipico(r)),
+    porque
   };
 }
 
