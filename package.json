@@ -11,7 +11,8 @@
     "iconos": "node build-iconos.mjs"
   },
   "devDependencies": {
-    "esbuild": "^0.28.2"
+    "esbuild": "^0.28.2",
+    "pdfjs-dist": "^6.3.289"
   },
   "engines": {
     "node": ">=20"

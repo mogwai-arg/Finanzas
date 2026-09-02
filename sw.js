@@ -27,6 +27,9 @@ const SHELL = [
   './js/vistas/sueldo.js', './js/vistas/form-movimiento.js',
   './js/vistas/formularios.js', './js/vistas/importar.js',
   './vendor/supabase.js',
+  // pdf.mjs y su worker NO van acá: pesan 1,7 MB entre los dos y solo hacen
+  // falta al importar un resumen. Se guardan solos la primera vez que se
+  // usan, con el mismo cache-first del resto.
   './marca/isotipo.svg', './icons/icon-192.png'
 ];
 

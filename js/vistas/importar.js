@@ -26,14 +26,48 @@ export function formImportarResumen() {
   const salida = h('div');
   const pie = h('div.fila', { style: { marginTop: '4px' } });
 
+  // Elegir el PDF y listo: abrirlo, seleccionar todo y pegar era el paso más
+  // molesto de los que quedaban, y encima en el teléfono es incómodo.
+  const archivo = h('input', { type: 'file', accept: 'application/pdf,.pdf,.txt',
+                               style: { display: 'none' },
+                               onchange: e => leerArchivo(e.target.files[0]) });
+  const estado = h('div.small.mut', { style: { marginTop: '10px', lineHeight: '1.45' } });
+
+  async function leerArchivo(f) {
+    if (!f) return;
+    salida.replaceChildren(); pie.replaceChildren();
+    if (/\.txt$/i.test(f.name)) {
+      texto.value = await f.text();
+      estado.textContent = `${f.name} · listo`;
+      leer(); return;
+    }
+    estado.textContent = 'Abriendo el PDF…';
+    try {
+      const { textoDePDF } = await import('../pdf.js');
+      texto.value = await textoDePDF(f, {
+        alAvanzar: (n, total) => { estado.textContent = `Leyendo página ${n} de ${total}…`; }
+      });
+      estado.textContent = `${f.name} · ${texto.value.split('\n').length} líneas leídas`;
+      leer();
+    } catch (e) {
+      estado.textContent = 'No pude abrir el PDF. Si tiene contraseña, todavía no sé abrirlo; ' +
+                           'podés abrirlo vos, copiar el texto y pegarlo acá.';
+      console.warn('pdf', e);
+    }
+  }
+
   const cerrar = hoja('Importar un resumen', h('div',
     h('div.small.mut', { style: { lineHeight: '1.5', marginBottom: '12px' } },
-      'Abrí el PDF que te manda el banco, seleccioná todo el texto, copialo y ',
-      'pegalo acá. Se leen los consumos, las cuotas, los impuestos y las seis ',
-      'fechas del ciclo. Lo que ya esté cargado no se duplica.'),
+      'Elegí el PDF que te manda el banco y la app lo lee sola: los consumos, ',
+      'las cuotas, los impuestos y las seis fechas del ciclo. Lo que ya esté ',
+      'cargado no se duplica ni se pisa.'),
+    h('button.btn', { onclick: () => archivo.click() },
+      icono('recibo', 17), 'Elegir el PDF del resumen'),
+    archivo, estado,
+    h('div.small.mut', { style: { margin: '18px 0 8px', textAlign: 'center' } }, 'o pegalo a mano'),
     texto,
     h('button.btn.sec', { style: { marginTop: '10px' }, onclick: () => leer() },
-      icono('recibo', 16), 'Leer el resumen'),
+      icono('buscar', 16), 'Leer lo pegado'),
     salida, pie));
 
   function leer() {

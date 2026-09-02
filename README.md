@@ -98,6 +98,23 @@ colegio, la luz, el gas, la prepaga. Con eso ya tenés el "qué me falta pagar".
 > los mails de Mercado Pago se siguen leyendo igual desde `gmail-sync`: entre
 > las dos fuentes no se te escapa nada, y los duplicados se descartan solos.
 
+### Leer los PDF de los resúmenes
+
+`vendor/pdf.mjs` y `vendor/pdf.worker.mjs` son copias de
+[pdfjs-dist](https://www.npmjs.com/package/pdfjs-dist), versionadas como el
+resto de las dependencias: la app no baja nada de ningún CDN.
+
+Para actualizarlas:
+
+```bash
+npm i pdfjs-dist
+cp node_modules/pdfjs-dist/build/pdf.min.mjs        vendor/pdf.mjs
+cp node_modules/pdfjs-dist/build/pdf.worker.min.mjs vendor/pdf.worker.mjs
+```
+
+Pesan 1,7 MB entre las dos, así que se cargan recién cuando alguien elige un
+PDF: quien no importa resúmenes no las baja nunca.
+
 ### Subir las Edge Functions
 
 Hay dos caminos. Los dos dejan lo mismo andando.
