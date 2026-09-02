@@ -87,7 +87,9 @@ export function ciclosOrdenados(tarjeta) {
  * otro, asi que la tarjeta dice cero teniendo consumos. Preguntar es mejor que
  * adivinar.
  */
-export const tieneCiclo = t => !!((t.ciclos || []).some(c => c && c.cierre) || t.cierre_dia);
+export const diaDelMes = n => Number.isInteger(Number(n)) && Number(n) >= 1 && Number(n) <= 31;
+export const tieneCiclo = t =>
+  !!((t.ciclos || []).some(c => c && c.cierre) || diaDelMes(t.cierre_dia));
 
 /** Ciclo al que entra una compra: el primero cuyo cierre es posterior. */
 export function cicloDeCompra(fecha, tarjeta) {
@@ -346,13 +348,51 @@ export function recurrentesDelMes(recurrings, pagos, per, ref = hoy()) {
     const pago = pagosIdx[r.id] || null;
     const vence = diaSeguro(y, m - 1, r.dia_vencimiento);
     const pagado = !!(pago && pago.pagado_at);
+    const { valor, saldo, sugerido } = aPagarRecurrente(r, pagos, per);
+    // El saldo que queda para el mes que viene, ya contando este pago.
+    const pagadoMonto = pago && pago.monto != null ? Number(pago.monto) : valor;
+    const saldoDespues = pagado ? round2(saldo + pagadoMonto - valor) : saldo;
     return {
-      ...r, pago, pagado, vence,
-      monto: pago && pago.monto != null ? Number(pago.monto) : Number(r.monto_estimado),
+      ...r, pago, pagado, vence, valor, saldo, sugerido, saldoDespues,
+      // Lo que figura en el mes: si ya se pago, lo que se pago de verdad; si
+      // no, lo que conviene pagar teniendo en cuenta lo que sobro de antes.
+      monto: pago && pago.monto != null ? Number(pago.monto) : sugerido,
       vencido: !pagado && vence < ref,
       diasRestantes: dias(ref, vence)
     };
   }).sort((a, b) => a.vence - b.vence);
+}
+
+/**
+ * Saldo arrastrado de un gasto fijo.
+ *
+ * El alquiler vale 850 dolares, pero para no romper billetes un mes se pagan
+ * 900 y otro 800. Lo que vale no cambia; lo que sobra o falta se lleva al mes
+ * siguiente. Positivo = pagaste de mas y tenes a favor.
+ *
+ * `hasta` excluye el periodo que se esta mirando: el saldo que entra a un mes
+ * es el de todos los meses anteriores.
+ */
+export function saldoRecurrente(recurring, pagos, hasta = null) {
+  const valor = Number(recurring.monto_estimado) || 0;
+  let saldo = 0;
+  for (const p of pagos) {
+    if (p.recurring_id !== recurring.id || !p.pagado_at) continue;
+    if (hasta && p.periodo >= hasta) continue;
+    saldo += (p.monto == null ? valor : Number(p.monto)) - valor;
+  }
+  return round2(saldo);
+}
+
+/**
+ * Cuanto conviene pagar este mes: lo que vale, menos lo que sobro de antes.
+ * Nunca negativo: si el saldo a favor tapa el mes entero, se paga cero y el
+ * resto sigue arrastrandose.
+ */
+export function aPagarRecurrente(recurring, pagos, per) {
+  const valor = Number(recurring.monto_estimado) || 0;
+  const saldo = saldoRecurrente(recurring, pagos, per);
+  return { valor, saldo, sugerido: round2(Math.max(0, valor - saldo)) };
 }
 
 /** Presupuesto vs gastado por categoria. */

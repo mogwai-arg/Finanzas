@@ -4,9 +4,23 @@
 // =====================================================================
 import { h, icono, iconoDe, hoja, aviso, campo, select, confirmar } from '../ui.js';
 import { state, guardar, borrar } from '../db.js';
+import * as F from '../finance.js';
 import { plata, periodoLargo, hoyISO, nombreDe, etiquetaCuenta } from '../formato.js';
 
 const num = v => Number(String(v ?? '').replace(/\./g, '').replace(',', '.')) || 0;
+
+// Un dia del mes y nada mas: dos digitos, del 1 al 31. Escribir '5/09' en un
+// campo numerico daba 509, y con eso el ciclo se calcula sobre una fecha que
+// no existe: la tarjeta muestra cero teniendo consumos.
+const dia = valor => {
+  const e = h('input', { type: 'text', inputmode: 'numeric', maxlength: '2',
+                         placeholder: '5', value: valor ? String(valor) : '' });
+  e.addEventListener('input', () => {
+    const limpio = e.value.replace(/\D/g, '').slice(0, 2);
+    if (limpio !== e.value) e.value = limpio;
+  });
+  return e;
+};
 const DIAS = [['1','lun'],['2','mar'],['3','mié'],['4','jue'],['5','vie'],['6','sáb'],['0','dom']];
 
 // =====================================================================
@@ -37,10 +51,8 @@ export function formCuenta(a = null) {
                            value: a?.ultimos4 || '', placeholder: '9817' }),
     limite: h('input', { type: 'text', inputmode: 'decimal',
                          value: a?.limite ? String(a.limite) : '' }),
-    cierre: h('input', { type: 'number', min: '1', max: '31', inputmode: 'numeric',
-                         value: String(a?.cierre_dia || '') }),
-    venc: h('input', { type: 'number', min: '1', max: '31', inputmode: 'numeric',
-                       value: String(a?.vencimiento_dia || '') }),
+    cierre: dia(a?.cierre_dia),
+    venc: dia(a?.vencimiento_dia),
     saldo: h('input', { type: 'text', inputmode: 'decimal',
                         value: a?.saldo_inicial ? String(a.saldo_inicial) : '' }),
     saldoAl: h('input', { type: 'date', value: a?.saldo_al || hoyISO() })
@@ -84,6 +96,8 @@ export function formCuenta(a = null) {
     h('div.fila', campo('Marca', c.marca), campo('Últimos 4', c.ultimos4)),
     campo('Límite', c.limite),
     h('div.fila', campo('Día de cierre', c.cierre), campo('Día de vencimiento', c.venc)),
+    h('div.small.mut', { style: { marginTop: '-12px', marginBottom: '16px', lineHeight: '1.45' } },
+      'Un día del mes, del 1 al 31. Si tu tarjeta cierra el 5 y vence el 10, va 5 y 10.'),
     h('div.f',
       h('label', 'Fechas del resumen'),
       h('div.small.mut', { style: { marginTop: '-3px', marginBottom: '10px', lineHeight: '1.45' } },
@@ -119,12 +133,21 @@ export function formCuenta(a = null) {
       h('button.btn', { onclick: async () => {
         if (!c.nombre.value.trim()) { c.nombre.focus(); aviso('Falta el nombre'); return; }
         const esCredito = c.tipo.value === 'credito';
-        // Sin cierre no hay con que armar el resumen, y la tarjeta termina
-        // mostrando cero aunque tenga consumos.
-        if (esCredito && !ciclos.some(x => x.cierre && x.vence) && !Number(c.cierre.value)) {
-          c.cierre.focus();
-          aviso('Falta el día de cierre, o las fechas del resumen');
-          return;
+        if (esCredito) {
+          const conCiclos = ciclos.some(x => x.cierre && x.vence);
+          // Sin cierre no hay con que armar el resumen, y la tarjeta termina
+          // mostrando cero aunque tenga consumos.
+          if (!conCiclos && !c.cierre.value.trim()) {
+            c.cierre.focus(); aviso('Falta el día de cierre, o las fechas del resumen'); return;
+          }
+          for (const [campoDia, rot] of [[c.cierre, 'cierre'], [c.venc, 'vencimiento']]) {
+            if (!campoDia.value.trim()) continue;
+            if (!F.diaDelMes(campoDia.value)) {
+              campoDia.focus();
+              aviso(`El día de ${rot} va del 1 al 31, no ${campoDia.value}`);
+              return;
+            }
+          }
         }
         await guardar('accounts', { ...(a || {}),
           nombre: c.nombre.value.trim(), tipo: c.tipo.value, moneda: c.moneda.value,

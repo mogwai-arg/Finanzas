@@ -88,8 +88,21 @@ function filaRecurrente(r, periodo, hoy) {
       icono(r.pagado ? 'check' : iconoDe(r.nombre), 17)),
     h('div.m',
       h('div.t', { style: r.pagado ? { color: 'var(--tx2)' } : {} }, r.nombre),
-      h('div.s', r.pagado ? 'pagado' : cuandoVence(iso, hoy) + (r.variable ? ' · monto variable' : ''))),
-    h('div', { class: 'v' + (r.pagado ? ' mut' : '') }, plata(r.monto, r.moneda)));
+      h('div.s', apoyo(r, iso, hoy))),
+    h('div', { class: 'v' + (r.pagado ? ' mut' : '') }, plata(r.monto, r.moneda),
+      // Lo que vale, cuando lo que se paga no es lo que vale.
+      !r.pagado && r.saldo ? h('small', `vale ${plata(r.valor, r.moneda)}`) : null));
+}
+
+/** El renglon chico: cuando vence, y como viene el saldo arrastrado. */
+function apoyo(r, iso, hoy) {
+  const s = r.pagado ? r.saldoDespues : r.saldo;
+  const arrastre = !s ? null
+    : s > 0 ? `${plata(s, r.moneda)} a favor`
+            : `debés ${plata(Math.abs(s), r.moneda)}`;
+  const base = r.pagado ? `pagaste ${plata(r.monto, r.moneda)}`
+                        : cuandoVence(iso, hoy) + (r.variable ? ' · variable' : '');
+  return [base, arrastre].filter(Boolean).join(' · ');
 }
 
 async function togglePago(r, periodo) {
@@ -98,27 +111,52 @@ async function togglePago(r, periodo) {
     aviso(`${r.nombre} vuelve a estar pendiente`);
     return;
   }
-  if (r.variable) { formPagoVariable(r, periodo); return; }
-  await guardar('recurring_payments', {
-    ...(r.pago || {}), recurring_id: r.id, periodo,
-    monto: r.monto, pagado_at: new Date().toISOString()
-  });
-  aviso(`${r.nombre} pagado`);
+  formPago(r, periodo);
 }
 
-function formPagoVariable(r, periodo) {
+/**
+ * Marcar pagado diciendo cuanto se pago de verdad.
+ *
+ * El alquiler vale 850 dolares pero se pagan 900 para no romper billetes: lo
+ * que vale no cambia, los 50 quedan a favor del mes que viene. Por eso el
+ * monto siempre se puede editar, no solo en los gastos marcados como
+ * variables.
+ */
+function formPago(r, periodo) {
   const campo = h('input', { type: 'text', inputmode: 'decimal',
-                             value: String(r.monto || ''), 'aria-label': 'Monto pagado' });
+                             value: String(r.sugerido || r.valor || ''), 'aria-label': 'Monto pagado' });
+  const nuevoSaldo = h('div.small.mut', { style: { marginTop: '-10px', lineHeight: '1.45' } });
+
+  const recalcular = () => {
+    const pagado = num(campo.value);
+    const queda = Math.round((r.saldo + pagado - r.valor) * 100) / 100;
+    nuevoSaldo.replaceChildren(
+      `Vale ${plata(r.valor, r.moneda)}.`,
+      r.saldo ? ` Venías con ${plata(Math.abs(r.saldo), r.moneda)} ${r.saldo > 0 ? 'a favor' : 'en contra'}.` : '',
+      !queda ? ' Queda saldado.'
+        : queda > 0 ? ` Te quedan ${plata(queda, r.moneda)} a favor para el mes que viene.`
+                    : ` Quedás debiendo ${plata(Math.abs(queda), r.moneda)}.`);
+  };
+  campo.addEventListener('input', recalcular);
+  recalcular();
+
   const cerrar = hoja(`¿Cuánto pagaste de ${r.nombre}?`, h('div',
     h('div.f', h('label', 'Monto'), campo),
-    h('button.btn', { onclick: async () => {
-      const monto = Number(String(campo.value).replace(/\./g, '').replace(',', '.')) || 0;
+    nuevoSaldo,
+    h('button.btn', { style: { marginTop: '16px' }, onclick: async () => {
+      const monto = num(campo.value);
+      if (!monto) { campo.focus(); aviso('Falta el monto'); return; }
       await guardar('recurring_payments', {
         ...(r.pago || {}), recurring_id: r.id, periodo, monto,
         pagado_at: new Date().toISOString() });
-      cerrar(); aviso(`${r.nombre} pagado`);
+      const queda = Math.round((r.saldo + monto - r.valor) * 100) / 100;
+      cerrar();
+      aviso(queda ? `${r.nombre} pagado · ${plata(Math.abs(queda), r.moneda)} ${queda > 0 ? 'a favor' : 'en contra'}`
+                  : `${r.nombre} pagado`);
     } }, 'Marcar pagado')));
 }
+
+const num = v => Number(String(v ?? '').replace(/\./g, '').replace(',', '.')) || 0;
 
 function filaPresupuesto(b) {
   const nom = nombreDe('categories', b.category_id, 'Sin categoría');

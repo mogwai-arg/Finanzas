@@ -7,6 +7,77 @@ let ok = 0; const t = (n, fn) => { fn(); ok++; console.log('  ok  ' + n); };
 console.log('Ciclo de tarjeta (cierre 20, vence 30)');
 const gal = { id: 'g', tipo: 'credito', cierre_dia: 20, vencimiento_dia: 30 };
 
+const ALQ = { id: 'alq', activo: true, nombre: 'Alquiler', monto_estimado: 850,
+              moneda: 'USD', dia_vencimiento: 5 };
+const PAGOS_ALQ = [
+  { recurring_id: 'alq', periodo: '2026-06', monto: 900, pagado_at: '2026-06-05' },
+  { recurring_id: 'alq', periodo: '2026-07', monto: 800, pagado_at: '2026-07-05' },
+  { recurring_id: 'alq', periodo: '2026-08', monto: 900, pagado_at: '2026-08-05' }
+];
+
+t('pagar de mas deja saldo a favor para el mes siguiente', () => {
+  // Junio: pago 900 por algo que vale 850.
+  assert.equal(F.aPagarRecurrente(ALQ, PAGOS_ALQ, '2026-07').saldo, 50);
+  assert.equal(F.aPagarRecurrente(ALQ, PAGOS_ALQ, '2026-07').sugerido, 800);
+});
+
+t('el saldo se consume y vuelve a cero', () => {
+  // Julio uso los 50 pagando 800: agosto arranca en cero.
+  assert.equal(F.aPagarRecurrente(ALQ, PAGOS_ALQ, '2026-08').saldo, 0);
+  assert.equal(F.aPagarRecurrente(ALQ, PAGOS_ALQ, '2026-08').sugerido, 850);
+});
+
+t('el saldo se acumula mes a mes', () => {
+  const pagos = [
+    { recurring_id: 'alq', periodo: '2026-06', monto: 900, pagado_at: 'x' },
+    { recurring_id: 'alq', periodo: '2026-07', monto: 900, pagado_at: 'x' }
+  ];
+  assert.equal(F.aPagarRecurrente(ALQ, pagos, '2026-08').saldo, 100);
+  assert.equal(F.aPagarRecurrente(ALQ, pagos, '2026-08').sugerido, 750);
+});
+
+t('pagar de menos deja saldo en contra', () => {
+  const pagos = [{ recurring_id: 'alq', periodo: '2026-06', monto: 800, pagado_at: 'x' }];
+  const { saldo, sugerido } = F.aPagarRecurrente(ALQ, pagos, '2026-07');
+  assert.equal(saldo, -50);
+  assert.equal(sugerido, 900);
+});
+
+t('un saldo a favor mas grande que el mes no da un pago negativo', () => {
+  const pagos = [{ recurring_id: 'alq', periodo: '2026-06', monto: 2000, pagado_at: 'x' }];
+  const { saldo, sugerido } = F.aPagarRecurrente(ALQ, pagos, '2026-07');
+  assert.equal(saldo, 1150);
+  assert.equal(sugerido, 0);          // y los 300 que sobran siguen arrastrandose
+});
+
+t('un mes sin pagar no mueve el saldo', () => {
+  const pagos = [{ recurring_id: 'alq', periodo: '2026-06', monto: 900, pagado_at: null }];
+  assert.equal(F.aPagarRecurrente(ALQ, pagos, '2026-07').saldo, 0);
+});
+
+t('el colegio en pesos funciona igual', () => {
+  const col = { id: 'col', activo: true, nombre: 'Colegio', monto_estimado: 259000, moneda: 'ARS', dia_vencimiento: 10 };
+  const pagos = [{ recurring_id: 'col', periodo: '2026-08', monto: 260000, pagado_at: 'x' }];
+  const { saldo, sugerido } = F.aPagarRecurrente(col, pagos, '2026-09');
+  assert.equal(saldo, 1000);
+  assert.equal(sugerido, 258000);
+});
+
+t('el mes trae el saldo que queda despues de pagar', () => {
+  const r = F.recurrentesDelMes([ALQ], PAGOS_ALQ, '2026-06', new Date(2026, 5, 20))[0];
+  assert.equal(r.valor, 850);
+  assert.equal(r.monto, 900);           // lo que pago de verdad
+  assert.equal(r.saldoDespues, 50);     // lo que se lleva a julio
+});
+
+t('un dia de cierre que no es un dia del mes no sirve', () => {
+  assert.equal(F.diaDelMes(5), true);
+  assert.equal(F.diaDelMes('31'), true);
+  assert.equal(F.diaDelMes(0), false);
+  assert.equal(F.diaDelMes(509), false);     // '5/09' escrito en un campo numerico
+  assert.equal(F.tieneCiclo({ tipo: 'credito', cierre_dia: 509 }), false);
+});
+
 t('una tarjeta sin cierre ni ciclos no tiene con que calcular', () => {
   assert.equal(F.tieneCiclo({ tipo: 'credito' }), false);
   assert.equal(F.tieneCiclo({ tipo: 'credito', cierre_dia: 5 }), true);

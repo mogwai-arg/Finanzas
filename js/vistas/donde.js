@@ -8,6 +8,7 @@ import { state } from '../db.js';
 import * as F from '../finance.js';
 import { plata, plataPartida, fechaRelativa } from '../formato.js';
 import { formCuenta } from './formularios.js';
+import { irA } from '../ruteo.js';
 
 /** El icono sale del tipo de cuenta, no del nombre: 'Wallbit' no dice nada. */
 const iconoCuenta = c => ({ cuenta: 'banco', billetera: 'qr', efectivo: 'billete',
@@ -50,9 +51,28 @@ export function vistaDonde(root) {
         + `Todo junto, ${plata(Math.round(totalArs + totalUsd * ref))}.`)
     : null;
 
+  // Las tarjetas no tienen saldo sino deuda, asi que no van con las cuentas.
+  // Pero tienen que estar: esta es la pantalla de "todo lo que tengo", y si
+  // faltan uno las busca donde no estan.
+  const tarjetas = state.accounts.filter(a => a.tipo === 'credito' && a.activo !== false);
+  const grupoTarjetas = !tarjetas.length ? null : h('section',
+    h('div.ghead', 'Tarjetas'),
+    h('div.grp', tarjetas.map(t => {
+      const c = F.tieneCiclo(t) ? (F.resumenAPagar(t, hoy) || F.proximoCiclo(t, hoy)) : null;
+      const monto = c ? F.totalTarjetaEnPeriodo(state.transactions, t, F.periodo(c.vence), t.moneda || 'ARS') : 0;
+      return h('button.li', { onclick: () => irA(`/tarjetas/${t.id}`) },
+        h('div.av', icono('tarjeta', 17)),
+        h('div.m', h('div.t', t.nombre),
+          h('div.s', !c ? 'falta el cierre'
+            : `${t.ultimos4 ? '•••• ' + t.ultimos4 + ' · ' : ''}vence ${c.vence.getDate()}/${c.vence.getMonth() + 1}`)),
+        h('div', { class: 'v' + (state.ocultarMontos ? ' oculto' : '') },
+          plata(Math.round(monto), t.moneda || 'ARS')),
+        h('span.chev', icono('chev', 15)));
+    })));
+
   root.append(h('div.flow',
     h('div.grid2', tot('En pesos', totalArs, 'ARS'), tot('En dólares', totalUsd, 'USD')),
-    grupo('Pesos', ars), grupo('Dólares', usd),
+    grupo('Pesos', ars), grupo('Dólares', usd), grupoTarjetas,
     state.ocultarMontos
       ? h('div.small.mut', { style: { padding: '0 4px' } },
           'Los nombres y las fechas se siguen leyendo. Lo único tapado son los números.')
