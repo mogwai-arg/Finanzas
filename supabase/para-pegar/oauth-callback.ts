@@ -49,9 +49,21 @@ MP_CLIENT_SECRET      ${hay("MP_CLIENT_SECRET")}
   const prov = corte > 0 ? state.slice(0, corte) : url.searchParams.get("proveedor") ?? "gmail";
   const jwt = corte > 0 ? state.slice(corte + 1) : state;
   if (!code) {
-    const llegaron = [...url.searchParams.keys()];
-    const motivo = url.searchParams.get("error_description") || url.searchParams.get("error") || `no vino el c\xF3digo; lleg\xF3: ${llegaron.join(", ") || "nada"}`;
-    return Response.redirect(`${APP}#/ajustes?error=${encodeURIComponent(motivo)}`, 302);
+    const partes = [...url.searchParams.entries()].map(([k, v]) => `${k} = ${k === "state" ? v.slice(0, 40) + "\u2026" : v}`);
+    return new Response(
+      `BISHUSHA \xB7 la vuelta de Google no trajo el c\xF3digo
+
+Lo que lleg\xF3 a ${url.pathname}:
+` + (partes.length ? partes.map((p) => "  " + p).join("\n") : "  nada, ni un par\xE1metro") + `
+
+M\xE9todo: ${req.method}
+Referer: ${req.headers.get("referer") ?? "(ninguno)"}
+
+Si dice error = access_denied, se cort\xF3 el permiso en la pantalla de
+Google. Si no lleg\xF3 nada, esta direcci\xF3n se abri\xF3 sin venir de Google.
+`,
+      { status: 400, headers: { "content-type": "text/plain; charset=utf-8" } }
+    );
   }
   const sb = admin();
   const { data: u } = await sb.auth.getUser(jwt);

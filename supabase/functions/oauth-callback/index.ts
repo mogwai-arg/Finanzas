@@ -54,18 +54,31 @@ Deno.serve(async (req) => {
                          : (url.searchParams.get('proveedor') ?? 'gmail');
   const jwt = corte > 0 ? state.slice(corte + 1) : state;
   if (!code) {
-    // Cuando no hay code, el que sabe por que es Google: puede venir un
-    // access_denied porque se toco "Volver a seguridad" en la pantalla de app
-    // sin verificar. Decir 'sin_code' escondia justamente el motivo.
-    //
-    // Y si tampoco hay error, se listan los parametros que si llegaron: es la
-    // unica forma de distinguir "Google contesto raro" de "algo mas esta
-    // pegandole a esta direccion".
-    const llegaron = [...url.searchParams.keys()];
-    const motivo = url.searchParams.get('error_description') ||
-                   url.searchParams.get('error') ||
-                   `no vino el código; llegó: ${llegaron.join(', ') || 'nada'}`;
-    return Response.redirect(`${APP}#/ajustes?error=${encodeURIComponent(motivo)}`, 302);
+    // Sin codigo no hay nada que hacer, asi que en vez de rebotar a la app
+    // —donde el mensaje se recorta y se mezcla con el estado de la pantalla—
+    // se muestra aca mismo todo lo que llego. Es un callejon sin salida a
+    // proposito: el unico caso en que conviene ver los datos crudos.
+    const partes = [...url.searchParams.entries()]
+      .map(([k, v]) => `${k} = ${k === 'state' ? v.slice(0, 40) + '…' : v}`);
+    return new Response(
+      `BISHUSHA · la vuelta de Google no trajo el código
+
+` +
+      `Lo que llegó a ${url.pathname}:
+` +
+      (partes.length ? partes.map(p => '  ' + p).join('\n') : '  nada, ni un parámetro') +
+      `
+
+Método: ${req.method}
+` +
+      `Referer: ${req.headers.get('referer') ?? '(ninguno)'}
+
+` +
+      `Si dice error = access_denied, se cortó el permiso en la pantalla de
+` +
+      `Google. Si no llegó nada, esta dirección se abrió sin venir de Google.
+`,
+      { status: 400, headers: { 'content-type': 'text/plain; charset=utf-8' } });
   }
 
   const sb = admin();
