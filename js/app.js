@@ -1,9 +1,9 @@
 // =====================================================================
 // app.js — arranque, barra de pestañas y despacho de vistas.
 // =====================================================================
-import { h, icono, aviso } from './ui.js';
+import { h, icono, marca, aviso } from './ui.js';
 import { state, sesion, sincronizar, cargarCache, onChange, DEMO,
-         enviarMagicLink, urlDeVuelta } from './db.js';
+         entrar, crearCuenta, recuperarPassword } from './db.js';
 import { rutaActual, irA, alCambiarRuta, calzar } from './ruteo.js';
 import { fechaLarga, hoyISO } from './formato.js';
 
@@ -47,17 +47,47 @@ const TABS = [
 ];
 
 // ------------------------------------------------------------ arranque
+/** Texto de la pantalla de arranque. Decir en qué anda vale más que un spinner. */
+const decirEstado = txt => {
+  const e = document.getElementById('splash-estado');
+  if (e) e.textContent = txt;
+};
+
 async function iniciar() {
   aplicarTema();
-  const usuario = await sesion();
+
+  // Si tarda, avisar en vez de dejar la marca latiendo sin explicación.
+  const lento = setTimeout(() => {
+    const e = document.getElementById('splash-estado');
+    if (!e) return;
+    e.classList.add('lento');
+    e.textContent = navigator.onLine
+      ? 'Está tardando más de lo normal. Seguí esperando o recargá.'
+      : 'Sin conexión. Voy a mostrarte lo último que guardé.';
+  }, 5000);
+
+  let usuario = null;
+  try { usuario = await sesion(); }
+  catch (e) { console.warn('sesion', e); }
+  clearTimeout(lento);
+
   if (!usuario) { pantallaLogin(); return; }
 
-  cargarCache();
+  decirEstado('Leyendo lo guardado…');
+  const habiaCache = cargarCache();
   render();
   tabs.hidden = false;
   onChange(render);
   alCambiarRuta(() => { window.scrollTo(0, 0); render(); });
-  sincronizar().catch(e => console.warn('sync', e));
+
+  // El primer arranque no tiene caché: ahí sí se espera a que baje todo.
+  if (!habiaCache) {
+    decirEstado('Trayendo tus datos…');
+    await sincronizar().catch(e => console.warn('sync', e));
+    render();
+  } else {
+    sincronizar().catch(e => console.warn('sync', e));
+  }
 
   if ('serviceWorker' in navigator && location.protocol !== 'file:') {
     navigator.serviceWorker.register('sw.js').catch(() => {});
@@ -149,74 +179,129 @@ function pintarTabs(activo) {
 }
 
 // --------------------------------------------------------------- login
+
 /**
  * Un error de login sin explicacion es lo peor que puede pasar en la primera
- * pantalla: no hay nada que probar y no se sabe si es la app, el correo o
- * la conexion. Por eso el mensaje dice QUE paso y QUE hacer.
+ * pantalla: no hay nada que probar y no se sabe si es la app, la clave o la
+ * conexion. Por eso el mensaje dice QUE paso y QUE hacer.
  */
-function explicarError(error) {
+function explicarError(error, modo) {
   const m = String(error?.message || error || '').toLowerCase();
+  if (/invalid login|invalid credentials/.test(m))
+    return 'Ese correo y esa contraseña no coinciden. Si nunca entraste, creá la cuenta.';
+  if (/email not confirmed/.test(m))
+    return 'La cuenta existe pero falta confirmarla. En Supabase, Authentication → Providers → '
+         + 'Email, desactivá "Confirm email".';
+  if (/already registered|already exists|user already/.test(m))
+    return 'Ese correo ya tiene cuenta. Entrá con tu contraseña, o recuperala si la olvidaste.';
+  if (/password should be|at least|weak/.test(m))
+    return 'La contraseña es muy corta. Poné al menos seis caracteres.';
   if (/rate|too many|seconds|limit/.test(m))
-    return { txt: 'Supabase corta los envíos si pedís varios seguidos. Esperá unos minutos.',
-             detalle: error?.message };
-  if (/redirect|not allowed|invalid.*url/.test(m))
-    return { txt: `Falta permitir esta dirección en Supabase: ${urlDeVuelta()}`,
-             detalle: error?.message };
-  if (/signup|disabled|not allowed/.test(m))
-    return { txt: 'Supabase no está aceptando altas nuevas con este correo.',
-             detalle: error?.message };
-  if (/fetch|network|failed/.test(m))
-    return { txt: 'No pude hablar con el servidor. ¿Hay internet?', detalle: error?.message };
-  return { txt: error?.message || 'No salió, y el servidor no dijo por qué.',
-           detalle: error?.message };
+    return 'Demasiados intentos seguidos. Esperá un minuto.';
+  if (/signup.*disabled|not allowed/.test(m))
+    return 'Supabase no está aceptando altas. Activá "Allow new users to sign up".';
+  if (/fetch|network|failed to fetch/.test(m))
+    return 'No pude hablar con el servidor. ¿Hay internet?';
+  return error?.message || 'No salió, y el servidor no dijo por qué.';
 }
 
 function pantallaLogin() {
   tabs.hidden = true;
-  let enviando = false;
-  const email = h('input', { type: 'email', placeholder: 'tu@correo.com',
-                             autocomplete: 'email', inputmode: 'email' });
-  const detalle = h('div.small', { style: { marginTop: '14px', lineHeight: '1.5',
-                                            textAlign: 'left' }, hidden: true });
-  const boton = h('button.btn', { onclick: async () => {
-    if (enviando || !email.value.includes('@')) { email.focus(); return; }
-    enviando = true; boton.disabled = true; boton.textContent = 'Enviando…';
-    detalle.hidden = true;
-    let error = null;
-    try { ({ error } = await enviarMagicLink(email.value.trim())); }
-    catch (e) { error = e; }
-    enviando = false; boton.disabled = false; boton.textContent = 'Entrar';
+  let modo = 'entrar';          // entrar | crear
+  let ocupado = false;
 
-    if (!error) {
-      aviso('Listo. Te mandé un link para entrar.');
-      detalle.hidden = false;
-      detalle.replaceChildren(
-        h('div.aviso', { style: { display: 'block' } },
-          h('div.tt', 'Revisá el correo'),
-          h('div.ds', 'Abrí el link desde este mismo aparato. Si lo abrís en la computadora, ',
-            'la sesión queda ahí y no acá.')));
+  const email = h('input', { type: 'email', placeholder: 'tu@correo.com',
+                             autocomplete: 'username', inputmode: 'email',
+                             autocapitalize: 'none', spellcheck: 'false' });
+  const clave = h('input', { type: 'password', placeholder: '••••••••',
+                             autocomplete: 'current-password' });
+  const verClave = h('button.iconbtn', {
+    type: 'button', 'aria-label': 'Ver la contraseña',
+    style: { position: 'absolute', right: '2px', top: '2px', width: '44px', height: '44px' },
+    onclick: () => {
+      clave.type = clave.type === 'password' ? 'text' : 'password';
+      verClave.replaceChildren(icono(clave.type === 'password' ? 'ojo' : 'ojoNo', 18));
+    }
+  }, icono('ojo', 18));
+
+  const mensaje = h('div', { hidden: true, style: { marginTop: '14px', textAlign: 'left' } });
+  const boton = h('button.btn');
+  const cambiar = h('button', {
+    style: { background: 'none', border: '0', color: 'var(--brand)', font: 'inherit',
+             fontSize: '14px', fontWeight: '600', cursor: 'pointer', padding: '10px',
+             marginTop: '4px' },
+    onclick: () => { modo = modo === 'entrar' ? 'crear' : 'entrar'; mensaje.hidden = true; pintar(); }
+  });
+  const olvide = h('button', {
+    style: { background: 'none', border: '0', color: 'var(--tx2)', font: 'inherit',
+             fontSize: '13.5px', cursor: 'pointer', padding: '8px' },
+    onclick: async () => {
+      if (!email.value.includes('@')) { email.focus(); mostrar('amb', 'Poné tu correo primero.'); return; }
+      const { error } = await recuperarPassword(email.value);
+      mostrar(error ? 'amb' : 'bra', error ? explicarError(error, modo)
+        : 'Te mandé un correo para poner una contraseña nueva. Abrilo desde este aparato.');
+    }
+  }, 'Olvidé la contraseña');
+
+  const mostrar = (tono, txt) => {
+    mensaje.hidden = false;
+    mensaje.replaceChildren(h('div', { class: `aviso ${tono}`, style: { display: 'block' } },
+      h('div.ds', { style: { color: tono === 'amb' ? 'var(--amb)' : 'var(--tx2)' } }, txt)));
+  };
+
+  function pintar() {
+    const crear = modo === 'crear';
+    boton.textContent = crear ? 'Crear cuenta' : 'Entrar';
+    clave.autocomplete = crear ? 'new-password' : 'current-password';
+    clave.placeholder = crear ? 'al menos 6 caracteres' : '••••••••';
+    cambiar.textContent = crear ? 'Ya tengo cuenta' : 'Es la primera vez: crear cuenta';
+    olvide.hidden = crear;
+  }
+
+  boton.onclick = async () => {
+    if (ocupado) return;
+    if (!email.value.includes('@')) { email.focus(); mostrar('amb', 'Falta el correo.'); return; }
+    if (clave.value.length < 6) { clave.focus(); mostrar('amb', 'La contraseña va de seis caracteres para arriba.'); return; }
+
+    ocupado = true; boton.disabled = true;
+    boton.textContent = modo === 'crear' ? 'Creando…' : 'Entrando…';
+    mensaje.hidden = true;
+
+    let error = null, data = null;
+    try {
+      ({ data, error } = modo === 'crear'
+        ? await crearCuenta(email.value, clave.value)
+        : await entrar(email.value, clave.value));
+    } catch (e) { error = e; }
+
+    ocupado = false; boton.disabled = false; pintar();
+
+    if (error) { mostrar('amb', explicarError(error, modo)); return; }
+    if (modo === 'crear' && !data?.session) {
+      mostrar('bra', 'Cuenta creada. Te mandé un correo para confirmarla; abrilo y volvé a entrar.');
       return;
     }
-    const e = explicarError(error);
-    aviso('No pude mandar el link');
-    detalle.hidden = false;
-    detalle.replaceChildren(
-      h('div.aviso.amb', { style: { display: 'block' } },
-        h('div.tt', 'No salió'),
-        h('div.ds', e.txt),
-        e.detalle && e.detalle !== e.txt
-          ? h('div.ds', { style: { marginTop: '8px', fontFamily: 'ui-monospace,monospace',
-                                   fontSize: '11.5px', opacity: '.8' } }, e.detalle) : null));
-  } }, 'Entrar');
+    location.reload();
+  };
 
-  app.replaceChildren(h('div', { style: { maxWidth: '340px', margin: '18vh auto 0', textAlign: 'center' } },
-    h('svg', { width: 56, height: 56, viewBox: '0 0 100 100', 'aria-hidden': 'true',
-               html: '<path style="fill:var(--tx)" d="M16 13.5A3.5 3.5 0 0 1 19.5 10h8A3.5 3.5 0 0 1 31 13.5v73a3.5 3.5 0 0 1-3.5 3.5h-8A3.5 3.5 0 0 1 16 86.5Z M22 10h24a18 18 0 0 1 0 36H22Z M31 35h15a7 7 0 0 0 0-14H31Z M22 54h46a18 18 0 0 1 0 36H22Z M31 79h37a7 7 0 0 0 0-14H31Z"/>' }),
-    h('h1', { style: { fontSize: '32px', fontWeight: '800', letterSpacing: '-.05em', margin: '18px 0 8px' } }, 'BISHUSHA'),
-    h('p.mut', { style: { fontSize: '14.5px', lineHeight: '1.45', marginBottom: '26px' } },
-      'Poné tu correo y te mando un link para entrar. Sin contraseñas.'),
-    h('div.f', h('label', 'Correo'), email),
-    boton, detalle));
+  pintar();
+
+  app.replaceChildren(h('div', { style: { maxWidth: '340px', margin: '14vh auto 0',
+                                          textAlign: 'center' } },
+    marca(52),
+    h('h1', { style: { fontFamily: 'var(--f-display)', fontSize: '30px', fontWeight: '800',
+                       letterSpacing: '-.05em', margin: '16px 0 24px' } }, 'BISHUSHA'),
+    h('form', { style: { textAlign: 'left' },
+                onsubmit: e => { e.preventDefault(); boton.click(); } },
+      h('div.f', h('label', 'Correo'), email),
+      h('div.f', h('label', 'Contraseña'),
+        h('div', { style: { position: 'relative' } }, clave, verClave)),
+      boton),
+    mensaje,
+    h('div', { style: { display: 'flex', flexDirection: 'column', alignItems: 'center' } },
+      cambiar, olvide)));
+
+  setTimeout(() => email.focus(), 120);
 }
 
 iniciar();

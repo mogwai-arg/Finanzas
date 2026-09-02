@@ -219,4 +219,19 @@ input[type=checkbox]{width:auto;min-height:0}
 .chips button{border:0;cursor:pointer}
 .chips .pill[aria-pressed="true"]{background:var(--tx);color:var(--bg)}
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:9px}
-.splash{display:grid;place-items:center;min-height:70vh}
+/* Pantalla de arranque. Aparece sola —sin animacion de entrada— para que el
+   primer cuadro ya tenga algo; lo unico que se mueve es la salida. */
+.splash{display:flex;flex-direction:column;align-items:center;justify-content:center;
+        gap:14px;min-height:78vh;transition:opacity 220ms var(--e-sale)}
+.splash.sale{opacity:0;pointer-events:none}
+.splash .marca{opacity:.92}
+.splash .wordmark{font-family:var(--f-display);font-size:26px;font-weight:800;
+                  letter-spacing:-.05em;color:var(--tx)}
+.splash .estado{font-size:13px;color:var(--tx2);min-height:18px;text-align:center;
+                max-width:30ch;line-height:1.45}
+.splash .estado.lento{color:var(--amb)}
+
+/* Latido mientras espera. No es un spinner: no pretende medir nada. */
+.splash .marca{animation:latir 1.8s var(--e-entra) infinite}
+@keyframes latir{0%,100%{opacity:.92}50%{opacity:.45}}
+@media (prefers-reduced-motion:reduce){.splash .marca{animation:none}}

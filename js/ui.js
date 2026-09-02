@@ -76,6 +76,25 @@ const TRAZOS = {
   varios:  'M6 12a1.6 1.6 0 1 1-3.2 0A1.6 1.6 0 0 1 6 12zm7.6 0a1.6 1.6 0 1 1-3.2 0 1.6 1.6 0 0 1 3.2 0zm7.6 0a1.6 1.6 0 1 1-3.2 0 1.6 1.6 0 0 1 3.2 0z'
 };
 
+/**
+ * El isotipo. Va aparte de `icono` porque es una silueta rellena, no un
+ * trazo, y porque `h('svg')` no sirve: crea un elemento HTML llamado "svg"
+ * y no se dibuja nada. Los SVG necesitan su espacio de nombres.
+ */
+export function marca(tam = 52, color = 'var(--tx)') {
+  const NS = 'http://www.w3.org/2000/svg';
+  const s = document.createElementNS(NS, 'svg');
+  s.setAttribute('width', tam); s.setAttribute('height', tam);
+  s.setAttribute('viewBox', '0 0 100 100');
+  s.setAttribute('role', 'img');
+  s.setAttribute('aria-label', 'BISHUSHA');
+  const p = document.createElementNS(NS, 'path');
+  p.setAttribute('fill', color);
+  p.setAttribute('d', 'M16 13.5A3.5 3.5 0 0 1 19.5 10h8A3.5 3.5 0 0 1 31 13.5v73a3.5 3.5 0 0 1-3.5 3.5h-8A3.5 3.5 0 0 1 16 86.5Z M22 10h24a18 18 0 0 1 0 36H22Z M31 35h15a7 7 0 0 0 0-14H31Z M22 54h46a18 18 0 0 1 0 36H22Z M31 79h37a7 7 0 0 0 0-14H31Z');
+  s.append(p);
+  return s;
+}
+
 export function icono(nombre, tam = 18) {
   const s = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
   s.setAttribute('width', tam); s.setAttribute('height', tam);

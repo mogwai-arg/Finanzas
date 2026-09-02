@@ -9,7 +9,10 @@ export const DEMO = !!CFG.DEMO;
 const stub = {
   auth: { getSession: async () => ({ data: { session: null } }),
           onAuthStateChange: () => ({ data: { subscription: { unsubscribe() {} } } }),
-          signInWithOtp: async () => ({ error: null }), signOut: async () => {} },
+          signInWithPassword: async () => ({ data: {}, error: null }),
+          signUp: async () => ({ data: {}, error: null }),
+          resetPasswordForEmail: async () => ({ error: null }),
+          updateUser: async () => ({ error: null }), signOut: async () => {} },
   from: () => ({ select: () => ({ gt: async () => ({ data: [] }), then: r => r({ data: [] }) }),
                  upsert: async () => ({}), delete: () => ({ eq: async () => ({}) }) })
 };
@@ -133,16 +136,31 @@ export async function sesion() {
   return state.user;
 }
 /**
- * El link vuelve SIEMPRE a la raiz del sitio, no a la URL desde la que se
- * pidio. Instalada en el celular la app arranca en `/index.html`, y si esa
- * direccion exacta no esta en la lista blanca de Supabase, el envio falla
- * sin decir por que. Con la raiz alcanza con permitir una sola URL.
+ * Correo y contrasena, no link magico.
+ *
+ * El link magico se veia mas prolijo pero traia dos problemas reales: el
+ * correo incluido de Supabase corta a los pocos envios por hora, y en el
+ * celular el link abre en Safari mientras la app instalada queda afuera —
+ * la sesion queda de un lado y vos del otro. Con contrasena no se manda
+ * ningun correo al entrar, y el llavero del telefono la recuerda.
  */
+export const entrar = (email, password) =>
+  sb.auth.signInWithPassword({ email: email.trim().toLowerCase(), password });
+
+export const crearCuenta = (email, password) =>
+  sb.auth.signUp({ email: email.trim().toLowerCase(), password,
+                   options: { emailRedirectTo: urlDeVuelta() } });
+
+/** La unica vez que se manda un correo: cuando de verdad hace falta. */
+export const recuperarPassword = email =>
+  sb.auth.resetPasswordForEmail(email.trim().toLowerCase(),
+    { redirectTo: urlDeVuelta() });
+
+export const cambiarPassword = password => sb.auth.updateUser({ password });
+
+/** Adonde vuelve el correo de recuperacion. Siempre la raiz del sitio. */
 export const urlDeVuelta = () =>
   location.origin + location.pathname.replace(/index\.html$/, '');
-
-export const enviarMagicLink = email => sb.auth.signInWithOtp({
-  email, options: { emailRedirectTo: urlDeVuelta() } });
 export async function salir() {
   await sb.auth.signOut();
   localStorage.removeItem(CACHE_KEY);
