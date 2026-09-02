@@ -560,6 +560,108 @@ export function duplicadoManual(tx, existentes, { dias = 4, centavos = 1 } = {})
   }) || null;
 }
 
+// ---------------------------------------------------------------------
+// LO QUE SE DEBITA EN LA TARJETA
+// ---------------------------------------------------------------------
+
+/**
+ * Si un gasto fijo se debita en una tarjeta de credito.
+ *
+ * Cambia todo: uno que se debita en la cuenta saca la plata el dia que vence;
+ * uno que se debita en la tarjeta entra al resumen y sale recien cuando se
+ * paga el resumen. Contarlo como algo a pagar aparte, teniendolo adentro del
+ * resumen, es contar la misma plata dos veces.
+ */
+export function enTarjeta(recurring, cuentas) {
+  const c = (cuentas || []).find(x => x.id === recurring.account_id);
+  return !!c && c.tipo === 'credito';
+}
+
+/**
+ * Los debitos automaticos de una tarjeta que todavia no llegaron al resumen.
+ *
+ * Netflix, Spotify, la prepaga: caen todos los meses y son plata que ya esta
+ * comprometida aunque el consumo no figure todavia. Preverlos es la
+ * diferencia entre saber lo que va a venir y enterarse cuando cierra.
+ *
+ * Se descuenta el que ya aparecio: si el resumen o la carga a mano ya trajo
+ * "Spotify", ese no se suma de nuevo.
+ */
+export function debitosPrevistos(recurrings, txs, tarjeta, ciclo, ref = hoy()) {
+  const moneda = tarjeta.moneda || 'ARS';
+  const hasta = ciclo.cierre;
+  // La ventana arranca en el cierre anterior. Sin acotarla, un debito de
+  // agosto haria creer que el de septiembre ya cayo y no se preveria nunca.
+  const desde = ciclo.cierreAnterior ||
+    new Date(hasta.getFullYear(), hasta.getMonth() - 1, hasta.getDate());
+  const items = [];
+  for (const r of recurrings || []) {
+    if (r.activo === false || r.account_id !== tarjeta.id) continue;
+    if ((r.moneda || 'ARS') !== moneda) continue;
+    const nombre = String(r.nombre || '').toLowerCase();
+    // ¿Ya cayo en este ciclo?
+    const ya = (txs || []).some(tx => {
+      if (tx.account_id !== tarjeta.id || tx.tipo !== 'gasto') return false;
+      const f = parseFecha(tx.fecha);
+      if (f > hasta || (desde && f < desde)) return false;
+      const texto = `${tx.descripcion || ''} ${tx.comercio || ''}`.toLowerCase();
+      return nombre && texto.includes(nombre);
+    });
+    if (!ya) items.push({ ...r, monto: Number(r.monto_estimado) || 0 });
+  }
+  return { items, total: round2(items.reduce((s, r) => s + r.monto, 0)) };
+}
+
+/**
+ * La plata que de verdad esta libre.
+ *
+ * El saldo de las cuentas miente por omision: adentro esta el resumen que hay
+ * que pagar la semana que viene y los fijos que todavia no vencieron. Restar
+ * eso es la diferencia entre "tengo tres millones" y "puedo gastar".
+ *
+ * Devuelve tambien la version estricta: lo mismo, pero apartando ya lo que se
+ * lleva consumido con las tarjetas este ciclo, que es lo que se paga el mes
+ * que viene. Es el numero al que hay que apuntar si uno no quiere que la
+ * tarjeta le financie el mes.
+ */
+export function plataLibre(cuentas, txs, recurrings, pagos, ref = hoy(), moneda = 'ARS') {
+  const propias = (cuentas || []).filter(c => c.activo !== false && (c.moneda || 'ARS') === moneda);
+  let enCuentas = 0;
+  for (const c of propias) {
+    if (c.tipo === 'credito') continue;
+    enCuentas += saldoDeCuenta(c, txs, ref, Number(c.saldo_inicial) || 0, c.saldo_al);
+  }
+
+  let resumenes = 0, proximo = 0, debitos = 0;
+  for (const t of propias) {
+    if (t.tipo !== 'credito') continue;
+    const cerrado = resumenAPagar(t, ref);
+    if (cerrado) resumenes += faltaPagarDeResumen(txs, t, cerrado, moneda);
+    const enCurso = proximoCiclo(t, ref);
+    proximo += totalTarjetaEnPeriodo(txs, t, periodo(enCurso.vence), moneda);
+    debitos += debitosPrevistos(recurrings, txs, t, enCurso, ref).total;
+  }
+
+  // Los fijos que se debitan en una tarjeta NO se cuentan aca: ya estan
+  // adentro del resumen, o previstos como debito del ciclo en curso.
+  let fijos = 0;
+  for (const r of recurrentesDelMes(recurrings || [], pagos || [], periodo(ref), ref)) {
+    if (r.pagado || (r.moneda || 'ARS') !== moneda) continue;
+    if (enTarjeta(r, cuentas)) continue;
+    fijos += Number(r.monto) || 0;
+  }
+
+  const libre = round2(enCuentas - resumenes - fijos);
+  return {
+    enCuentas: round2(enCuentas), resumenes: round2(resumenes), fijos: round2(fijos),
+    libre,
+    // Lo que se lleva consumido con tarjeta este ciclo, mas lo que se sabe que
+    // va a caer: eso se paga el mes que viene y conviene tenerlo apartado hoy.
+    proximo: round2(proximo + debitos),
+    libreEstricta: round2(libre - proximo - debitos)
+  };
+}
+
 /** Presupuesto vs gastado por categoria. */
 export function estadoPresupuesto(budgets, resumen, alertPct = 80) {
   return budgets.filter(b => b.category_id).map(b => {

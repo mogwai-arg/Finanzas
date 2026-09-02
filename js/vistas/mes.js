@@ -20,10 +20,13 @@ export function vistaMes(root) {
   const ahorro = ['ARS', 'USD']
     .map(m => F.estadoAhorro(budgets, state.transactions, p, m)).filter(Boolean);
   const faltan = rec.filter(r => !r.pagado);
+  // Los que se debitan en la tarjeta no se pagan aparte: salen con el resumen,
+  // que ya está contado más arriba. Sumarlos sería cobrarlos dos veces.
+  const faltanEnCuenta = faltan.filter(r => !F.enTarjeta(r, state.accounts));
   const tarjetas = resumenesDelMes(hoy);
   // Para "falta pagar" solo cuentan los resúmenes que todavía se deben.
   const esteMes = tarjetas.filter(t => F.periodo(t.vence) === p && !t.pagado);
-  const total = faltan.reduce((s, r) => s + r.monto, 0) +
+  const total = faltanEnCuenta.reduce((s, r) => s + r.monto, 0) +
                 esteMes.reduce((s, t) => s + t.monto, 0);
 
   root.append(h('div.flow',
@@ -34,7 +37,7 @@ export function vistaMes(root) {
       h('div', { class: 'cifra', style: { fontSize: '30px', marginTop: '5px' } }, plata(Math.round(total))),
       h('div.small.mut', { style: { marginTop: '4px' } },
         [esteMes.length ? `${esteMes.length} ${esteMes.length === 1 ? 'resumen' : 'resúmenes'}` : null,
-         rec.length ? `${faltan.length} de ${rec.length} gastos fijos` : null]
+         rec.length ? `${faltanEnCuenta.length} de ${rec.length} gastos fijos` : null]
           .filter(Boolean).join(' · '))) : null,
 
     // Los resúmenes son casi siempre el número más grande del mes: van
@@ -110,8 +113,10 @@ function resumenesDelMes(hoy) {
 function filaRecurrente(r, periodo, hoy) {
   const vencido = r.vencido;
   const iso = fechaISO(r.vence);
+  const tarjeta = F.enTarjeta(r, state.accounts)
+    ? state.accounts.find(a => a.id === r.account_id) : null;
   return h('button.li', {
-    class: `li ${r.pagado ? '' : vencido ? 'sev sev-neg' : r.diasRestantes <= 3 ? 'sev sev-amb' : ''}`,
+    class: `li ${r.pagado || tarjeta ? '' : vencido ? 'sev sev-neg' : r.diasRestantes <= 3 ? 'sev sev-amb' : ''}`,
     onclick: () => togglePago(r, periodo),
     oncontextmenu: e => { e.preventDefault(); formRecurrente(state.recurrings.find(x => x.id === r.id)); }
   },
@@ -119,7 +124,8 @@ function filaRecurrente(r, periodo, hoy) {
       icono(r.pagado ? 'check' : iconoDe(r.nombre), 17)),
     h('div.m',
       h('div.t', { style: r.pagado ? { color: 'var(--tx2)' } : {} }, r.nombre),
-      h('div.s', apoyo(r, iso, hoy))),
+      h('div.s', tarjeta ? `se debita en ${tarjeta.nombre} · ${apoyo(r, iso, hoy)}`
+                         : apoyo(r, iso, hoy))),
     h('div', { class: 'v' + (r.pagado ? ' mut' : '') }, plata(r.monto, r.moneda),
       // Lo que vale, cuando lo que se paga no es lo que vale.
       !r.pagado && r.saldo ? h('small', `vale ${plata(r.valor, r.moneda)}`) : null));
@@ -246,12 +252,18 @@ function totalFijos(rec) {
     const total = suma(m, () => true);
     if (!total) return null;
     const pagado = suma(m, r => r.pagado);
-    return h('div', { style: { display: 'flex', justifyContent: 'space-between',
-                               alignItems: 'baseline', gap: '10px', marginTop: '3px' } },
-      h('span.small.mut', `Por mes${m === 'USD' ? ' en dólares' : ''}`),
-      h('span', h('b', { class: 'tabnum', style: { fontSize: '15px' } },
-        plata(Math.round(total), m)),
-        pagado > 0 ? h('span.small.mut', ` · pagaste ${plata(Math.round(pagado), m)}`) : null));
+    const enTj = suma(m, r => F.enTarjeta(r, state.accounts));
+    return h('div', { style: { marginTop: '3px' } },
+      h('div', { style: { display: 'flex', justifyContent: 'space-between',
+                          alignItems: 'baseline', gap: '10px' } },
+        h('span.small.mut', `Por mes${m === 'USD' ? ' en dólares' : ''}`),
+        h('span', h('b', { class: 'tabnum', style: { fontSize: '15px' } },
+          plata(Math.round(total), m)),
+          pagado > 0 ? h('span.small.mut', ` · pagaste ${plata(Math.round(pagado), m)}`) : null)),
+      // Los que se debitan en la tarjeta salen con el resumen, no aparte: sin
+      // decirlo, el total parece plata que hay que tener el día del vencimiento.
+      enTj > 0 ? h('div.small.mut', { style: { marginTop: '2px' } },
+        `de eso, ${plata(Math.round(enTj), m)} se debitan en tarjetas`) : null);
   }).filter(Boolean);
   if (!filas.length) return null;
   return h('div', { style: { padding: '12px 14px 2px' } }, filas);

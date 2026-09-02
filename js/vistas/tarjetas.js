@@ -44,6 +44,7 @@ export function vistaTarjeta(root, { id }) {
     faltaElCierre(t),
     limite(t, hoy),
     consumosDelCiclo(t, hoy),
+    debitosQueVienen(t, hoy),
     cuotasVivas(t, hoy),
     proximosResumenes(t, hoy),
     h('button.btn.sec', { onclick: () => formCuenta(t) }, icono('ajustes', 17), 'Editar tarjeta'),
@@ -65,7 +66,13 @@ function estadoTarjeta(t, hoy) {
   const pagado = cerrado ? F.pagadoDeResumen(state.transactions, t, cerrado, moneda) : 0;
   const aPagar = falta > 0 ? cerrado : null;
   const ciclo = aPagar || F.proximoCiclo(t, hoy);
-  return { moneda, cerrado, falta, pagado, aPagar, ciclo,
+  // Los débitos automáticos que todavía no llegaron: Netflix, la prepaga.
+  // Son plata comprometida aunque el consumo no figure todavía, y se miran
+  // siempre sobre el ciclo EN CURSO: el cerrado ya trae lo que trajo.
+  const enCurso = F.proximoCiclo(t, hoy);
+  const previstos = F.debitosPrevistos(state.recurrings, state.transactions, t,
+    { ...enCurso, cierreAnterior: cerrado ? cerrado.cierre : null }, hoy);
+  return { moneda, cerrado, falta, pagado, aPagar, ciclo, previstos,
            // El resumen nuevo no arranca en cero: arranca debiendo las cuotas
            // de compras de meses anteriores, y suma desde ahí.
            comprometido: F.comprometidoEnPeriodo(state.transactions, t,
@@ -81,7 +88,7 @@ function plastico(t, hoy, linkear) {
   // cero y lo que importa es el ciclo en curso, que es lo que se esta
   // gastando ahora. Antes seguia mostrando la deuda y el "a pagar en 2 d"
   // aunque el pago estuviera anotado.
-  const { moneda, cerrado, falta, pagado, aPagar, comprometido } = estadoTarjeta(t, hoy);
+  const { moneda, cerrado, falta, pagado, aPagar, comprometido, previstos } = estadoTarjeta(t, hoy);
   const c = F.proximoCiclo(t, hoy);
   const foco = aPagar || c;
   // Sin cierre cargado no hay resumen que mostrar: en vez de un cero que
@@ -127,6 +134,8 @@ function plastico(t, hoy, linkear) {
       h('div.foot', { style: { marginTop: '2px' } },
         comprometido > 0 ? h('div', h('span', 'De eso, en cuotas'),
           h('b', plata(Math.round(comprometido), moneda))) : null,
+        previstos.total > 0 ? h('div', h('span', 'Faltan caer'),
+          h('b', `${plata(Math.round(previstos.total), moneda)} de débitos`)) : null,
         pagado > 0 ? h('div', h('span', 'Pagaste'),
           h('b', `${plata(Math.round(pagado), moneda)} · del ${fmt(cerrado.cierre)}`)) : null));
   return cc;
@@ -183,6 +192,29 @@ function limite(t, hoy) {
       h('div.small.mut', { style: { marginTop: '9px', lineHeight: '1.45' } },
         `Consumido ${plata(l.consumido, t.moneda)} de ${plata(l.limite, t.moneda)}. `
         + 'Incluye las cuotas que todavía no vencieron.')));
+}
+
+/**
+ * Los débitos automáticos que van a caer en este resumen y todavía no cayeron.
+ *
+ * Es lo que hace que el resumen no sorprenda: Netflix, la prepaga y el colegio
+ * caen todos los meses. Verlos antes de que lleguen es la diferencia entre
+ * prever y enterarse.
+ */
+function debitosQueVienen(t, hoy) {
+  const { previstos, moneda } = estadoTarjeta(t, hoy);
+  if (!previstos.items.length) return null;
+  return h('section',
+    h('div.ghead', 'Débitos que faltan caer',
+      h('span.mut', plata(Math.round(previstos.total), moneda))),
+    h('div.grp', previstos.items.map(r => h('div.li',
+      h('div.av', icono(iconoDe(r.nombre), 17)),
+      h('div.m', h('div.t', r.nombre),
+        h('div.s', `todos los meses · día ${r.dia_vencimiento}`)),
+      h('div.v.mut', plata(Math.round(r.monto), moneda))))),
+    h('div.small.mut', { style: { padding: '10px 4px 0', lineHeight: '1.5' } },
+      'Cuando el consumo llegue de verdad —del resumen o cargado a mano— dejan de ',
+      'figurar acá y pasan a sumar en el resumen.'));
 }
 
 // ------------------------------------------------------- cuotas vivas

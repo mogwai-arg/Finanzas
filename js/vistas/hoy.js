@@ -29,6 +29,7 @@ export function vistaHoy(root, { moneda = 'ARS' } = {}) {
       selectorMoneda(moneda),
       sinRevisar(),
       conexionCaida(),
+      moneda === 'ARS' ? plataLibre(hoy) : null,
       moneda === 'ARS' ? heroMes(res, hoy, p) : heroDolares(),
       loQueSeViene(hoy, moneda),
       moneda === 'ARS' ? proximoSueldo() : null,
@@ -36,6 +37,57 @@ export function vistaHoy(root, { moneda = 'ARS' } = {}) {
       moneda === 'ARS' ? tiraBishu(hoy) : null,
       antesDeComprar()
     )
+  );
+}
+
+/**
+ * La plata que de verdad está libre.
+ *
+ * El saldo de las cuentas miente por omisión: adentro está el resumen que hay
+ * que pagar la semana que viene y los fijos que todavía no vencieron. Y el
+ * gasto del mes miente al revés —cuenta lo que consumiste, no lo que salió—,
+ * así que ninguno de los dos contesta "¿puedo gastar?".
+ *
+ * Abajo va la versión estricta, que es la que enseña la regla: lo que llevás
+ * consumido con las tarjetas este ciclo se paga el mes que viene, y conviene
+ * tenerlo apartado desde hoy y no desde el día del vencimiento.
+ */
+function plataLibre(hoy) {
+  const pl = F.plataLibre(state.accounts, state.transactions, state.recurrings,
+                          state.recurring_payments, hoy, 'ARS');
+  if (!pl.enCuentas && !pl.resumenes && !pl.fijos) return null;
+
+  const rojo = pl.libre < 0;
+  const { simbolo, numero } = plataPartida(Math.round(pl.libre), 'ARS');
+  const resta = [
+    pl.resumenes > 0 ? `resúmenes ${plata(Math.round(pl.resumenes))}` : null,
+    pl.fijos > 0 ? `fijos ${plata(Math.round(pl.fijos))}` : null
+  ].filter(Boolean).join(' − ');
+
+  return h('div.grp.pad',
+    h('div.ghead', { style: { margin: '0 0 5px' } }, 'Plata libre'),
+    h('div', { class: 'cifra' + (state.ocultarMontos ? ' oculto' : '') +
+                      (rojo ? ' neg' : '') }, h('em', simbolo), numero),
+    h('div.small.mut', { style: { marginTop: '5px', lineHeight: '1.45' } },
+      `en cuentas ${plata(Math.round(pl.enCuentas))}`, resta ? ` − ${resta}` : ''),
+
+    pl.proximo > 0 && h('div', {
+      style: { marginTop: '13px', paddingTop: '13px', borderTop: '1px solid var(--line)',
+               fontSize: '13.5px', color: 'var(--tx2)', lineHeight: '1.45' } },
+      'Con las tarjetas llevás ',
+      h('b', { style: { color: 'var(--tx)' } }, plata(Math.round(pl.proximo))),
+      ' de este ciclo, que se pagan el mes que viene. Apartándolos te quedan ',
+      h('b', { style: { color: pl.libreEstricta < 0 ? 'var(--amb)' : 'var(--tx)' } },
+        plata(Math.round(pl.libreEstricta))),
+      '.'),
+
+    rojo && h('div.small', { style: { marginTop: '10px', color: 'var(--neg)',
+                                      fontWeight: '600', lineHeight: '1.45' } },
+      'Debés más de lo que tenés en las cuentas: ya estás usando plata del mes que viene.'),
+    !rojo && pl.libreEstricta < 0 && h('div.small', {
+      style: { marginTop: '10px', color: 'var(--amb)', lineHeight: '1.45' } },
+      'La tarjeta te está financiando el mes: lo que consumiste con ella no entra ',
+      'en lo que te queda.')
   );
 }
 
@@ -208,6 +260,9 @@ function loQueSeViene(hoy, moneda) {
   const p = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}`;
   for (const r of F.recurrentesDelMes(state.recurrings, state.recurring_payments, p, hoy)) {
     if (r.pagado || r.moneda !== moneda) continue;
+    // Un fijo que se debita en la tarjeta no se paga aparte: entra al resumen
+    // y sale cuando se paga el resumen. Listarlo acá lo cobraría dos veces.
+    if (F.enTarjeta(r, state.accounts)) continue;
     items.push({ id: r.id, nombre: r.nombre, monto: r.monto, vence: r.vence,
                  icono: iconoDe(r.nombre), recurrente: r, periodo: p, ir: `/mes` });
   }

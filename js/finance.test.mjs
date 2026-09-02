@@ -402,6 +402,81 @@ t('pagar el resumen libera el límite en el momento', () => {
   assert.equal(pagada.disponible, 1000000);
 });
 
+// --------------------------------------------------------- plata libre
+const CUENTAS_PL = [
+  { id: 'gal', nombre: 'Galicia', tipo: 'cuenta', moneda: 'ARS',
+    saldo_inicial: 3000000, saldo_al: '2026-09-01' },
+  { id: 'visa', nombre: 'Visa', tipo: 'credito', moneda: 'ARS',
+    ciclos: [{ cierre: '2026-08-27', vence: '2026-09-04' },
+             { cierre: '2026-10-01', vence: '2026-10-09' }] }
+];
+const FIJOS_PL = [
+  { id: 'r1', nombre: 'Colegio', monto_estimado: 500000, moneda: 'ARS',
+    dia_vencimiento: 10, activo: true, account_id: 'gal' },
+  { id: 'r2', nombre: 'Spotify', monto_estimado: 9000, moneda: 'ARS',
+    dia_vencimiento: 12, activo: true, account_id: 'visa' }   // se debita en la tarjeta
+];
+const TXS_PL = [
+  // Consumo de agosto: entra al resumen que vence el 4/9.
+  { id: 'a', tipo: 'gasto', moneda: 'ARS', monto: 900000, fecha: '2026-08-20',
+    account_id: 'visa', cuotas: 1 },
+  // Consumo de septiembre: entra al resumen que vence el 9/10.
+  { id: 'b', tipo: 'gasto', moneda: 'ARS', monto: 400000, fecha: '2026-09-01',
+    account_id: 'visa', cuotas: 1 }
+];
+
+t('la plata libre descuenta el resumen y los fijos que faltan', () => {
+  const r = F.plataLibre(CUENTAS_PL, TXS_PL, FIJOS_PL, [], d('2026-09-02'));
+  assert.equal(r.enCuentas, 3000000);
+  assert.equal(r.resumenes, 900000);       // el resumen que vence el 4/9
+  assert.equal(r.fijos, 500000);           // el colegio; Spotify va en la tarjeta
+  assert.equal(r.libre, 1600000);
+});
+
+t('lo consumido este ciclo se aparta para el mes que viene', () => {
+  const r = F.plataLibre(CUENTAS_PL, TXS_PL, FIJOS_PL, [], d('2026-09-02'));
+  // 400.000 consumidos + 9.000 de Spotify, que todavía no cayó.
+  assert.equal(r.proximo, 409000);
+  assert.equal(r.libreEstricta, 1191000);
+});
+
+t('un fijo que se debita en la tarjeta no se cuenta dos veces', () => {
+  const soloTarjeta = [FIJOS_PL[1]];
+  const r = F.plataLibre(CUENTAS_PL, TXS_PL, soloTarjeta, [], d('2026-09-02'));
+  assert.equal(r.fijos, 0);
+  assert.ok(F.enTarjeta(FIJOS_PL[1], CUENTAS_PL));
+  assert.ok(!F.enTarjeta(FIJOS_PL[0], CUENTAS_PL));
+});
+
+t('el débito del mes pasado no tapa el de este mes', () => {
+  // Spotify cayó en agosto; el ciclo que cierra el 1/10 todavía lo espera.
+  const agosto = [...TXS_PL,
+    { id: 'v', tipo: 'gasto', moneda: 'ARS', monto: 8999, fecha: '2026-08-12',
+      account_id: 'visa', descripcion: 'Spotify', cuotas: 1 }];
+  const ciclo = { cierre: F.parseFecha('2026-10-01'), cierreAnterior: F.parseFecha('2026-08-27') };
+  assert.equal(F.debitosPrevistos(FIJOS_PL, agosto, CUENTAS_PL[1], ciclo).total, 9000);
+});
+
+t('un débito que ya cayó en el resumen no se prevé de nuevo', () => {
+  const conSpotify = [...TXS_PL,
+    { id: 'c', tipo: 'gasto', moneda: 'ARS', monto: 8999, fecha: '2026-09-12',
+      account_id: 'visa', descripcion: 'MERPAGO*SPOTIFY', comercio: 'Spotify', cuotas: 1 }];
+  const ciclo = F.proximoCiclo(CUENTAS_PL[1], d('2026-09-13'));
+  const antes = F.debitosPrevistos(FIJOS_PL, TXS_PL, CUENTAS_PL[1], ciclo, d('2026-09-13'));
+  const despues = F.debitosPrevistos(FIJOS_PL, conSpotify, CUENTAS_PL[1], ciclo, d('2026-09-13'));
+  assert.equal(antes.total, 9000);
+  assert.equal(despues.total, 0);
+});
+
+t('pagar el resumen sube la plata libre en cero: sale de la cuenta y salda la deuda', () => {
+  const pago = [...TXS_PL, { id: 'p', tipo: 'transferencia', moneda: 'ARS', monto: 900000,
+                             fecha: '2026-09-02', account_id: 'gal', destino_account_id: 'visa' }];
+  const r = F.plataLibre(CUENTAS_PL, pago, FIJOS_PL, [], d('2026-09-02'));
+  assert.equal(r.enCuentas, 2100000);      // salió la plata
+  assert.equal(r.resumenes, 0);            // ya no se debe
+  assert.equal(r.libre, 1600000);          // la plata libre no se movió: es la misma
+});
+
 t('el reintegro respeta el tope', () => {
   assert.equal(F.reintegroEstimado(200000, promos[0]), 20000);
   assert.equal(F.reintegroEstimado(50000, promos[0]), 10000);
