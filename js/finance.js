@@ -194,6 +194,26 @@ export function totalTarjetaEnPeriodo(txs, tarjeta, per, moneda = 'ARS') {
 }
 
 /**
+ * Cuanto de un resumen ya estaba comprometido antes de que empezara.
+ *
+ * Son las cuotas de compras de meses anteriores: el resumen nuevo no arranca
+ * en cero, arranca debiendo eso. Saberlo cambia la decision —"me quedan
+ * 200.000 de aire", no "puedo gastar todo el limite"— y es lo que hace que un
+ * resumen recien pagado no se lea como una tarjeta vacia.
+ */
+export function comprometidoEnPeriodo(txs, tarjeta, per, moneda = 'ARS') {
+  let total = 0;
+  for (const tx of txs) {
+    if (tx.account_id !== tarjeta.id || tx.tipo !== 'gasto' || tx.moneda !== moneda) continue;
+    for (const c of cronograma(tx, tarjeta)) {
+      // La cuota 1 es la compra de este ciclo; de la 2 en adelante viene de antes.
+      if (c.periodoVenc === per && c.nro > 1) total += c.monto;
+    }
+  }
+  return round2(total);
+}
+
+/**
  * Lo que ya pagaste de un resumen.
  *
  * Un pago de tarjeta es una movida de plata: sale de la cuenta y entra a la

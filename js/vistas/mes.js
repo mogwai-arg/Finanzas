@@ -1,7 +1,7 @@
 // =====================================================================
 // vistas/mes.js — gastos fijos y presupuesto del mes.
 // =====================================================================
-import { h, icono, iconoDe, hoja, aviso, select } from '../ui.js';
+import { h, icono, iconoDe, hoja, aviso, select, deslizable, confirmar } from '../ui.js';
 import { state, guardar, borrar } from '../db.js';
 import * as F from '../finance.js';
 import { plata, cuandoVence, nombreDe, fechaISO, hoyISO, etiquetaCuenta,
@@ -54,7 +54,15 @@ export function vistaMes(root) {
         h('button', { onclick: () => formRecurrente() }, 'Agregar')),
       rec.length
         ? h('div',
-            h('div.grp', rec.map(r => filaRecurrente(r, p, hoy))),
+            h('div.grp', rec.map(r => deslizable(filaRecurrente(r, p, hoy), {
+              alEditar: () => formRecurrente(state.recurrings.find(x => x.id === r.id)),
+              alBorrar: async () => {
+                if (!await confirmar(`¿Borrar "${r.nombre}"? Se van también los pagos anotados.`))
+                  return;
+                await borrar('recurrings', r.id);
+                aviso('Borrado'); irA('/mes');
+              }
+            }))),
             totalFijos(rec))
         : h('div.vacio', { style: { padding: '32px 24px' } },
             h('div.ic', icono('reloj', 24)),

@@ -64,8 +64,12 @@ function estadoTarjeta(t, hoy) {
   const falta = cerrado ? F.faltaPagarDeResumen(state.transactions, t, cerrado, moneda) : 0;
   const pagado = cerrado ? F.pagadoDeResumen(state.transactions, t, cerrado, moneda) : 0;
   const aPagar = falta > 0 ? cerrado : null;
-  return { moneda, cerrado, falta, pagado, aPagar,
-           ciclo: aPagar || F.proximoCiclo(t, hoy) };
+  const ciclo = aPagar || F.proximoCiclo(t, hoy);
+  return { moneda, cerrado, falta, pagado, aPagar, ciclo,
+           // El resumen nuevo no arranca en cero: arranca debiendo las cuotas
+           // de compras de meses anteriores, y suma desde ahí.
+           comprometido: F.comprometidoEnPeriodo(state.transactions, t,
+                                                 F.periodo(ciclo.vence), moneda) };
 }
 
 // ---------------------------------------------------------------- cc
@@ -77,7 +81,7 @@ function plastico(t, hoy, linkear) {
   // cero y lo que importa es el ciclo en curso, que es lo que se esta
   // gastando ahora. Antes seguia mostrando la deuda y el "a pagar en 2 d"
   // aunque el pago estuviera anotado.
-  const { moneda, cerrado, falta, pagado, aPagar } = estadoTarjeta(t, hoy);
+  const { moneda, cerrado, falta, pagado, aPagar, comprometido } = estadoTarjeta(t, hoy);
   const c = F.proximoCiclo(t, hoy);
   const foco = aPagar || c;
   // Sin cierre cargado no hay resumen que mostrar: en vez de un cero que
@@ -116,10 +120,15 @@ function plastico(t, hoy, linkear) {
           h('div', h('span', aPagar ? 'Próximo cierre' : 'Vence'),
             h('b', aPagar ? `${fmt(c.cierre)} · en ${dc} d` : `${fmt(c.vence)} · en ${dv} d`)),
           !foco.declarado && h('div', h('span', 'estimado'))),
-    // Que el pago figure: sin esto, la tarjeta en cero se lee como un error.
-    !sinCiclo && !aPagar && pagado > 0 && h('div.foot', { style: { marginTop: '2px' } },
-      h('div', h('span', 'Pagaste'),
-        h('b', `${plata(Math.round(pagado), moneda)} · resumen del ${fmt(cerrado.cierre)}`))));
+    // Que el pago figure, y que las cuotas ya comprometidas no parezcan gasto
+    // nuevo: una tarjeta que vuelve a cero sin explicación se lee como un
+    // error, y una que arranca en 180.000 sin decir por qué, también.
+    !sinCiclo && !aPagar && (pagado > 0 || comprometido > 0) &&
+      h('div.foot', { style: { marginTop: '2px' } },
+        comprometido > 0 ? h('div', h('span', 'De eso, en cuotas'),
+          h('b', plata(Math.round(comprometido), moneda))) : null,
+        pagado > 0 ? h('div', h('span', 'Pagaste'),
+          h('b', `${plata(Math.round(pagado), moneda)} · del ${fmt(cerrado.cierre)}`)) : null));
   return cc;
 }
 

@@ -374,6 +374,22 @@ t('un resto de centavos cuenta como resumen pagado', () => {
   assert.equal(F.faltaPagarDeResumen([txs[0]], tj, ciclo), 939323.25);
 });
 
+t('el resumen nuevo arranca debiendo las cuotas de antes', () => {
+  const tj = { id: 'v', tipo: 'credito', moneda: 'ARS', cierre_dia: 27, vencimiento_dia: 4 };
+  const txs = [
+    // Comprada en julio en 3 cuotas: la 2 y la 3 caen en los resúmenes siguientes.
+    { id: 'a', tipo: 'gasto', moneda: 'ARS', monto: 300000, cuotas: 3,
+      fecha: '2026-07-10', account_id: 'v' },
+    // Comprada este ciclo, en una: es gasto nuevo, no compromiso viejo.
+    { id: 'b', tipo: 'gasto', moneda: 'ARS', monto: 50000, cuotas: 1,
+      fecha: '2026-09-02', account_id: 'v' }
+  ];
+  assert.equal(F.comprometidoEnPeriodo(txs, tj, '2026-10'), 100000);
+  assert.equal(F.totalTarjetaEnPeriodo(txs, tj, '2026-10'), 150000);
+  // En el resumen de la compra, la cuota 1 no es un compromiso de antes.
+  assert.equal(F.comprometidoEnPeriodo(txs, tj, '2026-08'), 0);
+});
+
 t('pagar el resumen libera el límite en el momento', () => {
   const tj = { id: 'v', tipo: 'credito', moneda: 'ARS', limite: 1000000,
                cierre_dia: 27, vencimiento_dia: 4 };
