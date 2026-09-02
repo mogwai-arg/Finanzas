@@ -141,7 +141,8 @@ function avisarVueltaDeOAuth() {
   // conecte bien o se descarte a mano.
   try {
     if (ok) localStorage.removeItem('bishusha.oauth.error');
-    else localStorage.setItem('bishusha.oauth.error', error);
+    else localStorage.setItem('bishusha.oauth.error',
+      JSON.stringify({ msg: error, cuando: Date.now() }));
   } catch { /* modo privado */ }
   setTimeout(() => {
     if (ok) { aviso(`${nombre(ok)} conectado`); sincronizar().catch(() => {}); }

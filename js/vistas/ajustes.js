@@ -189,16 +189,27 @@ function filaProveedor(p) {
 
 /** El motivo por el que fallo el ultimo permiso, hasta que se resuelva. */
 function avisoOAuth() {
-  let msg = null;
-  try { msg = localStorage.getItem('bishusha.oauth.error'); } catch { /* modo privado */ }
+  let crudo = null, guardado = null;
+  try { crudo = localStorage.getItem('bishusha.oauth.error'); } catch { /* modo privado */ }
+  // Antes se guardaba el texto pelado: si no es JSON, es uno de esos.
+  try { guardado = crudo ? JSON.parse(crudo) : null; } catch { guardado = crudo; }
+  if (!guardado) return null;
+  const msg = typeof guardado === 'string' ? guardado : guardado.msg;
+  const cuando = typeof guardado === 'string' ? null : guardado.cuando;
   if (!msg) return null;
+
   return h('div.aviso.amb',
     h('div.av.amb', icono('rayo', 17)),
     h('div.txt',
-      h('div.tt', 'No se pudo conectar'),
-      h('div.ds', msg.slice(0, 300)),
+      // La hora importa: sin ella no se distingue un error de recién de uno
+      // que quedo de un intento anterior.
+      h('div.tt', 'No se pudo conectar', cuando ? ` · ${hora(cuando)}` : ''),
+      h('div.ds', String(msg).slice(0, 300)),
       h('button.btn.sec', { style: { marginTop: '12px' }, onclick: () => {
         try { localStorage.removeItem('bishusha.oauth.error'); } catch { /* nada */ }
         irA('/ajustes'); location.reload();
       } }, 'Entendido')));
 }
+
+const hora = ms => new Date(ms).toLocaleTimeString('es-AR',
+  { hour: '2-digit', minute: '2-digit', hour12: false });

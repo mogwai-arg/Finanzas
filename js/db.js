@@ -163,6 +163,10 @@ export async function conectar(proveedor) {
     // Cualquier otro problema de red no deberia frenar el intento.
   }
 
+  // Borrar el error del intento anterior antes de salir: si no, al volver no
+  // hay forma de saber si el cartel es de ahora o de la vez pasada.
+  try { localStorage.removeItem('bishusha.oauth.error'); } catch { /* modo privado */ }
+
   location.href = `${FUNCTIONS_URL}/oauth-start?proveedor=${proveedor}&t=${encodeURIComponent(t)}`;
 }
 
