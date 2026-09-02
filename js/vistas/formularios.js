@@ -119,6 +119,13 @@ export function formCuenta(a = null) {
       h('button.btn', { onclick: async () => {
         if (!c.nombre.value.trim()) { c.nombre.focus(); aviso('Falta el nombre'); return; }
         const esCredito = c.tipo.value === 'credito';
+        // Sin cierre no hay con que armar el resumen, y la tarjeta termina
+        // mostrando cero aunque tenga consumos.
+        if (esCredito && !ciclos.some(x => x.cierre && x.vence) && !Number(c.cierre.value)) {
+          c.cierre.focus();
+          aviso('Falta el día de cierre, o las fechas del resumen');
+          return;
+        }
         await guardar('accounts', { ...(a || {}),
           nombre: c.nombre.value.trim(), tipo: c.tipo.value, moneda: c.moneda.value,
           banco: c.banco.value.trim() || null,

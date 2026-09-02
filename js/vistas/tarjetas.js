@@ -41,6 +41,7 @@ export function vistaTarjeta(root, { id }) {
   const hoy = new Date();
   root.append(h('div.flow',
     plastico(t, hoy, false),
+    faltaElCierre(t),
     limite(t, hoy),
     consumosDelCiclo(t, hoy),
     cuotasVivas(t, hoy),
@@ -56,7 +57,12 @@ function plastico(t, hoy, linkear) {
   const aPagar = F.resumenAPagar(t, hoy);
   const c = F.proximoCiclo(t, hoy);
   const foco = aPagar || c;
-  const total = F.totalTarjetaEnPeriodo(state.transactions, t, F.periodo(foco.vence), t.moneda || 'ARS');
+  // Sin cierre cargado no hay resumen que mostrar: en vez de un cero que
+  // parece un dato, se muestra todo lo que hay y se pide la fecha que falta.
+  const sinCiclo = !F.tieneCiclo(t);
+  const total = sinCiclo
+    ? todoLoQueDebe(t)
+    : F.totalTarjetaEnPeriodo(state.transactions, t, F.periodo(foco.vence), t.moneda || 'ARS');
   const { simbolo, numero } = plataPartida(
     (t.moneda || 'ARS') === 'USD' ? total : Math.round(total), t.moneda || 'ARS');
   const dv = diasHasta(isoDe(foco.vence), hoy);
@@ -72,15 +78,44 @@ function plastico(t, hoy, linkear) {
         t.ultimos4 && h('div.n4', '•••• ' + t.ultimos4)),
       t.marca && h('span.marca', t.marca)),
     h('div.amtl', { style: { marginTop: '14px' } },
-      aPagar ? (dv <= 0 ? 'Venció' : dv <= 3 ? `A pagar en ${dv} d` : 'A pagar') : 'Resumen en curso'),
+      sinCiclo ? 'En consumos'
+        : aPagar ? (dv <= 0 ? 'Venció' : dv <= 3 ? `A pagar en ${dv} d` : 'A pagar')
+        : 'Resumen en curso'),
     h('div', { class: 'amt' + (state.ocultarMontos ? ' oculto' : '') }, `${simbolo} ${numero}`),
-    h('div.foot',
-      h('div', h('span', aPagar ? 'Vence' : 'Cierra'),
-        h('b', aPagar ? `${fmt(foco.vence)} · en ${dv} d` : `${fmt(c.cierre)} · en ${dc} d`)),
-      h('div', h('span', aPagar ? 'Próximo cierre' : 'Vence'),
-        h('b', aPagar ? `${fmt(c.cierre)} · en ${dc} d` : `${fmt(c.vence)} · en ${dv} d`)),
-      !foco.declarado && h('div', h('span', 'estimado'))));
+    sinCiclo
+      ? h('div.foot', h('div', h('span', 'Falta el cierre'),
+          h('b', 'sin él no sé cuándo se paga')))
+      : h('div.foot',
+          h('div', h('span', aPagar ? 'Vence' : 'Cierra'),
+            h('b', aPagar ? `${fmt(foco.vence)} · en ${dv} d` : `${fmt(c.cierre)} · en ${dc} d`)),
+          h('div', h('span', aPagar ? 'Próximo cierre' : 'Vence'),
+            h('b', aPagar ? `${fmt(c.cierre)} · en ${dc} d` : `${fmt(c.vence)} · en ${dv} d`)),
+          !foco.declarado && h('div', h('span', 'estimado'))));
   return cc;
+}
+
+/** Todo lo pendiente de una tarjeta, sin repartir por resumen. */
+function todoLoQueDebe(t) {
+  let total = 0;
+  for (const tx of state.transactions) {
+    if (tx.account_id !== t.id || tx.tipo !== 'gasto') continue;
+    if ((tx.moneda || 'ARS') !== (t.moneda || 'ARS')) continue;
+    total += Number(tx.monto) || 0;
+  }
+  return total;
+}
+
+/** Sin cierre no se puede armar el resumen: se pide la fecha que falta. */
+function faltaElCierre(t) {
+  if (F.tieneCiclo(t)) return null;
+  return h('div.aviso.amb',
+    h('div.av.amb', icono('rayo', 17)),
+    h('div.txt',
+      h('div.tt', 'Falta el cierre de esta tarjeta'),
+      h('div.ds', 'Sin la fecha de cierre no sé a qué resumen va cada compra ni cuándo ' +
+        'se paga. Cargá el día de cierre y el de vencimiento, o pegá un resumen y las ' +
+        'saco de ahí.'),
+      h('button.btn', { onclick: () => formCuenta(t) }, 'Cargar el cierre')));
 }
 
 // ------------------------------------------------------------ limite
@@ -140,18 +175,20 @@ function consumosDelCiclo(t, hoy) {
   const c = F.resumenAPagar(t, hoy) || F.proximoCiclo(t, hoy);
   const per = F.periodo(c.vence);
   const moneda = t.moneda || 'ARS';
+  const sinCiclo = !F.tieneCiclo(t);
 
   const filas = [];
   for (const tx of state.transactions) {
     if (tx.account_id !== t.id || tx.tipo !== 'gasto') continue;
     for (const cu of F.cronograma(tx, t, hoy)) {
-      if (cu.periodoVenc !== per) continue;
+      if (!sinCiclo && cu.periodoVenc !== per) continue;
       filas.push({ tx, monto: cu.monto, nro: cu.nro, total: cu.total });
     }
   }
   filas.sort((a, b) => (a.tx.fecha < b.tx.fecha ? 1 : -1));
 
-  const titulo = F.resumenAPagar(t, hoy) ? 'Lo que se paga' : 'Lo que va del resumen';
+  const titulo = sinCiclo ? 'Consumos'
+    : F.resumenAPagar(t, hoy) ? 'Lo que se paga' : 'Lo que va del resumen';
   if (!filas.length) {
     return h('section',
       h('div.ghead', titulo),

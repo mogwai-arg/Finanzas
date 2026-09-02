@@ -7,6 +7,13 @@ let ok = 0; const t = (n, fn) => { fn(); ok++; console.log('  ok  ' + n); };
 console.log('Ciclo de tarjeta (cierre 20, vence 30)');
 const gal = { id: 'g', tipo: 'credito', cierre_dia: 20, vencimiento_dia: 30 };
 
+t('una tarjeta sin cierre ni ciclos no tiene con que calcular', () => {
+  assert.equal(F.tieneCiclo({ tipo: 'credito' }), false);
+  assert.equal(F.tieneCiclo({ tipo: 'credito', cierre_dia: 5 }), true);
+  assert.equal(F.tieneCiclo({ tipo: 'credito', ciclos: [{ cierre: '2026-09-05', vence: '2026-09-10' }] }), true);
+  assert.equal(F.tieneCiclo({ tipo: 'credito', ciclos: [] }), false);
+});
+
 t('compra el 05/09 cierra el 20/09 y vence el 30/09', () => {
   const c = F.cierreDeCompra(d('2026-09-05'), 20);
   assert.equal(F.fechaISO(c), '2026-09-20');

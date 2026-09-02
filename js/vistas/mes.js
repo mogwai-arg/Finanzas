@@ -67,6 +67,7 @@ export function vistaMes(root) {
 function resumenesDelMes(hoy) {
   const out = [];
   for (const t of state.accounts.filter(a => a.tipo === 'credito' && a.activo !== false)) {
+    if (!F.tieneCiclo(t)) continue;      // sin cierre, la fecha seria inventada
     const c = F.resumenAPagar(t, hoy) || F.proximoCiclo(t, hoy);
     const monto = F.totalTarjetaEnPeriodo(state.transactions, t, F.periodo(c.vence), 'ARS');
     if (!monto) continue;

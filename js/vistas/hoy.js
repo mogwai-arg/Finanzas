@@ -158,6 +158,9 @@ function loQueSeViene(hoy, moneda) {
   for (const t of state.accounts.filter(a => a.tipo === 'credito' && a.activo !== false)) {
     // Primero lo que hay que pagar: un resumen ya cerrado que vence en dias
     // importa mas que el ciclo que recien empezo a acumular.
+    // Sin cierre cargado, la fecha de vencimiento seria inventada: no entra
+    // en una lista que ordena justamente por cuando hay que pagar.
+    if (!F.tieneCiclo(t)) continue;
     const c = F.resumenAPagar(t, hoy) || F.proximoCiclo(t, hoy);
     const total = F.totalTarjetaEnPeriodo(state.transactions, t, F.periodo(c.vence), moneda);
     if (!total) continue;

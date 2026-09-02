@@ -78,6 +78,17 @@ export function ciclosOrdenados(tarjeta) {
     .sort((a, b) => a.cierre - b.cierre);
 }
 
+/**
+ * Si la tarjeta tiene con que calcular su ciclo: fechas leidas del resumen o,
+ * en su defecto, un dia fijo de cierre.
+ *
+ * Sin ninguna de las dos cosas se cae en 'cierra el 1, vence el 10', que es
+ * una invencion: las compras van a parar a un resumen y la pantalla muestra
+ * otro, asi que la tarjeta dice cero teniendo consumos. Preguntar es mejor que
+ * adivinar.
+ */
+export const tieneCiclo = t => !!((t.ciclos || []).some(c => c && c.cierre) || t.cierre_dia);
+
 /** Ciclo al que entra una compra: el primero cuyo cierre es posterior. */
 export function cicloDeCompra(fecha, tarjeta) {
   for (const c of ciclosOrdenados(tarjeta)) {
