@@ -66,6 +66,37 @@ var REGLAS = [
       };
     }
   },
+  // ---------------- Banco Galicia: plata que entra o sale de la cuenta ----
+  //
+  // Va despues de la regla de tarjetas a proposito: una compra con tarjeta
+  // tambien nombra al banco, y ahi manda la otra.
+  {
+    emisor: "galicia",
+    remitentes: /galicia|bancogalicia/i,
+    test: /transferencia|dep[oó]sito|acreditaci[oó]n|se acredit[oó]|se debit[oó]|d[eé]bito autom[aá]tico|haberes/i,
+    extraer(t, hoy) {
+      const monto = t.match(/(?:por|de)\s*(?:\$|ars|u\$s|usd)\s*([\d.,]+)/i) || t.match(/(?:\$|u\$s)\s*([\d.,]+)/i);
+      if (!monto) return null;
+      const entra = /recibiste|se acredit[oó]|acreditaci[oó]n|dep[oó]sito|haberes|ingres[oó]/i.test(t);
+      const sale = /enviaste|se debit[oó]|d[eé]bito autom[aá]tico|transferencia enviada/i.test(t);
+      if (entra === sale) return null;
+      const quien = t.match(/(?:de|a)\s+([A-ZÁÉÍÓÚÑ][^\n.,]{2,50}?)(?=\s+(?:por|el|con|\.|,|$))/);
+      const concepto = /haberes/i.test(t) ? "Acreditaci\xF3n de haberes" : /d[eé]bito autom[aá]tico/i.test(t) ? "D\xE9bito autom\xE1tico" : /dep[oó]sito/i.test(t) ? "Dep\xF3sito" : entra ? "Transferencia recibida" : "Transferencia enviada";
+      return {
+        monto: plata(monto[1]),
+        moneda: MONEDA(t),
+        comercio: limpiar(quien ? `${concepto} \xB7 ${quien[1]}` : concepto),
+        fecha: fechaAR(t.match(/\d{1,2}[\/\-.]\d{1,2}[\/\-.]\d{2,4}/)?.[0], hoy),
+        ultimos4: null,
+        cuotas: 1,
+        // 'cuenta' para que caiga en la cuenta bancaria y no en una tarjeta.
+        medio: "cuenta",
+        emisor: "galicia",
+        confianza: quien ? 92 : 85,
+        tipo: entra ? "ingreso" : "gasto"
+      };
+    }
+  },
   // ---------------- MODO ----------------
   {
     emisor: "modo",
@@ -142,6 +173,9 @@ var ES_RUIDO = new RegExp([
   "alerta de seguridad",
   "resumen disponible",
   "vencimiento de tu resumen",
+  "vence el",
+  "pr[o\xF3]ximo vencimiento",
+  "recordatorio de pago",
   // vocabulario de oferta
   "sin inter[e\xE9]s",
   "cuotas fijas",
@@ -291,7 +325,8 @@ async function sincronizar(sb, it) {
 async function insertar(sb, userId, mov, cuentas, cats, reglas, externoId) {
   let cuenta = mov.ultimos4 ? cuentas.find((c) => c.ultimos4 === mov.ultimos4) : null;
   if (!cuenta) {
-    cuenta = cuentas.find((c) => mov.emisor === "galicia" && /galicia/i.test(c.banco ?? "") && c.tipo === (mov.medio === "debito" ? "debito" : "credito") || mov.emisor !== "galicia" && new RegExp(mov.emisor, "i").test(c.nombre));
+    const tipoBuscado = mov.medio === "cuenta" ? "cuenta" : mov.medio === "debito" ? "debito" : "credito";
+    cuenta = cuentas.find((c) => mov.emisor === "galicia" && /galicia/i.test(c.banco ?? c.nombre ?? "") && c.tipo === tipoBuscado || mov.emisor !== "galicia" && new RegExp(mov.emisor, "i").test(c.nombre));
   }
   const texto = mov.comercio.toLowerCase();
   let catId = reglas.sort((a, b) => b.prioridad - a.prioridad).find((r) => texto.includes(String(r.patron).toLowerCase()))?.category_id ?? null;

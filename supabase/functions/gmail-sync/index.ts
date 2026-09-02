@@ -82,7 +82,8 @@ async function sincronizar(sb: any, it: any) {
       ignorados++; continue;
     }
     // Sin comercio reconocido, lo unico que quedaria es un importe suelto:
-    // eso no es un movimiento, es una adivinanza.
+    // eso no es un movimiento, es una adivinanza. (Una transferencia sin
+    // contraparte sigue siendo real, y por eso entra con confianza alta.)
     if (mov.confianza < 75) {
       await sb.from('ingest_log').insert({
         ...log, estado: 'ignorado',
@@ -119,8 +120,12 @@ async function insertar(sb: any, userId: string, mov: Movimiento, cuentas: any[]
   // Tarjeta: primero por ultimos 4, si no por emisor.
   let cuenta = mov.ultimos4 ? cuentas.find(c => c.ultimos4 === mov.ultimos4) : null;
   if (!cuenta) {
+    // 'cuenta' es plata que entra o sale del banco, no un consumo con
+    // plastico: va a la caja de ahorro, no a una tarjeta.
+    const tipoBuscado = mov.medio === 'cuenta' ? 'cuenta'
+                      : mov.medio === 'debito' ? 'debito' : 'credito';
     cuenta = cuentas.find(c =>
-      (mov.emisor === 'galicia' && /galicia/i.test(c.banco ?? '') && c.tipo === (mov.medio === 'debito' ? 'debito' : 'credito')) ||
+      (mov.emisor === 'galicia' && /galicia/i.test(c.banco ?? c.nombre ?? '') && c.tipo === tipoBuscado) ||
       (mov.emisor !== 'galicia' && new RegExp(mov.emisor, 'i').test(c.nombre)));
   }
 

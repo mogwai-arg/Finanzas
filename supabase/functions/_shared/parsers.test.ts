@@ -66,6 +66,47 @@ t('un mail de promociones no genera movimiento', () => {
     'Descubri 25% de ahorro en gastronomia todos los sabados.', HOY);
   assert.equal(m, null);
 });
+t('una transferencia recibida entra como ingreso', () => {
+  const m = parsearMail('avisos@bancogalicia.com.ar', 'Recibiste una transferencia',
+    'Recibiste una transferencia por $ 150.000,00 de JUAN PEREZ el 02/09/2026.', HOY);
+  assert.equal(m!.tipo, 'ingreso');
+  assert.equal(m!.monto, 150000);
+  assert.equal(m!.medio, 'cuenta');
+  assert.match(m!.comercio, /Transferencia recibida/);
+});
+
+t('la acreditación de haberes se reconoce', () => {
+  const m = parsearMail('avisos@bancogalicia.com.ar', 'Acreditación de haberes',
+    'Se acreditó tu sueldo por $ 2.474.636,31 en tu cuenta.', HOY);
+  assert.equal(m!.tipo, 'ingreso');
+  assert.equal(m!.monto, 2474636.31);
+  assert.equal(m!.comercio, 'Acreditación de haberes');
+});
+
+t('una transferencia enviada es un egreso', () => {
+  const m = parsearMail('avisos@bancogalicia.com.ar', 'Transferencia enviada',
+    'Enviaste una transferencia por $ 80.000,00 a MARIA GOMEZ.', HOY);
+  assert.equal(m!.tipo, 'gasto');
+  assert.equal(m!.medio, 'cuenta');
+});
+
+t('un débito automático es un egreso', () => {
+  const m = parsearMail('avisos@bancogalicia.com.ar', 'Débito automático',
+    'Se debitó automáticamente $ 45.000,00 de tu cuenta por el servicio de EDESUR.', HOY);
+  assert.equal(m!.tipo, 'gasto');
+  assert.equal(m!.comercio, 'Débito automático');
+});
+
+t('un aviso de vencimiento no es un movimiento', () => {
+  assert.equal(parsearMail('avisos@bancogalicia.com.ar', 'Vencimiento de tu tarjeta',
+    'Tu resumen vence el 04/09/2026 por $ 1.276.838,45. Podés pagarlo por débito automático.', HOY), null);
+});
+
+t('un aviso que no dice para qué lado va no entra', () => {
+  assert.equal(parsearMail('avisos@bancogalicia.com.ar', 'Movimientos',
+    'Hubo movimientos en tu cuenta por $ 10.000,00.', HOY), null);
+});
+
 t('la promo de cuotas del banco no genera movimiento', () => {
   // El caso real: entro como un gasto de $1.000 en 9 cuotas que nadie hizo.
   assert.equal(parsearMail('novedades@bancogalicia.com.ar',

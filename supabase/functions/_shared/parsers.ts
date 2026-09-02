@@ -89,6 +89,43 @@ export const REGLAS: Regla[] = [
       };
     }
   },
+  // ---------------- Banco Galicia: plata que entra o sale de la cuenta ----
+  //
+  // Va despues de la regla de tarjetas a proposito: una compra con tarjeta
+  // tambien nombra al banco, y ahi manda la otra.
+  {
+    emisor: 'galicia',
+    remitentes: /galicia|bancogalicia/i,
+    test: /transferencia|dep[oó]sito|acreditaci[oó]n|se acredit[oó]|se debit[oó]|d[eé]bito autom[aá]tico|haberes/i,
+    extraer(t, hoy) {
+      const monto = t.match(/(?:por|de)\s*(?:\$|ars|u\$s|usd)\s*([\d.,]+)/i)
+                 || t.match(/(?:\$|u\$s)\s*([\d.,]+)/i);
+      if (!monto) return null;
+
+      const entra = /recibiste|se acredit[oó]|acreditaci[oó]n|dep[oó]sito|haberes|ingres[oó]/i.test(t);
+      const sale  = /enviaste|se debit[oó]|d[eé]bito autom[aá]tico|transferencia enviada/i.test(t);
+      // Sin saber para que lado va, no es un movimiento: es un aviso suelto.
+      if (entra === sale) return null;
+
+      // Quien manda o quien cobra, si el aviso lo dice.
+      const quien = t.match(/(?:de|a)\s+([A-ZÁÉÍÓÚÑ][^\n.,]{2,50}?)(?=\s+(?:por|el|con|\.|,|$))/);
+      const concepto = /haberes/i.test(t) ? 'Acreditación de haberes'
+        : /d[eé]bito autom[aá]tico/i.test(t) ? 'Débito automático'
+        : /dep[oó]sito/i.test(t) ? 'Depósito'
+        : entra ? 'Transferencia recibida' : 'Transferencia enviada';
+
+      return {
+        monto: plata(monto[1]), moneda: MONEDA(t),
+        comercio: limpiar(quien ? `${concepto} · ${quien[1]}` : concepto),
+        fecha: fechaAR(t.match(/\d{1,2}[\/\-.]\d{1,2}[\/\-.]\d{2,4}/)?.[0], hoy),
+        ultimos4: null, cuotas: 1,
+        // 'cuenta' para que caiga en la cuenta bancaria y no en una tarjeta.
+        medio: 'cuenta', emisor: 'galicia',
+        confianza: quien ? 92 : 85,
+        tipo: entra ? 'ingreso' : 'gasto'
+      };
+    }
+  },
   // ---------------- MODO ----------------
   {
     emisor: 'modo',
@@ -162,6 +199,7 @@ export const ES_RUIDO = new RegExp([
   // lo que ya estaba
   'newsletter', 'promoci[oó]n', 'beneficio', 'encuesta', 'no responder a este mail',
   'clave', 'token', 'alerta de seguridad', 'resumen disponible', 'vencimiento de tu resumen',
+  'vence el', 'pr[oó]ximo vencimiento', 'recordatorio de pago',
   // vocabulario de oferta
   'sin inter[eé]s', 'cuotas fijas', 'hasta \\d+ cuotas', 'descuento', 'reintegro de hasta',
   'ahorr[aá]', '\\d+ *% *(de *)?(off|descuento)', 'promo\\b', 'promos\\b', 'sorteo',
