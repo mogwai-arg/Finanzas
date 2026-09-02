@@ -4,7 +4,7 @@
 import { h, icono, iconoDe, hoja, aviso } from '../ui.js';
 import { state, guardar } from '../db.js';
 import * as F from '../finance.js';
-import { plata, cuandoVence, nombreDe, fechaISO, hoyISO } from '../formato.js';
+import { plata, cuandoVence, nombreDe, fechaISO, hoyISO, aNumero as num } from '../formato.js';
 import { irA } from '../ruteo.js';
 import { formRecurrente, formPresupuesto } from './formularios.js';
 
@@ -158,7 +158,6 @@ function formPago(r, periodo) {
     } }, 'Marcar pagado')));
 }
 
-const num = v => Number(String(v ?? '').replace(/\./g, '').replace(',', '.')) || 0;
 
 function filaPresupuesto(b) {
   const nom = nombreDe('categories', b.category_id, 'Sin categoría');

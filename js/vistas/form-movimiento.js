@@ -5,7 +5,7 @@
 // =====================================================================
 import { h, icono, iconoDe, hoja, aviso, campo, select, confirmar } from '../ui.js';
 import { state, guardar, borrar } from '../db.js';
-import { plata, hoyISO, nombreDe, etiquetaCuenta, tituloTx } from '../formato.js';
+import { plata, hoyISO, nombreDe, etiquetaCuenta, tituloTx, aNumero } from '../formato.js';
 
 export function formMovimiento(tx = null) {
   const nuevo = !tx;
@@ -110,7 +110,7 @@ export function formMovimiento(tx = null) {
   actualizar();
 
   async function guardarlo() {
-    const monto = Number(String(cMonto.value).replace(/\./g, '').replace(',', '.')) || 0;
+    const monto = aNumero(cMonto.value);
     if (!monto) { cMonto.focus(); aviso('Falta el monto'); return; }
     const comercio = cComercio.value.trim();
     const que = cQue.value.trim();

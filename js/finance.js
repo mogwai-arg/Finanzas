@@ -193,6 +193,35 @@ export function totalTarjetaEnPeriodo(txs, tarjeta, per, moneda = 'ARS') {
   return round2(total);
 }
 
+/**
+ * Lo que ya pagaste de un resumen.
+ *
+ * Un pago de tarjeta es una movida de plata: sale de la cuenta y entra a la
+ * tarjeta. Se cuentan los que caen entre el cierre y unos dias despues del
+ * vencimiento, que es la ventana en la que uno paga.
+ */
+export function pagadoDeResumen(txs, tarjeta, ciclo, moneda = 'ARS') {
+  if (!ciclo) return 0;
+  const desde = ciclo.cierre;
+  const hasta = new Date(ciclo.vence.getTime() + 10 * 86400000);
+  let total = 0;
+  for (const tx of txs) {
+    if (tx.tipo !== 'transferencia') continue;
+    if (tx.destino_account_id !== tarjeta.id) continue;
+    if ((tx.moneda || 'ARS') !== moneda) continue;
+    const f = parseFecha(tx.fecha);
+    if (f >= desde && f <= hasta) total += Math.abs(Number(tx.monto) || 0);
+  }
+  return round2(total);
+}
+
+/** Lo que falta pagar de un resumen: el total menos lo ya pagado. */
+export function faltaPagarDeResumen(txs, tarjeta, ciclo, moneda = 'ARS') {
+  if (!ciclo) return 0;
+  const total = totalTarjetaEnPeriodo(txs, tarjeta, periodo(ciclo.vence), moneda);
+  return round2(Math.max(0, total - pagadoDeResumen(txs, tarjeta, ciclo, moneda)));
+}
+
 /** Deuda futura: cuotas que todavia no vencieron, agrupadas por periodo. */
 export function deudaFutura(txs, tarjetas, moneda = 'ARS', ref = hoy(), meses = 12) {
   const idx = Object.fromEntries(tarjetas.map(t => [t.id, t]));

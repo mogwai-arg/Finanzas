@@ -5,9 +5,8 @@
 import { h, icono, iconoDe, hoja, aviso, campo, select, confirmar, selectorDeDia } from '../ui.js';
 import { state, guardar, borrar } from '../db.js';
 import * as F from '../finance.js';
-import { plata, periodoLargo, hoyISO, nombreDe, etiquetaCuenta } from '../formato.js';
+import { plata, periodoLargo, hoyISO, nombreDe, etiquetaCuenta, aNumero as num } from '../formato.js';
 
-const num = v => Number(String(v ?? '').replace(/\./g, '').replace(',', '.')) || 0;
 
 const DIAS = [['1','lun'],['2','mar'],['3','mié'],['4','jue'],['5','vie'],['6','sáb'],['0','dom']];
 

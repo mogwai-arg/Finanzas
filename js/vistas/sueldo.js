@@ -7,7 +7,7 @@
 import { h, icono, hoja, aviso, campo, confirmar } from '../ui.js';
 import { state, guardar, borrar } from '../db.js';
 import * as S from '../sueldo.js';
-import { plata, periodoLargo, mesCorto, hoyISO } from '../formato.js';
+import { plata, periodoLargo, mesCorto, hoyISO, aNumero as num } from '../formato.js';
 
 const MESES = ['enero','febrero','marzo','abril','mayo','junio','julio',
                'agosto','septiembre','octubre','noviembre','diciembre'];
@@ -346,7 +346,6 @@ function formRecibo(r = null) {
 }
 
 // ---------------------------------------------------------------------
-const num = v => Number(String(v ?? '').replace(/\./g, '').replace(',', '.')) || 0;
 
 /** El mes siguiente al ultimo tramo cargado, o el que viene. */
 function mesSiguiente(tramos = []) {

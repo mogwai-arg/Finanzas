@@ -8,7 +8,7 @@
 import { h, icono, iconoDe } from '../ui.js';
 import { state } from '../db.js';
 import * as F from '../finance.js';
-import { plata, plataPartida, diasHasta, fechaISO } from '../formato.js';
+import { plata, plataPartida, diasHasta, fechaISO, aNumero } from '../formato.js';
 
 const RUBROS = [
   { id: 'supermercado', nombre: 'Súper', icono: 'carro' },
@@ -29,7 +29,7 @@ export function vistaPago(root) {
              fontFamily: 'var(--f-display)', fontSize: '36px', fontWeight: '800',
              letterSpacing: '-.04em', fontVariantNumeric: 'tabular-nums' },
     oninput: e => {
-      monto = Number(String(e.target.value).replace(/[^\d,]/g, '').replace(',', '.')) || 0;
+      monto = aNumero(e.target.value);
       pintar();
     }
   });

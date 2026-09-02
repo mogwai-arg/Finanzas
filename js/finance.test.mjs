@@ -318,6 +318,34 @@ const GALICIA = {
   ]
 };
 
+t('pagar el resumen baja lo que falta', () => {
+  const t = [
+    { id:'g1', account_id:'g', tipo:'gasto', moneda:'ARS', monto:100000, fecha:'2026-08-20', cuotas:1 },
+    { id:'p1', tipo:'transferencia', destino_account_id:'g', moneda:'ARS', monto:60000, fecha:'2026-09-02' }
+  ];
+  const ciclo = { cierre: d('2026-08-27'), vence: d('2026-09-04') };
+  assert.equal(F.pagadoDeResumen(t, GALICIA, ciclo), 60000);
+  assert.equal(F.faltaPagarDeResumen(t, GALICIA, ciclo), 40000);
+});
+
+t('un pago fuera de la ventana no cuenta para ese resumen', () => {
+  const t = [
+    { id:'g1', account_id:'g', tipo:'gasto', moneda:'ARS', monto:100000, fecha:'2026-08-20', cuotas:1 },
+    { id:'p1', tipo:'transferencia', destino_account_id:'g', moneda:'ARS', monto:60000, fecha:'2026-10-30' }
+  ];
+  const ciclo = { cierre: d('2026-08-27'), vence: d('2026-09-04') };
+  assert.equal(F.pagadoDeResumen(t, GALICIA, ciclo), 0);
+});
+
+t('pagar de más no deja el resumen en negativo', () => {
+  const t = [
+    { id:'g1', account_id:'g', tipo:'gasto', moneda:'ARS', monto:100000, fecha:'2026-08-20', cuotas:1 },
+    { id:'p1', tipo:'transferencia', destino_account_id:'g', moneda:'ARS', monto:150000, fecha:'2026-09-02' }
+  ];
+  const ciclo = { cierre: d('2026-08-27'), vence: d('2026-09-04') };
+  assert.equal(F.faltaPagarDeResumen(t, GALICIA, ciclo), 0);
+});
+
 t('una compra antes del cierre entra en ese resumen', () => {
   const c = F.cicloDeCompra(d('2026-08-20'), GALICIA);
   assert.equal(F.fechaISO(c.cierre), '2026-08-27');

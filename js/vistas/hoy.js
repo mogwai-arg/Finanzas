@@ -7,11 +7,12 @@
 //   3. ¿Con qué me conviene pagar?
 // No son tres pestañas: es un orden vertical.
 // =====================================================================
-import { h, frag, icono, iconoDe } from '../ui.js';
-import { state } from '../db.js';
+import { h, frag, icono, iconoDe, hoja, campo, select, aviso } from '../ui.js';
+import { state, guardar } from '../db.js';
 import * as F from '../finance.js';
 import * as S from '../sueldo.js';
-import { plataPartida, plata, cuandoVence, diasHasta, hoyISO, aFecha, nombreDe } from '../formato.js';
+import { plataPartida, plata, cuandoVence, diasHasta, hoyISO, aFecha, nombreDe,
+         aNumero, etiquetaCuenta } from '../formato.js';
 import { irA } from '../ruteo.js';
 
 const per = () => hoyISO().slice(0, 7);
@@ -164,8 +165,15 @@ function loQueSeViene(hoy, moneda) {
     const c = F.resumenAPagar(t, hoy) || F.proximoCiclo(t, hoy);
     const total = F.totalTarjetaEnPeriodo(state.transactions, t, F.periodo(c.vence), moneda);
     if (!total) continue;
-    items.push({ id: t.id, nombre: t.nombre, monto: total, vence: c.vence,
-                 icono: 'tarjeta', nota: c.declarado ? null : 'estimado',
+    // Si ya se pagó algo de este resumen, lo que se viene es el resto.
+    const falta = F.faltaPagarDeResumen(state.transactions, t, c, moneda);
+    if (!falta) continue;
+    const pagado = total - falta;
+    items.push({ id: t.id, nombre: t.nombre, monto: falta, vence: c.vence,
+                 icono: 'tarjeta',
+                 nota: pagado > 0 ? `pagaste ${plata(Math.round(pagado), moneda)}`
+                                  : (c.declarado ? null : 'estimado'),
+                 tarjeta: t, ciclo: c,
                  ir: `/tarjetas/${t.id}` });
   }
 
@@ -191,13 +199,21 @@ function loQueSeViene(hoy, moneda) {
       const iso = it.vence instanceof Date
         ? `${it.vence.getFullYear()}-${String(it.vence.getMonth() + 1).padStart(2, '0')}-${String(it.vence.getDate()).padStart(2, '0')}`
         : it.vence;
-      return h(`button.li.${sev || 'li'}`.replace('.li.li', '.li'), {
-        class: `li ${sev}`, onclick: () => irA(it.ir)
-      },
-        h('div', { class: `av ${d < 0 ? 'neg' : d <= 3 ? 'amb' : ''}` }, icono(it.icono, 17)),
-        h('div.m', h('div.t', it.nombre),
-          h('div.s', cuandoVence(iso, hoy) + (it.nota ? ` · ${it.nota}` : ''))),
-        h('div.v', plata(moneda === 'USD' ? it.monto : Math.round(it.monto), moneda)));
+      return h('div.li', { class: `li ${sev}` },
+        h('button', { style: { display: 'flex', alignItems: 'center', gap: '12px',
+                               flex: '1', minWidth: '0', background: 'none', border: '0',
+                               padding: '0', textAlign: 'left', cursor: 'pointer' },
+                      onclick: () => irA(it.ir) },
+          h('div', { class: `av ${d < 0 ? 'neg' : d <= 3 ? 'amb' : ''}` }, icono(it.icono, 17)),
+          h('div.m', h('div.t', it.nombre),
+            h('div.s', cuandoVence(iso, hoy) + (it.nota ? ` · ${it.nota}` : ''))),
+          h('div.v', plata(moneda === 'USD' ? it.monto : Math.round(it.monto), moneda))),
+        // Anotar el pago desde acá: es donde uno lo mira, y si hay que ir a
+        // buscarlo a otra pantalla se anota después, o nunca.
+        it.tarjeta ? h('button.iconbtn', { 'aria-label': `Pagar ${it.nombre}`,
+          style: { flex: 'none' },
+          onclick: () => formPagoTarjeta(it.tarjeta, it.ciclo, it.monto, moneda) },
+          icono('check', 18)) : null);
     }))
   );
 }
@@ -340,4 +356,45 @@ function antesDeComprar() {
           h('div.s', 'Saldo por cuenta, en pesos y en dólares')),
         h('span.chev', icono('chev', 15))))
   );
+}
+
+// =====================================================================
+/**
+ * Anotar el pago de un resumen, desde donde uno lo está mirando.
+ *
+ * Un pago de tarjeta es una movida de plata: sale de una cuenta y entra a la
+ * tarjeta. Guardarlo así —y no como un gasto— es lo que hace que no se cuente
+ * dos veces: el gasto ya se contó cuando se hizo la compra.
+ */
+export function formPagoTarjeta(tarjeta, ciclo, sugerido, moneda = 'ARS') {
+  const cuentas = state.accounts.filter(a =>
+    a.activo !== false && a.tipo !== 'credito' && (a.moneda || 'ARS') === moneda);
+
+  const cMonto = h('input', { type: 'text', inputmode: 'decimal',
+                              value: String(Math.round(sugerido)) });
+  const cCuenta = select(cuentas.map(a => ({ value: a.id, label: etiquetaCuenta(a) })),
+                         { value: cuentas[0]?.id || '' });
+  const cFecha = h('input', { type: 'date', value: hoyISO() });
+
+  const cerrar = hoja(`Pagar ${tarjeta.nombre}`, h('div',
+    h('div.small.mut', { style: { lineHeight: '1.5', marginBottom: '14px' } },
+      `Del resumen que vence el ${ciclo.vence.getDate()}/${ciclo.vence.getMonth() + 1}. `,
+      'Si pagás una parte, el resto sigue figurando.'),
+    campo('Cuánto', cMonto),
+    campo('Desde', cCuenta),
+    campo('Cuándo', cFecha),
+    h('button.btn', { style: { marginTop: '4px' }, onclick: async () => {
+      const monto = aNumero(cMonto.value);
+      if (!monto) { cMonto.focus(); aviso('Falta el monto'); return; }
+      if (!cCuenta.value) { aviso('Falta desde qué cuenta'); return; }
+      await guardar('transactions', {
+        fecha: cFecha.value || hoyISO(),
+        descripcion: `Pago ${tarjeta.nombre}`, comercio: null,
+        monto, moneda, tipo: 'transferencia',
+        account_id: cCuenta.value, destino_account_id: tarjeta.id,
+        cuotas: 1, fuente: 'manual', revisado: true
+      });
+      cerrar();
+      aviso(`Pago anotado · ${plata(monto, moneda)}`);
+    } }, 'Anotar el pago')));
 }
