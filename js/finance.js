@@ -88,6 +88,12 @@ export function ciclosOrdenados(tarjeta) {
  * adivinar.
  */
 export const diaDelMes = n => Number.isInteger(Number(n)) && Number(n) >= 1 && Number(n) <= 31;
+
+// Un dia guardado que no es un dia del mes —un 509 de teclear '5/09' en un
+// campo numerico— vale lo mismo que no tener nada: si se usara, el ciclo se
+// calcularia sobre una fecha que no existe.
+const diaCierre = t => (diaDelMes(t.cierre_dia) ? Number(t.cierre_dia) : 1);
+const diaVenc = t => (diaDelMes(t.vencimiento_dia) ? Number(t.vencimiento_dia) : 10);
 export const tieneCiclo = t =>
   !!((t.ciclos || []).some(c => c && c.cierre) || diaDelMes(t.cierre_dia));
 
@@ -96,14 +102,14 @@ export function cicloDeCompra(fecha, tarjeta) {
   for (const c of ciclosOrdenados(tarjeta)) {
     if (fecha < c.cierre) {
       return { cierre: c.cierre,
-               vence: c.vence || vencimientoDeCierre(c.cierre, tarjeta.vencimiento_dia || 10),
+               vence: c.vence || vencimientoDeCierre(c.cierre, diaVenc(tarjeta)),
                declarado: true };
     }
   }
   // Fuera de los ciclos conocidos: se vuelve al dia fijo, marcando que es
   // una estimacion y no un dato del banco.
-  const cierre = cierreDeCompra(fecha, tarjeta.cierre_dia || 1);
-  return { cierre, vence: vencimientoDeCierre(cierre, tarjeta.vencimiento_dia || 10),
+  const cierre = cierreDeCompra(fecha, diaCierre(tarjeta));
+  return { cierre, vence: vencimientoDeCierre(cierre, diaVenc(tarjeta)),
            declarado: false };
 }
 
@@ -117,7 +123,7 @@ export function cicloDeCompra(fecha, tarjeta) {
  */
 export function resumenAPagar(tarjeta, ref = hoy()) {
   for (const c of ciclosOrdenados(tarjeta)) {
-    const vence = c.vence || vencimientoDeCierre(c.cierre, tarjeta.vencimiento_dia || 10);
+    const vence = c.vence || vencimientoDeCierre(c.cierre, diaVenc(tarjeta));
     if (c.cierre <= ref && vence >= ref) return { cierre: c.cierre, vence, declarado: true };
   }
   return null;
@@ -163,9 +169,9 @@ export function cronograma(tx, tarjeta, ref = hoy()) {
     } else {
       const sig = ciclosOrdenados(tarjeta).find(c => c.cierre > cierre0(out, primero, k));
       if (sig) { cierre = sig.cierre; declarado = true;
-                 vence = sig.vence || vencimientoDeCierre(cierre, tarjeta.vencimiento_dia || 10); }
+                 vence = sig.vence || vencimientoDeCierre(cierre, diaVenc(tarjeta)); }
       else { cierre = diaSeguro(primero.cierre.getFullYear(), primero.cierre.getMonth() + k, diaBase);
-             vence = vencimientoDeCierre(cierre, tarjeta.vencimiento_dia || 10); declarado = false; }
+             vence = vencimientoDeCierre(cierre, diaVenc(tarjeta)); declarado = false; }
     }
     out.push({ nro: k + 1, total: n, monto, cierre, vence, declarado,
                periodoVenc: periodo(vence), pendiente: vence >= ref });

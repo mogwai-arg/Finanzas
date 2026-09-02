@@ -156,6 +156,22 @@ input[type=checkbox]{width:auto;min-height:0}
 /* 16px justos: por debajo de eso iOS hace zoom al tocar el campo. */
 .search input{background:none;border:0;padding:0;min-height:0;font-size:16px}
 
+/* ------------------------------------------------------- elegir un día */
+.selector-dia{width:100%;background:var(--fill);border:1px solid transparent;
+      border-radius:var(--r-interno);padding:12px 13px;min-height:48px;font-size:16px;
+      display:flex;align-items:center;justify-content:space-between;gap:8px;
+      color:var(--tx);cursor:pointer;-webkit-tap-highlight-color:transparent;
+      transition:border-color var(--d-micro) var(--e-entra)}
+.selector-dia:active{border-color:var(--brand)}
+.selector-dia.vacio{color:var(--tx3)}
+.selector-dia svg{color:var(--tx3);flex:none}
+.dias{display:grid;grid-template-columns:repeat(7,1fr);gap:7px}
+.dia{aspect-ratio:1;min-height:42px;border:0;border-radius:11px;background:var(--fill);
+     color:var(--tx);font-size:15.5px;font-weight:600;font-variant-numeric:tabular-nums;
+     cursor:pointer;-webkit-tap-highlight-color:transparent}
+.dia:active{background:var(--line)}
+.dia[aria-pressed="true"]{background:var(--brand);color:#fff}
+
 /* --------------------------------------------------------- barra tabs */
 .tabs{position:fixed;left:12px;right:12px;bottom:calc(12px + var(--safe-b));z-index:40;
       max-width:536px;margin:0 auto;

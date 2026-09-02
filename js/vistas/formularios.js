@@ -2,25 +2,13 @@
 // vistas/formularios.js — alta y edicion de todo lo que no es un movimiento:
 // cuentas y tarjetas, gastos fijos, presupuestos, promos y categorias.
 // =====================================================================
-import { h, icono, iconoDe, hoja, aviso, campo, select, confirmar } from '../ui.js';
+import { h, icono, iconoDe, hoja, aviso, campo, select, confirmar, selectorDeDia } from '../ui.js';
 import { state, guardar, borrar } from '../db.js';
 import * as F from '../finance.js';
 import { plata, periodoLargo, hoyISO, nombreDe, etiquetaCuenta } from '../formato.js';
 
 const num = v => Number(String(v ?? '').replace(/\./g, '').replace(',', '.')) || 0;
 
-// Un dia del mes y nada mas: dos digitos, del 1 al 31. Escribir '5/09' en un
-// campo numerico daba 509, y con eso el ciclo se calcula sobre una fecha que
-// no existe: la tarjeta muestra cero teniendo consumos.
-const dia = valor => {
-  const e = h('input', { type: 'text', inputmode: 'numeric', maxlength: '2',
-                         placeholder: '5', value: valor ? String(valor) : '' });
-  e.addEventListener('input', () => {
-    const limpio = e.value.replace(/\D/g, '').slice(0, 2);
-    if (limpio !== e.value) e.value = limpio;
-  });
-  return e;
-};
 const DIAS = [['1','lun'],['2','mar'],['3','mié'],['4','jue'],['5','vie'],['6','sáb'],['0','dom']];
 
 // =====================================================================
@@ -51,8 +39,8 @@ export function formCuenta(a = null) {
                            value: a?.ultimos4 || '', placeholder: '9817' }),
     limite: h('input', { type: 'text', inputmode: 'decimal',
                          value: a?.limite ? String(a.limite) : '' }),
-    cierre: dia(a?.cierre_dia),
-    venc: dia(a?.vencimiento_dia),
+    cierre: selectorDeDia(a?.cierre_dia, { titulo: '¿Qué día cierra?' }),
+    venc: selectorDeDia(a?.vencimiento_dia, { titulo: '¿Qué día vence?' }),
     saldo: h('input', { type: 'text', inputmode: 'decimal',
                         value: a?.saldo_inicial ? String(a.saldo_inicial) : '' }),
     saldoAl: h('input', { type: 'date', value: a?.saldo_al || hoyISO() })
@@ -97,7 +85,7 @@ export function formCuenta(a = null) {
     campo('Límite', c.limite),
     h('div.fila', campo('Día de cierre', c.cierre), campo('Día de vencimiento', c.venc)),
     h('div.small.mut', { style: { marginTop: '-12px', marginBottom: '16px', lineHeight: '1.45' } },
-      'Un día del mes, del 1 al 31. Si tu tarjeta cierra el 5 y vence el 10, va 5 y 10.'),
+      'El día del mes en que cierra el resumen y el día en que se paga.'),
     h('div.f',
       h('label', 'Fechas del resumen'),
       h('div.small.mut', { style: { marginTop: '-3px', marginBottom: '10px', lineHeight: '1.45' } },
@@ -177,8 +165,7 @@ export function formRecurrente(r = null) {
                         value: r?.monto_estimado ? String(r.monto_estimado) : '' }),
     moneda: select([{ value: 'ARS', label: 'Pesos' }, { value: 'USD', label: 'Dólares' }],
                    { value: r?.moneda || 'ARS' }),
-    dia: h('input', { type: 'number', min: '1', max: '31', inputmode: 'numeric',
-                      value: String(r?.dia_vencimiento || 10) }),
+    dia: selectorDeDia(r?.dia_vencimiento || 10, { titulo: '¿Qué día vence?' }),
     cat: select([{ value: '', label: 'Sin categoría' },
       ...state.categories.filter(x => x.tipo === 'gasto').map(x => ({ value: x.id, label: x.nombre }))],
       { value: r?.category_id || '' }),

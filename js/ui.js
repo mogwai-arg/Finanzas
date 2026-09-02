@@ -244,6 +244,50 @@ export function confirmar(msg, textoOk = 'Borrar', { peligro = true } = {}) {
 }
 
 // ------------------------------------------------------------- campos
+/**
+ * Elegir un dia del mes tocandolo, no escribiendolo.
+ *
+ * Un campo numerico deja escribir 509 —lo que sale de teclear '5/09'— y con
+ * eso el ciclo de la tarjeta se calcula sobre una fecha que no existe. Una
+ * grilla del 1 al 31 no tiene como equivocarse, y ademas se ve como un
+ * almanaque, que es lo que uno espera cuando le piden un dia.
+ */
+export function selectorDeDia(valor, { titulo = 'Elegir día', hasta = 31, alElegir } = {}) {
+  let dia = Number(valor) >= 1 && Number(valor) <= hasta ? Number(valor) : null;
+
+  const boton = h('button.selector-dia', { type: 'button', onclick: () => abrir() });
+  const pintar = () => {
+    boton.replaceChildren(
+      h('span', dia ? String(dia) : 'Elegir'),
+      icono('reloj', 17));
+    boton.classList.toggle('vacio', !dia);
+  };
+  pintar();
+
+  function abrir() {
+    const grilla = h('div.dias');
+    for (let d = 1; d <= hasta; d++) {
+      grilla.append(h('button.dia', {
+        type: 'button',
+        'aria-pressed': String(d === dia),
+        onclick: () => { dia = d; pintar(); alElegir && alElegir(d); cerrar(); }
+      }, String(d)));
+    }
+    const cerrar = hoja(titulo, h('div',
+      grilla,
+      dia ? h('button.btn.sec', { style: { marginTop: '16px' },
+        onclick: () => { dia = null; pintar(); alElegir && alElegir(null); cerrar(); } },
+        'Dejarlo sin día') : null));
+  }
+
+  // La misma interfaz que un input, para que el resto del codigo no cambie.
+  Object.defineProperty(boton, 'value', {
+    get: () => (dia == null ? '' : String(dia)),
+    set: v => { dia = Number(v) >= 1 && Number(v) <= hasta ? Number(v) : null; pintar(); }
+  });
+  return boton;
+}
+
 export const campo = (label, control) => h('div.f', h('label', label), control);
 export const input = (props = {}) => h('input', props);
 export function select(opciones, props = {}) {
