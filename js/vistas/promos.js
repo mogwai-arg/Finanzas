@@ -51,6 +51,8 @@ export function vistaPromos(root) {
     const tope = Number(p.tope) || 0;
     const pct = tope > 0 ? Math.min(100, (usado / tope) * 100) : 0;
     const aplicaHoy = !p.dias?.length || p.dias.includes(hoy.getDay());
+    const etiqueta = p.tipo === 'descuento' ? 'descuento'
+                   : p.tipo === 'cuotas' ? 'cuotas' : 'reintegro';
     const proximo = !aplicaHoy && p.dias?.length
       ? DIAS[p.dias.slice().sort((a, b) => ((a - hoy.getDay() + 7) % 7) - ((b - hoy.getDay() + 7) % 7))[0]]
       : null;
@@ -66,8 +68,10 @@ export function vistaPromos(root) {
           h('div', { style: { fontWeight: '600', fontSize: '15.5px', letterSpacing: '-.015em' } },
             p.titulo),
           h('div.small.mut', { style: { marginTop: '1px' } },
-            [p.medio_pago, p.dias?.length ? p.dias.map(d => DIAS[d]).join(' y ') : 'todos los días']
+            [etiqueta, p.medio_pago,
+             p.dias?.length ? p.dias.map(d => DIAS[d]).join(' y ') : 'todos los días']
               .filter(Boolean).join(' · '))),
+        p.favorita && h('span.pill.bra', 'preferida'),
         proximo && h('span.pill.mut', proximo)),
       tope > 0 && h('div', { style: { marginTop: '11px' } },
         h('div', { style: { display: 'flex', justifyContent: 'space-between',
@@ -122,5 +126,39 @@ export function vistaPromos(root) {
   root.append(h('div.flow', seg, cercania, lista,
     h('div.small.mut', { style: { padding: '0 4px', lineHeight: '1.45' } },
       'El tope consumido es lo que hace honesta la promo: "25 % de reintegro" con el tope lleno es 0 %.'),
-    h('button.btn.sec', { onclick: () => formPromo() }, icono('mas', 17), 'Agregar promo')));
+    h('button.btn.sec', { onclick: () => formPromo() }, icono('mas', 17), 'Agregar promo'),
+    buscadores()));
+}
+
+// =====================================================================
+// Los buscadores oficiales.
+//
+// Las promos cambian todas las semanas y ninguno de estos lugares publica
+// una lista que se pueda leer sola. Tenerlos a un toque, y que cargar la que
+// sirve cueste poco, es mas honesto que fingir que la app las sabe.
+// =====================================================================
+const BUSCADORES = [
+  { nombre: 'Galicia', detalle: 'buscador de promociones',
+    url: 'https://www.galicia.ar/personas/buscador-de-promociones' },
+  { nombre: 'MODO', detalle: 'promos de la semana',
+    url: 'https://www.modo.com.ar/promos' },
+  { nombre: 'Mercado Pago', detalle: 'promociones vigentes',
+    url: 'https://promociones.mercadopago.com.ar/' },
+  { nombre: 'Personal Pay', detalle: 'beneficios',
+    url: 'https://www.personal.com.ar/pay' }
+];
+
+function buscadores() {
+  return h('section', { style: { marginTop: '8px' } },
+    h('div.ghead', 'Dónde mirar'),
+    h('div.grp', BUSCADORES.map(b => h('a.li', {
+      href: b.url, target: '_blank', rel: 'noopener noreferrer'
+    },
+      h('div.av', icono('buscar', 17)),
+      h('div.m', h('div.t', b.nombre), h('div.s', b.detalle)),
+      h('span.chev', icono('chev', 15))))),
+    h('div.small.mut', { style: { padding: '10px 4px 0', lineHeight: '1.5' } },
+      'Cuando encuentres una que uses, cargala acá y la app te la recuerda el ',
+      'día que aplica y te lleva la cuenta del tope. Los reintegros van primero ',
+      'que los descuentos: el reintegro vuelve a tu cuenta.'));
 }

@@ -244,8 +244,19 @@ export function formPromo(p = null) {
   let dias = (p?.dias || []).map(String);
 
   const c = {
-    titulo: h('input', { type: 'text', value: p?.titulo || '', placeholder: 'Coto' }),
+    titulo: h('input', { type: 'text', value: p?.titulo || '', placeholder: 'Súper los martes' }),
     comercio: h('input', { type: 'text', value: p?.comercio || '', placeholder: 'Coto' }),
+    // Reintegro y descuento no son lo mismo y la app los ordena distinto:
+    // el reintegro vuelve a la cuenta, el descuento solo baja esa compra.
+    tipo: select([{ value: 'reintegro', label: 'Reintegro' },
+                  { value: 'descuento', label: 'Descuento' },
+                  { value: 'cuotas', label: 'Cuotas sin interés' }],
+                 { value: p?.tipo || 'reintegro' }),
+    emisor: select([{ value: 'galicia', label: 'Galicia' }, { value: 'modo', label: 'MODO' },
+                    { value: 'mercadopago', label: 'Mercado Pago' },
+                    { value: 'personalpay', label: 'Personal Pay' },
+                    { value: 'otro', label: 'Otro' }],
+                   { value: p?.emisor || 'galicia' }),
     valor: h('input', { type: 'text', inputmode: 'decimal', value: p ? String(p.valor) : '',
                         placeholder: '25' }),
     tope: h('input', { type: 'text', inputmode: 'decimal', value: p?.tope ? String(p.tope) : '',
@@ -261,8 +272,12 @@ export function formPromo(p = null) {
                  { value: 'amenity=pharmacy', label: 'Farmacias' },
                  { value: 'amenity=restaurant', label: 'Restaurantes' }],
                 { value: p?.osm_filtro || '' }),
-    hasta: h('input', { type: 'date', value: p?.vigencia_hasta || '' })
+    hasta: h('input', { type: 'date', value: p?.vigencia_hasta || '' }),
+    url: h('input', { type: 'url', value: p?.url || '', placeholder: 'https://…' }),
+    notas: h('input', { type: 'text', value: p?.notas || '',
+                        placeholder: 'Solo Eminent, tope por cuenta' })
   };
+  const cFavorita = h('input', { type: 'checkbox', checked: !!p?.favorita });
 
   const chips = h('div.chips', { style: { flexWrap: 'wrap' } });
   const pintarDias = () => {
@@ -278,7 +293,8 @@ export function formPromo(p = null) {
   const cerrar = hoja(nuevo ? 'Nueva promo' : 'Editar promo', h('div',
     campo('Nombre', c.titulo),
     campo('Comercio', c.comercio),
-    h('div.fila', campo('Reintegro %', c.valor), campo('Tope por mes', c.tope)),
+    h('div.fila', campo('Tipo', c.tipo), campo('Quién la da', c.emisor)),
+    h('div.fila', campo('Porcentaje', c.valor), campo('Tope por mes', c.tope)),
     h('div.f', h('label', 'Con qué se paga'), c.medio,
       h('div.small.mut', { style: { marginTop: '6px', lineHeight: '1.45' } },
         'Tal como figura en la promo: "Galicia Visa", "MODO". Con esto la app sabe cuál de tus ',
@@ -289,6 +305,13 @@ export function formPromo(p = null) {
     campo('Rubro', c.rubro),
     campo('Buscar sucursales cerca', c.osm),
     campo('Vence el', c.hasta),
+    campo('Link a la promo', c.url),
+    campo('Notas', c.notas),
+    h('label.li', { style: { padding: '11px 0' } },
+      h('div.m', h('div.t', 'Marcarla como preferida'),
+        h('div.s', 'Va primero en la lista y en "¿Con qué pago?"')),
+      cFavorita),
+
     h('div.fila', { style: { marginTop: '4px' } },
       !nuevo && h('button.btn.dg', { onclick: async () => {
         if (await confirmar(`¿Borrar "${p.titulo}"?`)) { await borrar('promos', p.id); cerrar(); aviso('Borrada'); }
@@ -300,10 +323,11 @@ export function formPromo(p = null) {
           titulo: c.titulo.value.trim(), comercio,
           valor: num(c.valor.value), tope: num(c.tope.value) || null,
           tope_periodo: 'mensual', medio_pago: c.medio.value.trim() || null,
-          rubro: c.rubro.value, tipo: 'reintegro', canal: 'ambos',
+          rubro: c.rubro.value, tipo: c.tipo.value, emisor: c.emisor.value, canal: 'ambos',
           dias: dias.map(Number).sort(), osm_filtro: c.osm.value || null,
           marcas: [comercio], vigencia_hasta: c.hasta.value || null,
-          activa: true, favorita: p?.favorita || false });
+          url: c.url.value.trim() || null, notas: c.notas.value.trim() || null,
+          activa: true, favorita: cFavorita.checked });
         cerrar(); aviso(nuevo ? 'Promo creada' : 'Actualizada');
       } }, nuevo ? 'Guardar' : 'Guardar cambios'))));
 }

@@ -70,6 +70,38 @@ t('el mes trae el saldo que queda despues de pagar', () => {
   assert.equal(r.saldoDespues, 50);     // lo que se lleva a julio
 });
 
+t('un reintegro le gana a un descuento del mismo tamaño', () => {
+  const promos = [
+    { id: 'd', titulo: 'Descuento', tipo: 'descuento', valor: 20, activa: true, dias: [] },
+    { id: 'r', titulo: 'Reintegro', tipo: 'reintegro', valor: 20, activa: true, dias: [] }
+  ];
+  assert.equal(F.promosDelDia(promos, d('2026-09-02'))[0].id, 'r');
+});
+
+t('y también a uno un poco más grande', () => {
+  const promos = [
+    { id: 'd', titulo: 'Descuento', tipo: 'descuento', valor: 30, activa: true, dias: [] },
+    { id: 'r', titulo: 'Reintegro', tipo: 'reintegro', valor: 15, activa: true, dias: [] }
+  ];
+  assert.equal(F.promosDelDia(promos, d('2026-09-02'))[0].id, 'r');
+});
+
+t('una marcada como favorita va primero igual', () => {
+  const promos = [
+    { id: 'r', titulo: 'Reintegro', tipo: 'reintegro', valor: 30, activa: true, dias: [] },
+    { id: 'f', titulo: 'La mía', tipo: 'descuento', valor: 10, activa: true, dias: [], favorita: true }
+  ];
+  assert.equal(F.promosDelDia(promos, d('2026-09-02'))[0].id, 'f');
+});
+
+t('entre dos reintegros gana el más alto', () => {
+  const promos = [
+    { id: 'a', tipo: 'reintegro', valor: 15, activa: true, dias: [] },
+    { id: 'b', tipo: 'reintegro', valor: 25, activa: true, dias: [] }
+  ];
+  assert.equal(F.promosDelDia(promos, d('2026-09-02'))[0].id, 'b');
+});
+
 const MANUAL = [
   { id: 'm1', fuente: 'manual', tipo: 'gasto', moneda: 'ARS', monto: 45300,
     fecha: '2026-08-28', account_id: 'visa', comercio: 'super' },

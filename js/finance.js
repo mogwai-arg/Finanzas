@@ -459,7 +459,25 @@ export function promosDelDia(promos, ref = hoy()) {
     if (p.vigencia_hasta && p.vigencia_hasta < iso) return false;
     const dias = p.dias || [];
     return dias.length === 0 || dias.includes(d);
-  }).sort((a, b) => (b.favorita - a.favorita) || (Number(b.valor) - Number(a.valor)));
+  }).sort(ordenPromo);
+}
+
+/**
+ * Primero las marcadas, despues las de reintegro, y recien ahi por porcentaje.
+ *
+ * Un reintegro vuelve a la cuenta y se puede usar en cualquier cosa; un
+ * descuento solo baja el precio de esa compra. A igual porcentaje el reintegro
+ * vale mas, y en la practica uno prefiere 15 de reintegro antes que 20 de
+ * descuento en algo que iba a comprar igual.
+ */
+export function ordenPromo(a, b) {
+  // Con ternario y no con Number(): una promo sin el campo daba NaN, y una
+  // comparacion con NaN deja el orden como estaba.
+  const marcada = p => (p.favorita ? 1 : 0);
+  const peso = p => p.tipo === 'reintegro' ? 2 : p.tipo === 'descuento' ? 1 : 0;
+  return (marcada(b) - marcada(a))
+      || (peso(b) - peso(a))
+      || ((Number(b.valor) || 0) - (Number(a.valor) || 0));
 }
 
 /** Reintegro estimado de una compra bajo una promo. */

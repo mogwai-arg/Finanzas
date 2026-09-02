@@ -112,6 +112,8 @@ function opciones(monto, rubro) {
 }
 
 function conPromo(monto, promos, cuenta, per) {
+  // Las promos ya vienen ordenadas: primero las marcadas, despues las de
+  // reintegro. La primera que aplica es la que conviene.
   for (const p of promos) {
     if (p.medio_pago) {
       const medio = p.medio_pago.toLowerCase();
