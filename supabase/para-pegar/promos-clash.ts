@@ -75,6 +75,82 @@ function bloques(html) {
   const inicios = [...html.matchAll(/<(?:a|div|li|article)\s[^>]*\bdata-pid="[^"]+"[^>]*>/g)];
   return inicios.map((m, i) => html.slice(m.index, i + 1 < inicios.length ? inicios[i + 1].index : m.index + 4e3));
 }
+function recorteJSON(txt, desde) {
+  const inicio = txt.indexOf("{", desde);
+  if (inicio < 0) return null;
+  let nivel = 0, enCadena = false, escapado = false;
+  for (let i = inicio; i < txt.length; i++) {
+    const c = txt[i];
+    if (escapado) {
+      escapado = false;
+      continue;
+    }
+    if (c === "\\") {
+      escapado = true;
+      continue;
+    }
+    if (c === '"') {
+      enCadena = !enCadena;
+      continue;
+    }
+    if (enCadena) continue;
+    if (c === "{") nivel++;
+    else if (c === "}" && --nivel === 0) return txt.slice(inicio, i + 1);
+  }
+  return null;
+}
+var tope = (s) => plata(s ?? null);
+function diasDeArreglo(days) {
+  if (!Array.isArray(days) || days.length !== 7) return [];
+  const out = [];
+  for (let i = 0; i < 7; i++) if (days[i]) out.push(A_DOMINGO_CERO[i]);
+  return out.length === 7 ? [] : out.sort();
+}
+var slug = (t) => t.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+function leerDatosClash(js, rubro = "", ref = /* @__PURE__ */ new Date()) {
+  const i = js.indexOf("__clashData");
+  const crudo = i < 0 ? null : recorteJSON(js, i);
+  if (!crudo) return [];
+  let datos;
+  try {
+    datos = JSON.parse(crudo);
+  } catch {
+    return [];
+  }
+  const nombre = (lista, id) => (lista || []).find((x) => x.id === id)?.name || null;
+  const out = [];
+  const vistos = /* @__PURE__ */ new Set();
+  for (const p of datos.P ?? []) {
+    if (!p || !p.id || !p.bk || !p.mc || vistos.has(p.id)) continue;
+    const cuotas = typeof p.inst === "string" ? p.inst.match(/(\d+)\s*cuotas?/i) : null;
+    const valor = Number(p.d);
+    const bien = Number.isFinite(valor) && valor > 0 && valor <= 100;
+    if (!bien && !cuotas) continue;
+    const texto = `${p.note ?? ""} ${p.fr ?? ""} ${p.inst ?? ""}`;
+    const emisorNombre = nombre(datos.banks, p.bk);
+    const comercioNombre = nombre(datos.merchants, p.mc);
+    const titulo = `${bien ? `${valor}% OFF` : `${cuotas[1]} cuotas sin inter\xE9s`} en ${comercioNombre || p.mc} con ${emisorNombre || p.bk}`;
+    vistos.add(p.id);
+    out.push({
+      id: String(p.id),
+      emisor: String(p.bk),
+      emisorNombre: emisorNombre || void 0,
+      // El nombre y no el identificador: 'Puma Energy' se lee, 'pumaenergy' no.
+      comercio: comercioNombre || String(p.mc),
+      valor: bien ? valor : Number(cuotas[1]),
+      tipo: /reintegro|devoluci[oó]n/i.test(texto) ? "reintegro" : bien ? "descuento" : "cuotas",
+      tope: tope(p.cap),
+      topePeriodo: p.fr && /x\s*mes/i.test(p.fr) ? "mensual" : p.fr && /semana/i.test(p.fr) ? "semanal" : null,
+      dias: diasDeArreglo(p.days),
+      fechas: fechasDe(p.note ?? null, ref),
+      medios: (p.cards ?? []).map((c) => String(c).replace(/\.png$/i, "").replace(/[_-]+/g, " ").toUpperCase()),
+      // La condicion ("Cuenta Sueldo") importa tanto como la letra chica.
+      nota: [p.inst && !cuotas ? p.inst : null, p.note].filter(Boolean).join(" \xB7 ") || null,
+      url: rubro ? `https://promos.clash.com.ar/${rubro}/promocion/${slug(titulo)}-${p.id}/` : null
+    });
+  }
+  return out;
+}
 function leerPromosClash(html, ref = /* @__PURE__ */ new Date()) {
   const out = [];
   const vistos = /* @__PURE__ */ new Set();
@@ -129,26 +205,35 @@ Deno.serve(async (req) => {
   const pedido = String(body.rubro ?? url.searchParams.get("rubro") ?? "supermercado");
   const rubro = RUBROS[pedido] ?? (Object.values(RUBROS).includes(pedido) ? pedido : null);
   if (!rubro) return json({ error: `no conozco el rubro "${pedido}"`, rubros: Object.keys(RUBROS) }, 400);
+  const COMO_NAVEGADOR = {
+    "user-agent": "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126 Mobile Safari/537.36",
+    "accept-language": "es-AR,es;q=0.9"
+  };
   try {
-    const r = await fetch(`https://promos.clash.com.ar/${rubro}/`, {
-      // Un user-agent de navegador: con uno propio varios sitios contestan
-      // una pagina de desafio en vez del contenido, y desde el telefono eso
-      // se ve igual que "no hay promos".
-      headers: {
-        "user-agent": "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126 Mobile Safari/537.36",
-        "accept": "text/html,application/xhtml+xml",
-        "accept-language": "es-AR,es;q=0.9"
-      }
-    });
+    const datos = await fetch(
+      `https://promos.clash.com.ar/${rubro}/data.js`,
+      { headers: { ...COMO_NAVEGADOR, accept: "application/javascript,text/plain,*/*" } }
+    );
+    if (datos.ok) {
+      const js = await datos.text();
+      const promos2 = leerDatosClash(js, rubro);
+      if (promos2.length) return json({ rubro, promos: promos2, fuente: "data.js", cuando: (/* @__PURE__ */ new Date()).toISOString() });
+      var revisionDatos = { bytes: js.length, muestra: js.slice(0, 200) };
+    }
+    const r = await fetch(
+      `https://promos.clash.com.ar/${rubro}/`,
+      { headers: { ...COMO_NAVEGADOR, accept: "text/html,application/xhtml+xml" } }
+    );
     if (!r.ok) return json({ error: `clash contest\xF3 ${r.status}` }, 502);
     const html = await r.text();
     const promos = leerPromosClash(html);
     const revision = promos.length ? void 0 : {
+      data: revisionDatos ?? "no vino",
       bytes: html.length,
       bloques: (html.match(/data-pid="/g) || []).length,
       titulo: html.match(/<title[^>]*>([^<]*)</i)?.[1]?.trim() ?? null
     };
-    return json({ rubro, promos, revision, cuando: (/* @__PURE__ */ new Date()).toISOString() });
+    return json({ rubro, promos, fuente: "html", revision, cuando: (/* @__PURE__ */ new Date()).toISOString() });
   } catch (e) {
     return json({ error: String(e) }, 502);
   }

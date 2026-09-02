@@ -261,13 +261,18 @@ function hojaTraer() {
    * pantalla y no son lo mismo: el sobre trae con que se topó la función.
    */
   function nadaQueMostrar(revision) {
-    const bloques = revision?.bloques ?? 0;
+    if (!revision) {
+      return h('div.grp.pad', h('div.small.mut', { style: { lineHeight: '1.55' } },
+        'No hay promos vigentes en este rubro.'));
+    }
+    // Con el detalle a la vista: "no pude leerlas" sin decir qué llegó es un
+    // callejón sin salida, y esto se arregla mirando dos líneas.
     return h('div.grp.pad', h('div.small.mut', { style: { lineHeight: '1.55' } },
-      bloques > 0
-        ? `Clash contestó con ${bloques} promos pero no pude leerlas: cambió cómo arma la página. Avisame y lo corrijo.`
-        : revision
-          ? `Clash no devolvió promos de este rubro (${revision.bytes} bytes${revision.titulo ? `, "${revision.titulo}"` : ''}).`
-          : 'No hay promos vigentes en este rubro.'));
+      'Clash contestó pero no pude leer ninguna promo. ',
+      'Mandale esto a quien mantiene la app:',
+      h('div', { style: { fontFamily: 'ui-monospace, monospace', fontSize: '11px',
+                          marginTop: '9px', wordBreak: 'break-all', userSelect: 'all' } },
+        JSON.stringify(revision).slice(0, 400))));
   }
 
   cargar();
@@ -289,7 +294,7 @@ function fila(p) {
                style: { fontSize: '19px', flex: 'none', minWidth: '48px' } }, cifra),
     h('div.m',
       h('div.t', titulo),
-      h('div.s', [p.tipo, p.emisor, dias].filter(Boolean).join(' · ')),
+      h('div.s', [p.tipo, p.emisorNombre || p.emisor, dias].filter(Boolean).join(' · ')),
       p.medios?.length ? h('div.s', { style: { color: 'var(--tx3)' } },
         p.medios.join(' · ').toLowerCase()) : null,
       p.nota ? h('div.s', { style: { color: 'var(--tx3)' } }, p.nota) : null,

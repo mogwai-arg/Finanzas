@@ -1,7 +1,7 @@
 // node --experimental-strip-types supabase/functions/_shared/clash.test.ts
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { leerPromosClash, fechasDe } from './clash.ts';
+import { leerPromosClash, leerDatosClash, recorteJSON, fechasDe } from './clash.ts';
 
 let ok = 0, mal = 0;
 const t = (n: string, fn: () => void) => { try { fn(); console.log('  ok  ' + n); ok++; }
@@ -124,6 +124,72 @@ t('una fecha imposible no se inventa', () => {
 
 t('una página vacía no rompe', () => {
   assert.deepEqual(leerPromosClash('<html><body>nada</body></html>'), []);
+});
+
+// =====================================================================
+// EL data.js, QUE ES POR DONDE VIENEN AHORA
+// =====================================================================
+const js = readFileSync(new URL('../../../js/fixtures/clash-data.js', import.meta.url), 'utf8');
+const datos = leerDatosClash(js, 'combustibles', new Date(2026, 8, 2));
+
+console.log('\nLAS PROMOS, COMO VIENEN AHORA');
+
+t('lee todas las que tienen algo que mostrar', () => {
+  // La quinta no tiene ni porcentaje ni cuotas: no es una promo.
+  assert.equal(datos.length, 4);
+});
+
+t('la de Galicia queda entera', () => {
+  const p = datos.find(x => x.id === 'm_galicia_ypf_mtk9x5lk')!;
+  assert.equal(p.valor, 25);
+  assert.equal(p.tipo, 'descuento');
+  assert.equal(p.tope, 20000);
+  assert.equal(p.topePeriodo, 'mensual');
+  assert.deepEqual(p.dias, [4]);                       // jueves
+  assert.deepEqual(p.fechas, ['2026-09-10']);          // y solo el 10
+  assert.deepEqual(p.medios, ['MODO', 'MASTERCARD PLATINUM']);
+  assert.equal(p.nota, 'Cuenta Sueldo · Jueves 10/09');
+});
+
+t('dice el nombre del comercio, no su identificador', () => {
+  assert.equal(datos.find(x => x.id === 'b_50001')!.comercio, 'Puma Energy');
+  assert.equal(datos.find(x => x.id === 'b_41715')!.emisorNombre, 'Mercado Pago');
+});
+
+t('los días vienen del lunes y la app los guarda desde el domingo', () => {
+  assert.deepEqual(datos.find(x => x.id === 'b_41715')!.dias, [0]);    // domingo
+  assert.deepEqual(datos.find(x => x.id === 'b_50001')!.dias, [5, 6]); // viernes y sábado
+  assert.deepEqual(datos.find(x => x.id === 'b_39100')!.dias, []);     // los siete = todos
+});
+
+t('un reintegro no se confunde con un descuento', () => {
+  const p = datos.find(x => x.id === 'b_39100')!;
+  assert.equal(p.tipo, 'reintegro');
+  assert.equal(p.topePeriodo, 'semanal');
+});
+
+t('las cuotas entran aunque no haya porcentaje', () => {
+  const p = datos.find(x => x.id === 'b_50001')!;
+  assert.equal(p.tipo, 'cuotas');
+  assert.equal(p.valor, 6);
+});
+
+t('el link lleva a la ficha de esa promo', () => {
+  assert.equal(datos.find(x => x.id === 'b_41715')!.url,
+    'https://promos.clash.com.ar/combustibles/promocion/10-off-en-ypf-con-mercado-pago-b_41715/');
+});
+
+t('una llave adentro de un texto no corta el recorte', () => {
+  // La tercera promo trae "{tope}" en la letra chica a propósito.
+  assert.equal(datos.find(x => x.id === 'b_39100')!.valor, 20);
+  const j = recorteJSON('x = {"a":"}{{","b":{"c":1}} ; sobra', 0);
+  assert.equal(j, '{"a":"}{{","b":{"c":1}}');
+});
+
+t('un data.js que no se entiende no rompe nada', () => {
+  assert.deepEqual(leerDatosClash('window.__clashData = {roto', 'x'), []);
+  assert.deepEqual(leerDatosClash('nada de nada', 'x'), []);
+  assert.deepEqual(leerDatosClash('', 'x'), []);
 });
 
 console.log(`\n${ok} pruebas OK${mal ? `, ${mal} FALLAN` : ''}\n`);

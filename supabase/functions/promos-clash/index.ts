@@ -10,7 +10,7 @@
 // "estoy en el super, ¿con que pago?".
 // =====================================================================
 import { json, CORS } from '../_shared/comun.ts';
-import { leerPromosClash } from '../_shared/clash.ts';
+import { leerPromosClash, leerDatosClash } from '../_shared/clash.ts';
 
 const RUBROS: Record<string, string> = {
   supermercado: 'supermercados',
@@ -29,17 +29,28 @@ Deno.serve(async (req) => {
   const rubro = RUBROS[pedido] ?? (Object.values(RUBROS).includes(pedido) ? pedido : null);
   if (!rubro) return json({ error: `no conozco el rubro "${pedido}"`, rubros: Object.keys(RUBROS) }, 400);
 
+  // Un navegador, no un robot: con un user-agent propio varios sitios
+  // contestan una pagina de desafio en vez del contenido, y desde el telefono
+  // eso se ve igual que "no hay promos".
+  const COMO_NAVEGADOR = {
+    'user-agent': 'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126 Mobile Safari/537.36',
+    'accept-language': 'es-AR,es;q=0.9'
+  };
+
   try {
-    const r = await fetch(`https://promos.clash.com.ar/${rubro}/`, {
-      // Un user-agent de navegador: con uno propio varios sitios contestan
-      // una pagina de desafio en vez del contenido, y desde el telefono eso
-      // se ve igual que "no hay promos".
-      headers: {
-        'user-agent': 'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126 Mobile Safari/537.36',
-        'accept': 'text/html,application/xhtml+xml',
-        'accept-language': 'es-AR,es;q=0.9'
-      }
-    });
+    // Primero el data.js, que es de donde el propio sitio saca las promos.
+    const datos = await fetch(`https://promos.clash.com.ar/${rubro}/data.js`,
+      { headers: { ...COMO_NAVEGADOR, accept: 'application/javascript,text/plain,*/*' } });
+    if (datos.ok) {
+      const js = await datos.text();
+      const promos = leerDatosClash(js, rubro);
+      if (promos.length) return json({ rubro, promos, fuente: 'data.js', cuando: new Date().toISOString() });
+      var revisionDatos = { bytes: js.length, muestra: js.slice(0, 200) };
+    }
+
+    // Si no salio nada, la pagina armada: hubo una epoca en que venia asi.
+    const r = await fetch(`https://promos.clash.com.ar/${rubro}/`,
+      { headers: { ...COMO_NAVEGADOR, accept: 'text/html,application/xhtml+xml' } });
     if (!r.ok) return json({ error: `clash contestó ${r.status}` }, 502);
 
     const html = await r.text();
@@ -48,11 +59,12 @@ Deno.serve(async (req) => {
     // pagina cambio" o "nos contestaron otra cosa", sin tener que estar
     // mirando los registros de la funcion.
     const revision = promos.length ? undefined : {
+      data: revisionDatos ?? 'no vino',
       bytes: html.length,
       bloques: (html.match(/data-pid="/g) || []).length,
       titulo: html.match(/<title[^>]*>([^<]*)</i)?.[1]?.trim() ?? null
     };
-    return json({ rubro, promos, revision, cuando: new Date().toISOString() });
+    return json({ rubro, promos, fuente: 'html', revision, cuando: new Date().toISOString() });
   } catch (e) {
     return json({ error: String(e) }, 502);
   }
