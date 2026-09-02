@@ -2,8 +2,9 @@
 // vistas/ajustes.js
 // =====================================================================
 import { h, icono, aviso, confirmar, hoja, campo } from '../ui.js';
-import { state, salir, sincronizar, exportarJSON, pendientes, fallidas, DEMO } from '../db.js';
-import { plata } from '../formato.js';
+import { state, salir, sincronizar, exportarJSON, pendientes, fallidas, DEMO,
+         FUNCTIONS_URL, conectar, desconectar, leerAhora } from '../db.js';
+import { plata, fechaRelativa } from '../formato.js';
 import { irA } from '../ruteo.js';
 import { formCategorias } from './formularios.js';
 import { formImportarResumen } from './importar.js';
@@ -17,9 +18,15 @@ export function vistaAjustes(root) {
       h('div.av.amb', icono('rayo', 17)),
       h('div.txt',
         h('div.tt', `${rotas.length} cambios no se pudieron subir`),
-        h('div.ds', 'Están guardados acá. Podés reintentarlos sin perder nada.'),
-        h('button.btn', { onclick: async () => { await sincronizar({ reintentarFallidas: true });
-                                                 aviso('Reintentando…'); } }, 'Reintentar'))) : null,
+        h('div.ds', 'Están guardados acá, no se perdió nada. Casi siempre es que ',
+          'a la base le falta correr una migración.'),
+        // Sin el motivo, el cartel es un callejón sin salida: se puede
+        // reintentar para siempre y nunca saber que falta una columna.
+        h('div.small.mut', { style: { marginTop: '8px', lineHeight: '1.5' } },
+          motivos(rotas).map(m => h('div', { style: { marginTop: '4px' } }, '· ', m))),
+        h('button.btn', { style: { marginTop: '12px' }, onclick: async () => {
+          await sincronizar({ reintentarFallidas: true });
+          aviso('Reintentando…'); } }, 'Reintentar'))) : null,
 
     h('section',
       h('div.ghead', 'Cuenta'),
@@ -52,6 +59,8 @@ export function vistaAjustes(root) {
           h('div.m', h('div.t', 'Categorías'),
             h('div.s', `${(state.categories || []).length} cargadas`)),
           h('span.chev', icono('chev', 15))))),
+
+    seccionLectura(),
 
     h('section',
       h('div.ghead', 'Sueldo'),
@@ -100,4 +109,78 @@ function exportar() {
                      download: `bishusha-${new Date().toISOString().slice(0, 10)}.json` });
   document.body.append(a); a.click(); a.remove();
   aviso('Exportado');
+}
+
+/** Los errores distintos que hay en el cajón, sin repetir. */
+function motivos(rotas) {
+  const vistos = new Map();
+  for (const r of rotas) {
+    const k = `${r.tabla}: ${r.error || 'sin detalle'}`;
+    vistos.set(k, (vistos.get(k) || 0) + 1);
+  }
+  return [...vistos].map(([k, n]) => n > 1 ? `${k} (${n} veces)` : k);
+}
+
+// =====================================================================
+// LECTURA AUTOMATICA
+// =====================================================================
+const PROVEEDORES = [
+  { id: 'gmail', nombre: 'Gmail', icono: 'sobre',
+    que: 'Lee los avisos de compra que te manda el banco y arma los movimientos.' },
+  { id: 'mercadopago', nombre: 'Mercado Pago', icono: 'billete',
+    que: 'Baja los movimientos directo de tu cuenta.' }
+];
+
+function seccionLectura() {
+  // Sin funciones desplegadas no hay a donde ir: mejor decirlo que ofrecer un
+  // boton que lleva a un error.
+  if (!FUNCTIONS_URL) {
+    return h('section',
+      h('div.ghead', 'Lectura automática'),
+      h('div.grp.pad', h('div.small.mut', { style: { lineHeight: '1.5' } },
+        'Falta configurar la dirección de las funciones. Hasta entonces los ',
+        'movimientos se cargan a mano o importando el resumen de la tarjeta.')));
+  }
+
+  return h('section',
+    h('div.ghead', 'Lectura automática'),
+    h('div.grp', PROVEEDORES.map(p => filaProveedor(p))),
+    h('div.small.mut', { style: { padding: '10px 4px 0', lineHeight: '1.5' } },
+      'Solo de lectura: la app no manda correos ni toca tu casilla. Podés cortar ',
+      'el permiso cuando quieras, acá o desde tu cuenta de Google.'));
+}
+
+function filaProveedor(p) {
+  const it = (state.integrations || []).find(x => x.proveedor === p.id && x.activo !== false);
+
+  if (!it) {
+    return h('button.li', { onclick: async () => {
+      try { await conectar(p.id); }
+      catch (e) { aviso(String(e.message || e)); }
+    } },
+      h('div.av', icono(p.icono, 17)),
+      h('div.m', h('div.t', `Conectar ${p.nombre}`), h('div.s', p.que)),
+      h('span.chev', icono('chev', 15)));
+  }
+
+  const cuando = it.ultima_sync ? fechaRelativa(it.ultima_sync.slice(0, 10)) : 'todavía no leyó';
+  return h('div.li', { class: `li ${it.ultimo_error ? 'sev sev-neg' : ''}` },
+    h('div', { class: 'av' + (it.ultimo_error ? ' neg' : ' pos') },
+      icono(it.ultimo_error ? 'rayo' : 'check', 17)),
+    h('div.m',
+      h('div.t', p.nombre),
+      h('div.s', it.ultimo_error ? it.ultimo_error.slice(0, 90)
+                                 : [it.cuenta, cuando].filter(Boolean).join(' · '))),
+    h('div', { style: { display: 'flex', gap: '6px', flex: 'none' } },
+      h('button.iconbtn', { 'aria-label': `Leer ${p.nombre} ahora`, onclick: async e => {
+        const b = e.currentTarget; b.disabled = true;
+        try { await leerAhora(p.id); aviso('Listo, fijate en Revisar'); }
+        catch (err) { aviso(String(err.message || err).slice(0, 120)); }
+        finally { b.disabled = false; }
+      } }, icono('sync', 17)),
+      h('button.iconbtn', { 'aria-label': `Desconectar ${p.nombre}`, onclick: async () => {
+        if (!await confirmar(`¿Cortar la conexión con ${p.nombre}? Lo que ya entró se queda.`,
+                             'Desconectar')) return;
+        await desconectar(p.id); aviso('Desconectado');
+      } }, icono('cerrar', 17))));
 }

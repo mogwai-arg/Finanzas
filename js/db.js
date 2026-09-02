@@ -120,6 +120,50 @@ export async function flushCola({ reintentarFallidas = false } = {}) {
   escribir(ROTAS_KEY, rotas);
 }
 
+// -------------------------------------------------------- integraciones
+export const FUNCTIONS_URL = CFG.FUNCTIONS_URL || '';
+
+/** El JWT de la sesion, que las Edge Functions necesitan para saber quien sos. */
+export async function token() {
+  const { data } = await sb.auth.getSession();
+  return data?.session?.access_token || '';
+}
+
+/**
+ * Manda al navegador a pedir el permiso.
+ *
+ * El JWT viaja en ?t= porque el que vuelve del proveedor es el navegador, no
+ * la app: la funcion necesita saber de quien es la cuenta que autorizo.
+ */
+export async function conectar(proveedor) {
+  if (!FUNCTIONS_URL) throw new Error('Falta FUNCTIONS_URL en la configuración.');
+  const t = await token();
+  if (!t) throw new Error('No hay sesión iniciada.');
+  location.href = `${FUNCTIONS_URL}/oauth-start?proveedor=${proveedor}&t=${encodeURIComponent(t)}`;
+}
+
+/** Corta la conexion sin borrar lo ya importado. */
+export async function desconectar(proveedor) {
+  const it = (state.integrations || []).find(x => x.proveedor === proveedor);
+  if (!it) return;
+  await guardar('integrations', { ...it, activo: false, access_token: null, refresh_token: null });
+}
+
+/** Pide una lectura ahora mismo, sin esperar al cron. */
+export async function leerAhora(proveedor) {
+  if (!FUNCTIONS_URL) throw new Error('Falta FUNCTIONS_URL en la configuración.');
+  const t = await token();
+  const r = await fetch(`${FUNCTIONS_URL}/${proveedor === 'gmail' ? 'gmail-sync' : 'mp-sync'}`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${t}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ user_id: state.user.id })
+  });
+  const texto = await r.text();
+  if (!r.ok) throw new Error(texto.slice(0, 200) || `Error ${r.status}`);
+  await sincronizar();
+  return texto;
+}
+
 // ------------------------------------------------------------------- auth
 export async function sesion() {
   if (DEMO) {

@@ -74,6 +74,8 @@ async function iniciar() {
 
   if (!usuario) { pantallaLogin(); return; }
 
+  avisarVueltaDeOAuth();
+
   decirEstado('Leyendo lo guardado…');
   const habiaCache = cargarCache();
   render();
@@ -115,6 +117,29 @@ function servicioOffline() {
       if (document.visibilityState === 'visible') reg.update().catch(() => {});
     });
   }).catch(() => {});
+}
+
+/**
+ * Vuelta del permiso de Gmail o Mercado Pago.
+ *
+ * La funcion oauth-callback termina mandando a #/ajustes?ok=gmail. Sin esto,
+ * el que autoriza vuelve a una pantalla igual a la que dejo y no sabe si
+ * salio bien.
+ */
+function avisarVueltaDeOAuth() {
+  const h = location.hash || '';
+  const i = h.indexOf('?');
+  if (i < 0) return;
+  const q = new URLSearchParams(h.slice(i + 1));
+  const ok = q.get('ok'), error = q.get('error');
+  if (!ok && !error) return;
+
+  const nombre = p => p === 'mercadopago' ? 'Mercado Pago' : 'Gmail';
+  location.hash = h.slice(0, i);        // limpiar, para no repetirlo al recargar
+  setTimeout(() => {
+    if (ok) { aviso(`${nombre(ok)} conectado`); sincronizar().catch(() => {}); }
+    else aviso('No se pudo conectar: ' + error.slice(0, 120));
+  }, 400);
 }
 
 function aplicarTema() {
