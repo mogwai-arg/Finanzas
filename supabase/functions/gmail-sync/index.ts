@@ -4,7 +4,7 @@
 // o a demanda con { user_id } en el body.
 // =====================================================================
 import { admin, json, CORS, hoyISO } from '../_shared/comun.ts';
-import { parsearMail, ES_RUIDO, ES_CONSUMO, type Movimiento } from '../_shared/parsers.ts';
+import { parsearMail, leerAumento, ES_RUIDO, ES_CONSUMO, type Movimiento } from '../_shared/parsers.ts';
 
 const REMITENTES = [
   'bancogalicia.com.ar', 'galicia.ar', 'modo.com.ar', 'mercadopago.com.ar', 'mercadolibre.com.ar'
@@ -155,6 +155,8 @@ async function sincronizar(sb: any, it: any) {
     nuevos.push(`${mov.comercio} ${mov.moneda === 'USD' ? 'U$S' : '$'}${mov.monto.toLocaleString('es-AR')}`);
   }
 
+  const aumentos = await buscarAumentos(sb, it, token);
+
   await sb.from('integrations')
     .update({ ultima_sync: new Date().toISOString(), ultimo_error: null }).eq('id', it.id);
 
@@ -165,7 +167,61 @@ async function sincronizar(sb: any, it: any) {
       cuerpo: nuevos.slice(0, 4).join(' · ')
     });
   }
-  return { user: it.user_id, cargados, ignorados, adoptados };
+  return { user: it.user_id, cargados, ignorados, adoptados, aumentos };
+}
+
+// ---------------------------------------------------------------------
+/**
+ * Avisos de aumento de los gastos fijos: la prepaga, el colegio, el alquiler.
+ *
+ * En vez de leer toda la casilla buscando aumentos —que serian miles de mails
+ * y un monton de falsos positivos— se busca al reves: por cada gasto fijo que
+ * ya tenes cargado, se busca su nombre en el correo reciente. Es una busqueda
+ * por cada uno, pero son pocos y acotados.
+ *
+ * No cambia nada solo: deja el aviso con el numero viejo y el nuevo, y la app
+ * ofrece el boton para actualizar. Un monto de un gasto fijo mal cambiado se
+ * arrastra todos los meses.
+ */
+async function buscarAumentos(sb: any, it: any, token: string) {
+  const { data: fijos } = await sb.from('recurrings').select('*')
+    .eq('user_id', it.user_id).eq('activo', true);
+  let propuestos = 0;
+
+  for (const r of fijos ?? []) {
+    const nombre = String(r.nombre || '').trim();
+    if (nombre.length < 4) continue;            // 'luz' traeria cualquier cosa
+
+    const q = `"${nombre}" newer_than:90d`;
+    const lista = await api(`messages?q=${encodeURIComponent(q)}&maxResults=5`, token)
+      .catch(() => ({ messages: [] }));
+
+    for (const m of lista.messages ?? []) {
+      const msg = await api(`messages/${m.id}?format=full`, token);
+      const cab = (n: string) => msg.payload?.headers?.find((h: any) =>
+        h.name.toLowerCase() === n)?.value ?? '';
+      const texto = cab('subject') + ' ' + textoDe(msg.payload).slice(0, 2000);
+
+      const a = leerAumento(texto);
+      if (!a) continue;
+
+      const actual = Number(r.monto_estimado) || 0;
+      // Menos de un 2 % es redondeo o un numero que no era el de la cuota.
+      if (!actual || Math.abs(a.monto - actual) / actual < 0.02) continue;
+
+      const { error } = await sb.from('notificaciones').insert({
+        user_id: it.user_id, tipo: 'aumento',
+        titulo: `${nombre} pasa a ${a.monto.toLocaleString('es-AR')}`,
+        cuerpo: `Tenés cargado ${actual.toLocaleString('es-AR')}` +
+                (a.desde ? ` · desde ${a.desde}` : ''),
+        ref_tabla: 'recurrings', ref_id: r.id,
+        datos: { monto: a.monto, anterior: actual, desde: a.desde, asunto: cab('subject') }
+      });
+      if (!error) propuestos++;   // el indice unico evita repetir el mismo aviso
+      break;                      // con el mas reciente de cada gasto alcanza
+    }
+  }
+  return propuestos;
 }
 
 // ---------------------------------------------------------------------

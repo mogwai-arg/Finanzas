@@ -147,6 +147,24 @@ var REGLAS = [
     }
   }
 ];
+var ANUNCIA_FUERTE = /(nuevo valor|nuevo importe|pasar[aá] a ser|pasa a ser|pasa a|se actualiza a|actualizad[oa] a|nueva cuota|queda en)/i;
+var ANUNCIA_DEBIL = /(valor de la cuota|cuota de|importe de|abonar[aá]s?|ser[aá] de)/i;
+var HABLA_DE_AUMENTO = /aument|ajuste|actualiza|incremento|nuevo valor|nueva cuota/i;
+var MES = /(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|octubre|noviembre|diciembre)/i;
+function leerAumento(texto) {
+  const t = (texto || "").replace(/\s+/g, " ");
+  const fuerte = t.match(ANUNCIA_FUERTE);
+  const debil = HABLA_DE_AUMENTO.test(t) ? t.match(ANUNCIA_DEBIL) : null;
+  const m = fuerte || debil;
+  if (!m || m.index == null) return null;
+  const cerca = t.slice(m.index, m.index + 160);
+  const imp = cerca.match(/(?:\$|ars)\s*(\d{1,3}(?:\.\d{3})+(?:,\d{1,2})?|\d+(?:,\d{1,2})?)/i);
+  if (!imp) return null;
+  const monto = plata(imp[1]);
+  if (!Number.isFinite(monto) || monto <= 0) return null;
+  const desde = t.match(new RegExp(`a partir de[^.]{0,20}?${MES.source}`, "i")) || t.match(MES);
+  return { monto, desde: desde ? desde[desde.length - 1].toLowerCase() : null };
+}
 function parsearMail(remitente, asunto, cuerpo, hoy) {
   const texto = `${asunto}
 ${cuerpo}`.replace(/ /g, " ");
@@ -348,6 +366,7 @@ async function sincronizar(sb, it) {
     cargados++;
     nuevos.push(`${mov.comercio} ${mov.moneda === "USD" ? "U$S" : "$"}${mov.monto.toLocaleString("es-AR")}`);
   }
+  const aumentos = await buscarAumentos(sb, it, token);
   await sb.from("integrations").update({ ultima_sync: (/* @__PURE__ */ new Date()).toISOString(), ultimo_error: null }).eq("id", it.id);
   if (cargados) {
     await sb.from("notificaciones").insert({
@@ -357,7 +376,38 @@ async function sincronizar(sb, it) {
       cuerpo: nuevos.slice(0, 4).join(" \xB7 ")
     });
   }
-  return { user: it.user_id, cargados, ignorados, adoptados };
+  return { user: it.user_id, cargados, ignorados, adoptados, aumentos };
+}
+async function buscarAumentos(sb, it, token) {
+  const { data: fijos } = await sb.from("recurrings").select("*").eq("user_id", it.user_id).eq("activo", true);
+  let propuestos = 0;
+  for (const r of fijos ?? []) {
+    const nombre = String(r.nombre || "").trim();
+    if (nombre.length < 4) continue;
+    const q = `"${nombre}" newer_than:90d`;
+    const lista = await api(`messages?q=${encodeURIComponent(q)}&maxResults=5`, token).catch(() => ({ messages: [] }));
+    for (const m of lista.messages ?? []) {
+      const msg = await api(`messages/${m.id}?format=full`, token);
+      const cab = (n) => msg.payload?.headers?.find((h) => h.name.toLowerCase() === n)?.value ?? "";
+      const texto = cab("subject") + " " + textoDe(msg.payload).slice(0, 2e3);
+      const a = leerAumento(texto);
+      if (!a) continue;
+      const actual = Number(r.monto_estimado) || 0;
+      if (!actual || Math.abs(a.monto - actual) / actual < 0.02) continue;
+      const { error } = await sb.from("notificaciones").insert({
+        user_id: it.user_id,
+        tipo: "aumento",
+        titulo: `${nombre} pasa a ${a.monto.toLocaleString("es-AR")}`,
+        cuerpo: `Ten\xE9s cargado ${actual.toLocaleString("es-AR")}` + (a.desde ? ` \xB7 desde ${a.desde}` : ""),
+        ref_tabla: "recurrings",
+        ref_id: r.id,
+        datos: { monto: a.monto, anterior: actual, desde: a.desde, asunto: cab("subject") }
+      });
+      if (!error) propuestos++;
+      break;
+    }
+  }
+  return propuestos;
 }
 async function insertar(sb, userId, mov, cuentas, cats, reglas, externoId) {
   let cuenta = mov.ultimos4 ? cuentas.find((c) => c.ultimos4 === mov.ultimos4) : null;

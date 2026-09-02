@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { parsearMail, plata, fechaAR } from './parsers.ts';
+import { leerAumento, parsearMail, plata, fechaAR } from './parsers.ts';
 
 let ok = 0; const t = (n: string, fn: () => void) => { fn(); ok++; console.log('  ok  ' + n); };
 const HOY = '2026-09-01';
@@ -66,6 +66,38 @@ t('un mail de promociones no genera movimiento', () => {
     'Descubri 25% de ahorro en gastronomia todos los sabados.', HOY);
   assert.equal(m, null);
 });
+t('el aviso de aumento del colegio', () => {
+  const a = leerAumento('Les informamos que la cuota de septiembre pasa a $ 259.000. ' +
+    'El valor anterior era de $ 235.000.');
+  assert.equal(a!.monto, 259000);
+  assert.equal(a!.desde, 'septiembre');
+});
+
+t('toma el valor nuevo y no el viejo', () => {
+  const a = leerAumento('Aumento de cuota. Valor anterior $ 100.000. Nuevo valor $ 120.000.');
+  assert.equal(a!.monto, 120000);
+});
+
+t('la prepaga con decimales', () => {
+  const a = leerAumento('Actualización de tu plan: a partir de octubre el nuevo importe ' +
+    'será de $ 187.450,50 mensuales.');
+  assert.equal(a!.monto, 187450.50);
+  assert.equal(a!.desde, 'octubre');
+});
+
+t('un mail sin anuncio de aumento no dice nada', () => {
+  assert.equal(leerAumento('Adjuntamos la factura de agosto por $ 259.000.'), null);
+});
+
+t('un aumento sin importe tampoco', () => {
+  assert.equal(leerAumento('Te informamos que habrá un aumento en la cuota a partir de octubre.'), null);
+});
+
+t('no confunde un descuento con el valor de la cuota', () => {
+  const a = leerAumento('Aumento de cuota: nueva cuota $ 300.000. Pagando en término, 10% de descuento.');
+  assert.equal(a!.monto, 300000);
+});
+
 t('una transferencia recibida entra como ingreso', () => {
   const m = parsearMail('avisos@bancogalicia.com.ar', 'Recibiste una transferencia',
     'Recibiste una transferencia por $ 150.000,00 de JUAN PEREZ el 02/09/2026.', HOY);

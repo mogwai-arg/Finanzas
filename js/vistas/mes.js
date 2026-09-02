@@ -21,6 +21,8 @@ export function vistaMes(root) {
                 esteMes.reduce((s, t) => s + t.monto, 0);
 
   root.append(h('div.flow',
+    ...aumentos(),
+
     (faltan.length || esteMes.length) ? h('div.grp.pad',
       h('div.ghead', { style: { margin: '0' } }, 'Falta pagar'),
       h('div', { class: 'cifra', style: { fontSize: '30px', marginTop: '5px' } }, plata(Math.round(total))),
@@ -176,4 +178,45 @@ function filaPresupuesto(b) {
       `${plata(Math.round(exceso))} de más`),
     exceso === 0 && b.restante > 0 && h('div.small.mut', { style: { marginTop: '7px' } },
       `quedan ${plata(Math.round(b.restante))}`));
+}
+
+/**
+ * Los aumentos que la app leyó del correo, esperando tu visto bueno.
+ *
+ * No se aplican solos a propósito: un monto de gasto fijo mal cambiado se
+ * arrastra todos los meses y es de los errores más difíciles de notar.
+ */
+function aumentos() {
+  return (state.notificaciones || [])
+    .filter(n => n.tipo === 'aumento' && !n.leida && n.datos?.monto)
+    .map(n => {
+      const r = state.recurrings.find(x => x.id === n.ref_id);
+      if (!r) return null;
+      const nuevo = Number(n.datos.monto);
+      const antes = Number(n.datos.anterior ?? r.monto_estimado) || 0;
+      const subio = antes ? Math.round(((nuevo - antes) / antes) * 100) : 0;
+
+      return h('div.aviso.amb',
+        h('div.av.amb', icono('sube', 17)),
+        h('div.txt',
+          h('div.tt', `${r.nombre} aumentó`),
+          h('div.ds',
+            `Un correo dice ${plata(nuevo, r.moneda)}`,
+            n.datos.desde ? ` desde ${n.datos.desde}` : '', '. ',
+            `Tenés cargado ${plata(antes, r.moneda)}`,
+            subio ? ` · ${subio > 0 ? '+' : ''}${subio} %` : '', '.'),
+          n.datos.asunto ? h('div.small.mut', { style: { marginTop: '6px' } },
+            '“', String(n.datos.asunto).slice(0, 80), '”') : null,
+          h('div.fila', { style: { marginTop: '12px' } },
+            h('button.btn.sec', { onclick: async () => {
+              await guardar('notificaciones', { ...n, leida: true });
+              aviso('Listo, no lo vuelvo a proponer');
+            } }, 'Dejalo como está'),
+            h('button.btn', { onclick: async () => {
+              await guardar('recurrings', { ...r, monto_estimado: nuevo });
+              await guardar('notificaciones', { ...n, leida: true });
+              aviso(`${r.nombre} actualizado`);
+            } }, 'Actualizar'))));
+    })
+    .filter(Boolean);
 }

@@ -169,6 +169,46 @@ export const REGLAS: Regla[] = [
   }
 ];
 
+/**
+ * Lee un aviso de aumento: la prepaga, el colegio, el alquiler.
+ *
+ * No alcanza con encontrar un importe —esos mails estan llenos de numeros:
+ * el anterior, el descuento, el total con recargo—. Se busca el que viene
+ * DESPUES de una frase que anuncia el valor nuevo, y se toma el primero: el
+ * que sigue a "pasa a" es el que importa, no el mas grande de la pagina.
+ */
+// Frases que por si solas anuncian un valor nuevo.
+const ANUNCIA_FUERTE = /(nuevo valor|nuevo importe|pasar[aá] a ser|pasa a ser|pasa a|se actualiza a|actualizad[oa] a|nueva cuota|queda en)/i;
+// Frases que sirven solo si el mail ademas habla de un aumento: 'cuota de
+// septiembre' aparece igual en una factura comun.
+const ANUNCIA_DEBIL = /(valor de la cuota|cuota de|importe de|abonar[aá]s?|ser[aá] de)/i;
+const HABLA_DE_AUMENTO = /aument|ajuste|actualiza|incremento|nuevo valor|nueva cuota/i;
+const MES = /(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|octubre|noviembre|diciembre)/i;
+
+export function leerAumento(texto: string): { monto: number; desde: string | null } | null {
+  const t = (texto || '').replace(/\s+/g, ' ');
+
+  const fuerte = t.match(ANUNCIA_FUERTE);
+  const debil = HABLA_DE_AUMENTO.test(t) ? t.match(ANUNCIA_DEBIL) : null;
+  const m = fuerte || debil;
+  if (!m || m.index == null) return null;
+
+  // El primer importe DESPUES del anuncio, en una ventana corta. Estos mails
+  // estan llenos de numeros —el valor anterior, el descuento por pago en
+  // termino, el total con recargo— y el que importa es el que sigue a la
+  // frase que anuncia el cambio, no el mas grande de la pagina.
+  const cerca = t.slice(m.index, m.index + 160);
+  // El patron es exacto a proposito: con [\d.]+ el punto final de la oracion
+  // quedaba adentro del importe —'259.000.'— y eso no es un numero.
+  const imp = cerca.match(/(?:\$|ars)\s*(\d{1,3}(?:\.\d{3})+(?:,\d{1,2})?|\d+(?:,\d{1,2})?)/i);
+  if (!imp) return null;
+  const monto = plata(imp[1]);
+  if (!Number.isFinite(monto) || monto <= 0) return null;
+
+  const desde = t.match(new RegExp(`a partir de[^.]{0,20}?${MES.source}`, 'i')) || t.match(MES);
+  return { monto, desde: desde ? desde[desde.length - 1].toLowerCase() : null };
+}
+
 /** Corre todas las reglas sobre un mail. Devuelve el primer match. */
 export function parsearMail(remitente: string, asunto: string, cuerpo: string, hoy: string): Movimiento | null {
   const texto = `${asunto}\n${cuerpo}`.replace(/ /g, ' ');
