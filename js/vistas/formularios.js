@@ -6,7 +6,8 @@ import { h, icono, iconoDe, iconoDeCategoria, selectorDeIcono, hoja, aviso, camp
          select, confirmar, selectorDeDia } from '../ui.js';
 import { state, guardar, borrar } from '../db.js';
 import * as F from '../finance.js';
-import { plata, periodoLargo, hoyISO, nombreDe, etiquetaCuenta, aNumero as num } from '../formato.js';
+import { plata, plataPartida, periodoLargo, hoyISO, nombreDe, etiquetaCuenta,
+         aNumero as num } from '../formato.js';
 
 
 const DIAS = [['1','lun'],['2','mar'],['3','mié'],['4','jue'],['5','vie'],['6','sáb'],['0','dom']];
@@ -207,14 +208,70 @@ export function formPresupuesto(periodo = hoyISO().slice(0, 7)) {
                                         .map(b => [b.category_id, b]));
   const campos = new Map();
 
+  // Con cuánto se cuenta: lo que entró este mes, y si todavía no entró nada,
+  // lo del mes pasado, avisando que es una referencia y no un dato.
+  const entro = F.resumenMes(state.transactions, periodo, 'ARS').ingresos;
+  const antes = F.resumenMes(state.transactions, F.mesAnterior(periodo), 'ARS').ingresos;
+  const cuento = entro > 0 ? entro : antes;
+  const estimado = entro <= 0 && antes > 0;
+
+  const fijos = F.recurrentesDelMes(state.recurrings, state.recurring_payments, periodo)
+    .filter(r => r.moneda !== 'USD')
+    .reduce((s, r) => s + Number(r.valor || 0), 0);
+
+  const { simbolo, numero } = plataPartida(Math.round(cuento), 'ARS');
+  const repartido = h('span', { class: 'tabnum' }, plata(0));
+  const sinRepartir = h('span', { class: 'tabnum' }, plata(0));
+  // El rótulo cambia con el signo: "sin repartir $1.900.000" cuando en
+  // realidad te pasaste por esa plata se lee al revés de lo que pasa.
+  const rotulo = h('span.small.mut', 'Sin repartir');
+  const nota = h('div.small.mut', { style: { lineHeight: '1.5', marginTop: '9px' } });
+
+  /** Lo repartido y lo que queda, mientras se escribe: repartir es restar. */
+  const recalcular = () => {
+    let suma = 0;
+    for (const inp of campos.values()) suma += num(inp.value) || 0;
+    const queda = Math.round(cuento - suma);
+    repartido.textContent = plata(Math.round(suma));
+    sinRepartir.textContent = plata(Math.abs(queda));
+    sinRepartir.style.color = queda < 0 ? 'var(--amb)' : 'var(--tx)';
+    rotulo.textContent = queda < 0 ? 'De más' : 'Sin repartir';
+    nota.replaceChildren(queda < 0
+      ? `Estás repartiendo ${plata(Math.abs(queda))} más de lo que entra.`
+      : cuento > 0 ? `Te queda ${plata(queda)} sin asignar.` : '');
+  };
+
+  const cabecera = h('div.grp.pad', { style: { marginBottom: '18px' } },
+    h('div.cifra', h('em', simbolo), numero),
+    h('div.small.mut', { style: { marginTop: '5px' } },
+      cuento <= 0 ? 'todavía no hay ingresos cargados'
+      : estimado ? `entraron en ${periodoLargo(F.mesAnterior(periodo))} · sirve de referencia`
+                 : `entraron en ${periodoLargo(periodo)}`),
+
+    cuento > 0 && h('div', { style: { marginTop: '13px', paddingTop: '13px',
+                                      borderTop: '1px solid var(--line)', fontSize: '13.5px' } },
+      h('div', { style: { display: 'flex', justifyContent: 'space-between', gap: '10px' } },
+        h('span.small.mut', 'Repartido en topes'), repartido),
+      h('div', { style: { display: 'flex', justifyContent: 'space-between', gap: '10px',
+                          marginTop: '5px' } },
+        rotulo, sinRepartir),
+      nota),
+
+    fijos > 0 && h('div.small.mut', { style: { marginTop: '11px', lineHeight: '1.5',
+                                               color: 'var(--tx3)' } },
+      `Ojo que tus gastos fijos de este mes suman ${plata(Math.round(fijos))}. `,
+      'Los que tengan categoría entran acá adentro, no aparte.'));
+
   const cuerpo = h('div',
+    cabecera,
     h('div.small.mut', { style: { marginBottom: '18px', lineHeight: '1.5' } },
       `Topes de ${periodoLargo(periodo)}. Dejá en blanco las categorías que no querés seguir: `,
       'un presupuesto con diez renglones que no mirás es peor que uno con tres.'),
     ...cats.map(cat => {
       const b = actuales.get(cat.id);
       const inp = h('input', { type: 'text', inputmode: 'decimal',
-                               value: b ? String(b.monto) : '', placeholder: '0' });
+                               value: b ? String(b.monto) : '', placeholder: '0',
+                               oninput: recalcular });
       campos.set(cat.id, inp);
       return h('div.f', { style: { marginBottom: '13px' } },
         h('label', { style: { display: 'flex', alignItems: 'center', gap: '8px' } },
@@ -232,6 +289,7 @@ export function formPresupuesto(periodo = hoyISO().slice(0, 7)) {
       cerrar(); aviso(n ? `${n} topes guardados` : 'Presupuesto vacío');
     } }, 'Guardar'));
 
+  recalcular();
   const cerrar = hoja('Presupuesto', cuerpo);
 }
 
