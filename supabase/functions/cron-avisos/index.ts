@@ -13,7 +13,7 @@
 // =====================================================================
 import { admin, json, CORS, usuarioDe } from '../_shared/comun.ts';
 import { avisosDelDia } from '../_shared/avisos.ts';
-import { enviarPush, clavesDelEntorno, bytesAB64u } from '../_shared/push.ts';
+import { enviarPush, clavesDelEntorno, faltanClaves, bytesAB64u } from '../_shared/push.ts';
 
 /** Al teléfono van a lo sumo dos: el resto está en la app cuando la abra. */
 const MAX_POR_VEZ = 2;
@@ -55,7 +55,8 @@ Deno.serve(async (req) => {
   if (cuerpo.probar) {
     const u = await usuarioDe(req);
     if (!u) return json({ error: 'sin sesión' }, 401);
-    if (!claves) return json({ enviados: 0, motivo: 'faltan las claves VAPID' });
+    if (!claves) return json({ enviados: 0,
+      motivo: `falta ${faltanClaves().join(' y ')} en los secretos de Supabase` });
     const n = await mandar(sb, claves, u.id, [{
       tipo: 'prueba', titulo: 'Soy Bishu', tag: 'prueba', url: './#/hoy',
       cuerpo: 'Si ves esto, los avisos te llegan aunque la app esté cerrada.'

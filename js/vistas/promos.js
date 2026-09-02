@@ -239,15 +239,19 @@ function hojaTraer() {
 
       if (!todas.length) { lista.replaceChildren(nadaQueMostrar(revision)); return; }
 
+      const conLoQueTengo = porComercio(mias);
+      const lasDemas = porComercio(resto);
+
       lista.replaceChildren(
-        mias.length
-          ? h('div', h('div.ghead', 'Con lo que tenés'), h('div.grp', mias.map(fila)))
+        conLoQueTengo.length
+          ? h('div', h('div.ghead', 'Con lo que tenés'),
+              h('div.grp', conLoQueTengo.map(fila)))
           : h('div.grp.pad', h('div.small.mut', { style: { lineHeight: '1.5' } },
               'Ninguna de las vigentes es para tus tarjetas o billeteras. ',
               'Abajo están todas por si te sirve alguna.')),
-        resto.length ? h('div', { style: { marginTop: '18px' } },
-          h('div.ghead', `Las demás · ${resto.length}`),
-          h('div.grp', resto.slice(0, 25).map(fila))) : null);
+        lasDemas.length ? h('div', { style: { marginTop: '18px' } },
+          h('div.ghead', `Las demás · ${lasDemas.length}`),
+          h('div.grp', lasDemas.slice(0, 25).map(fila))) : null);
     } catch (e) {
       lista.replaceChildren(h('div.small.mut', { style: { lineHeight: '1.5' } },
         String(e.message || e)));
@@ -278,6 +282,23 @@ function hojaTraer() {
   cargar();
 }
 
+/**
+ * Una fila por comercio, con la mejor adelante.
+ *
+ * Sin esto YPF aparecía seis veces seguidas —una por banco— y la pantalla se
+ * volvía ilegible justo donde hay que decidir rápido. Las otras no se pierden:
+ * van en una línea, que es todo lo que hace falta para saber que están.
+ */
+function porComercio(promos) {
+  const grupos = new Map();
+  for (const p of promos.slice().sort(F.ordenPromo)) {
+    const k = String(p.comercio || p.emisor || '').toLowerCase();
+    if (!grupos.has(k)) grupos.set(k, { ...p, otras: [] });
+    else grupos.get(k).otras.push(p);
+  }
+  return [...grupos.values()];
+}
+
 /** Una promo traída, con el botón para guardarla como propia. */
 function fila(p) {
   const dias = p.fechas?.length ? p.fechas.map(f => `el ${Number(f.slice(8))}/${Number(f.slice(5, 7))}`).join(' y ')
@@ -297,6 +318,9 @@ function fila(p) {
       h('div.s', [p.tipo, p.emisorNombre || p.emisor, dias].filter(Boolean).join(' · ')),
       p.medios?.length ? h('div.s', { style: { color: 'var(--tx3)' } },
         p.medios.join(' · ').toLowerCase()) : null,
+      p.otras?.length ? h('div.s', { style: { color: 'var(--tx3)' } },
+        'también ' + p.otras.slice(0, 3).map(o =>
+          `${o.emisorNombre || o.emisor} ${Number(o.valor) || 0}%`).join(', ')) : null,
       p.nota ? h('div.s', { style: { color: 'var(--tx3)' } }, p.nota) : null,
       p.tope ? h('div.s', { style: { color: 'var(--tx3)' } },
         `tope ${plata(p.tope)}${p.topePeriodo === 'semanal' ? ' por semana'

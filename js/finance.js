@@ -309,7 +309,15 @@ export function resumenMes(txs, per, moneda = 'ARS') {
   let gastos = 0, ingresos = 0, reintegros = 0, movido = 0;
   const porCategoria = {};
   for (const tx of txs) {
-    if (tx.moneda !== moneda) continue;
+    // Comprar dolares es una transferencia en pesos que deja dolares del otro
+    // lado. Mirando en dolares, esa plata entro: si solo se mira la moneda de
+    // origen, la operacion no existe en ninguna de las dos pantallas.
+    if (tx.moneda !== moneda) {
+      if (tx.tipo === 'transferencia' && tx.moneda_destino === moneda &&
+          tx.monto_destino != null && periodo(parseFecha(tx.fecha)) === per)
+        movido += Number(tx.monto_destino) || 0;
+      continue;
+    }
     if (periodo(parseFecha(tx.fecha)) !== per) continue;
     const m = Number(tx.monto);
     if (tx.tipo === 'transferencia') { movido += m; continue; }
@@ -324,6 +332,24 @@ export function resumenMes(txs, per, moneda = 'ARS') {
     movido: round2(movido),          // transferencias: informativo, no es gasto
     balance: round2(ingresos - gastos), porCategoria
   };
+}
+
+/**
+ * Lo que se ve en una moneda, con la pata que corresponde a cada movimiento.
+ *
+ * Una transferencia entre monedas es una sola fila en la base pero dos cosas
+ * distintas segun desde donde se mire: en pesos salieron 148.500 y en dolares
+ * entraron 100. Antes la lista filtraba por la moneda de origen nada mas, asi
+ * que la compra de dolares no aparecia en la pantalla de dolares.
+ */
+export function movimientosEnMoneda(txs, moneda) {
+  const out = [];
+  for (const tx of txs) {
+    if (tx.moneda === moneda) { out.push({ tx, entrante: false, monto: Number(tx.monto) || 0 }); continue; }
+    if (tx.tipo === 'transferencia' && tx.moneda_destino === moneda && tx.monto_destino != null)
+      out.push({ tx, entrante: true, monto: Number(tx.monto_destino) || 0 });
+  }
+  return out;
 }
 
 /**

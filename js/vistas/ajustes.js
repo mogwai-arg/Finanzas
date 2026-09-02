@@ -220,9 +220,11 @@ function seccionAvisos() {
           'Son de esta app y se generan una sola vez. Si las cambiás más ',
           'adelante, los teléfonos que ya tenían avisos dejan de recibirlos.'),
         clave('VAPID_PUBLIC', d.VAPID_PUBLIC,
-              'Cloudflare Pages → Settings → Environment variables. Después hay que volver a publicar.'),
+              'Va en DOS lados: Cloudflare Pages → Environment variables (y republicar), ' +
+              'y también en Supabase → Edge Functions → Secrets. El servidor la manda en ' +
+              'cada aviso para que el teléfono pueda verificar la firma.'),
         clave('VAPID_PRIVATE', d.VAPID_PRIVATE,
-              'Supabase → Edge Functions → Secrets. No la compartas.'),
+              'Solo en Supabase → Edge Functions → Secrets. No la compartas.'),
         clave('VAPID_SUBJECT', `mailto:${state.user?.email || 'vos@ejemplo.com'}`,
               'También en los secretos de Supabase.')));
     }).catch(e => caja.replaceChildren(String(e.message || e)));

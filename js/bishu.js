@@ -62,6 +62,12 @@ export function bishu(animo = 'contento', tam = 44) {
 const plata = n => new Intl.NumberFormat('es-AR', { maximumFractionDigits: 0 })
   .format(Math.abs(Math.round(Number(n) || 0)));
 
+/** '25 % de descuento con MODO', sin repetir lo que ya dice el título. */
+const detalle = p => [
+  `${Number(p.valor) || 0} % de ${p.tipo || 'descuento'}`,
+  p.medio ? `con ${p.medio}` : null
+].filter(Boolean).join(' ') + '.';
+
 /**
  * La única cosa que Bishu tiene para decir ahora, elegida por urgencia.
  *
@@ -71,6 +77,15 @@ const plata = n => new Intl.NumberFormat('es-AR', { maximumFractionDigits: 0 })
  */
 export function queDiceBishu(d, hoy = new Date()) {
   const dia = hoy.getDate();
+
+  // 0. Una promo que aplica hoy vence hoy: no hay nada que pueda esperar
+  //    menos. Va antes que todo lo demás, y por eso no hace falta una
+  //    sección de promos aparte repitiendo lo mismo dos renglones más arriba.
+  const hoyMismo = (d.promos || []).find(x => x.dias === 0);
+  if (hoyMismo) {
+    return { animo: 'festejo', ir: '/promos',
+             texto: `Hoy es la de ${hoyMismo.titulo}. ${detalle(hoyMismo)}` };
+  }
 
   // 1. La app vive de que le cuenten los gastos. Tres días en silencio es la
   //    diferencia entre un mes que cierra y uno que no.
@@ -96,7 +111,16 @@ export function queDiceBishu(d, hoy = new Date()) {
     return { animo: 'contento', texto: 'Vas casi igual que el mes pasado a esta altura.' };
   }
 
-  // 3. Recién arrancado el mes todavía no hay con qué comparar.
+  // 3. La que viene, si viene pronto. Las de una vez al mes son las que uno
+  //    se pierde, y avisarlas dos días antes es lo que las hace servir.
+  const proxima = (d.promos || []).find(x => x.dias <= 3);
+  if (proxima) {
+    return { animo: 'contento', ir: '/promos',
+             texto: `${proxima.dias === 1 ? 'Mañana' : `El ${proxima.cuando}`} cae la de ` +
+                    `${proxima.titulo}. ${detalle(proxima)}` };
+  }
+
+  // 4. Recién arrancado el mes todavía no hay con qué comparar.
   if (d.cargoHoy) return { animo: 'contento', texto: 'Ya está todo cargado por hoy.' };
   if (dia <= 4) return { animo: 'contento', texto: 'Arranca el mes. Cargá lo de hoy y yo llevo la cuenta.' };
   return { animo: 'dormido', texto: 'Por acá tranquilo. Cargá lo que gastes y te aviso si algo se desvía.' };

@@ -133,6 +133,9 @@ function leerDatosClash(js, rubro = "", ref = /* @__PURE__ */ new Date()) {
     vistos.add(p.id);
     out.push({
       id: String(p.id),
+      // El sitio ordena por este puntaje y muestra una sola por banco y
+      // comercio: la mejor. Sin eso, YPF aparece seis veces seguidas.
+      puntaje: Number(p.score) || 0,
       emisor: String(p.bk),
       emisorNombre: emisorNombre || void 0,
       // El nombre y no el identificador: 'Puma Energy' se lee, 'pumaenergy' no.
@@ -149,8 +152,18 @@ function leerDatosClash(js, rubro = "", ref = /* @__PURE__ */ new Date()) {
       url: rubro ? `https://promos.clash.com.ar/${rubro}/promocion/${slug(titulo)}-${p.id}/` : null
     });
   }
-  return out;
+  return unaPorBancoYComercio(out);
 }
+function unaPorBancoYComercio(promos) {
+  const mejor = /* @__PURE__ */ new Map();
+  for (const p of promos) {
+    const k = `${p.emisor}|${p.comercio}`;
+    const y = mejor.get(k);
+    if (!y || gana(p, y)) mejor.set(k, p);
+  }
+  return [...mejor.values()];
+}
+var gana = (a, b) => (a.puntaje ?? 0) !== (b.puntaje ?? 0) ? (a.puntaje ?? 0) > (b.puntaje ?? 0) : a.valor !== b.valor ? a.valor > b.valor : (a.tope ?? 0) > (b.tope ?? 0);
 function leerPromosClash(html, ref = /* @__PURE__ */ new Date()) {
   const out = [];
   const vistos = /* @__PURE__ */ new Set();

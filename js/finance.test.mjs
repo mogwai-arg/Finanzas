@@ -327,6 +327,34 @@ t('en Hoy solo se ven las que pediste que te recuerde', () => {
   assert.equal(F.fechaISO(v[1].fecha), '2026-09-10');
 });
 
+t('comprar dólares se ve en las dos monedas', () => {
+  const txs = [{ id: 'c', tipo: 'transferencia', moneda: 'ARS', monto: 148500,
+                 moneda_destino: 'USD', monto_destino: 100, fecha: '2026-09-02',
+                 account_id: 'gal', destino_account_id: 'usd' }];
+  // En pesos salieron 148.500; en dólares entraron 100. Antes la pantalla de
+  // dólares no mostraba nada.
+  const enPesos = F.movimientosEnMoneda(txs, 'ARS');
+  assert.equal(enPesos.length, 1);
+  assert.equal(enPesos[0].monto, 148500);
+  assert.equal(enPesos[0].entrante, false);
+
+  const enDolares = F.movimientosEnMoneda(txs, 'USD');
+  assert.equal(enDolares.length, 1);
+  assert.equal(enDolares[0].monto, 100);
+  assert.equal(enDolares[0].entrante, true);
+
+  assert.equal(F.resumenMes(txs, '2026-09', 'ARS').movido, 148500);
+  assert.equal(F.resumenMes(txs, '2026-09', 'USD').movido, 100);
+});
+
+t('una movida entre cuentas de la misma moneda se ve una sola vez', () => {
+  const txs = [{ id: 'm', tipo: 'transferencia', moneda: 'ARS', monto: 50000,
+                 fecha: '2026-09-02', account_id: 'gal', destino_account_id: 'mp' }];
+  assert.equal(F.movimientosEnMoneda(txs, 'ARS').length, 1);
+  assert.equal(F.movimientosEnMoneda(txs, 'USD').length, 0);
+  assert.equal(F.resumenMes(txs, '2026-09', 'USD').movido, 0);
+});
+
 t('el reintegro respeta el tope', () => {
   assert.equal(F.reintegroEstimado(200000, promos[0]), 20000);
   assert.equal(F.reintegroEstimado(50000, promos[0]), 10000);

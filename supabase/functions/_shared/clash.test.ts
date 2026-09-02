@@ -135,8 +135,15 @@ const datos = leerDatosClash(js, 'combustibles', new Date(2026, 8, 2));
 console.log('\nLAS PROMOS, COMO VIENEN AHORA');
 
 t('lee todas las que tienen algo que mostrar', () => {
-  // La quinta no tiene ni porcentaje ni cuotas: no es una promo.
+  // Una no tiene ni porcentaje ni cuotas: no es una promo.
   assert.equal(datos.length, 4);
+});
+
+t('el mismo banco en el mismo comercio va una sola vez, con la mejor', () => {
+  // Galicia tiene dos en YPF: la de 25 % con MODO y una de 15 % con débito.
+  const ypf = datos.filter(p => p.emisor === 'galicia' && p.comercio === 'YPF');
+  assert.equal(ypf.length, 1);
+  assert.equal(ypf[0].valor, 25);
 });
 
 t('la de Galicia queda entera', () => {

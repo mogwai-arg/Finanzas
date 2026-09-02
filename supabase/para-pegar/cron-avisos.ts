@@ -256,10 +256,15 @@ async function enviarPush(sub, aviso, claves) {
   return { ok: r.ok, status: r.status, muerta: r.status === 404 || r.status === 410 };
 }
 function clavesDelEntorno() {
-  const publica = Deno.env.get("VAPID_PUBLIC")?.trim();
-  const privada = Deno.env.get("VAPID_PRIVATE")?.trim();
-  if (!publica || !privada) return null;
-  return { publica, privada, contacto: Deno.env.get("VAPID_SUBJECT")?.trim() || "mailto:avisos@bishusha.app" };
+  if (faltanClaves().length) return null;
+  return {
+    publica: Deno.env.get("VAPID_PUBLIC").trim(),
+    privada: Deno.env.get("VAPID_PRIVATE").trim(),
+    contacto: Deno.env.get("VAPID_SUBJECT")?.trim() || "mailto:avisos@bishusha.app"
+  };
+}
+function faltanClaves() {
+  return ["VAPID_PUBLIC", "VAPID_PRIVATE"].filter((n) => !Deno.env.get(n)?.trim());
 }
 
 // supabase/functions/cron-avisos/index.ts
@@ -293,7 +298,10 @@ Deno.serve(async (req) => {
   if (cuerpo.probar) {
     const u = await usuarioDe(req);
     if (!u) return json({ error: "sin sesi\xF3n" }, 401);
-    if (!claves) return json({ enviados: 0, motivo: "faltan las claves VAPID" });
+    if (!claves) return json({
+      enviados: 0,
+      motivo: `falta ${faltanClaves().join(" y ")} en los secretos de Supabase`
+    });
     const n = await mandar(sb, claves, u.id, [{
       tipo: "prueba",
       titulo: "Soy Bishu",

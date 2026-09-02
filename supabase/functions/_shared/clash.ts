@@ -22,6 +22,7 @@
 
 export type PromoClash = {
   id: string;
+  puntaje?: number;
   emisor: string;
   emisorNombre?: string;
   comercio: string;
@@ -218,6 +219,9 @@ export function leerDatosClash(js: string, rubro = '', ref = new Date()): PromoC
     vistos.add(p.id);
     out.push({
       id: String(p.id),
+      // El sitio ordena por este puntaje y muestra una sola por banco y
+      // comercio: la mejor. Sin eso, YPF aparece seis veces seguidas.
+      puntaje: Number(p.score) || 0,
       emisor: String(p.bk),
       emisorNombre: emisorNombre || undefined,
       // El nombre y no el identificador: 'Puma Energy' se lee, 'pumaenergy' no.
@@ -236,8 +240,32 @@ export function leerDatosClash(js: string, rubro = '', ref = new Date()): PromoC
       url: rubro ? `https://promos.clash.com.ar/${rubro}/promocion/${slug(titulo)}-${p.id}/` : null
     });
   }
-  return out;
+  return unaPorBancoYComercio(out);
 }
+
+/**
+ * Una promo por banco y comercio: la mejor.
+ *
+ * Un mismo banco suele tener varias en el mismo comercio —una con debito,
+ * otra con credito, otra solo para un plan— y listarlas todas convierte la
+ * pantalla en seis renglones de YPF. El sitio hace exactamente esto: se queda
+ * con la de mayor puntaje. A igual puntaje decide el porcentaje, y despues el
+ * tope, que es lo que la hace valer.
+ */
+export function unaPorBancoYComercio(promos: PromoClash[]): PromoClash[] {
+  const mejor = new Map<string, PromoClash>();
+  for (const p of promos) {
+    const k = `${p.emisor}|${p.comercio}`;
+    const y = mejor.get(k);
+    if (!y || gana(p, y)) mejor.set(k, p);
+  }
+  return [...mejor.values()];
+}
+
+const gana = (a: PromoClash, b: PromoClash) =>
+  (a.puntaje ?? 0) !== (b.puntaje ?? 0) ? (a.puntaje ?? 0) > (b.puntaje ?? 0)
+  : a.valor !== b.valor ? a.valor > b.valor
+  : (a.tope ?? 0) > (b.tope ?? 0);
 
 // =====================================================================
 // EL HTML, POR SI ALGUN DIA VUELVE A VENIR ARMADO

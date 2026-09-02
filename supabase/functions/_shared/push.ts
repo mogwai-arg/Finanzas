@@ -138,10 +138,24 @@ export async function enviarPush(sub: Suscripcion, aviso: Aviso, claves: Claves)
   return { ok: r.ok, status: r.status, muerta: r.status === 404 || r.status === 410 };
 }
 
-/** Las claves del entorno, o null si todavia no estan puestas. */
+/**
+ * Las claves del entorno, o null si todavia no estan puestas.
+ *
+ * Las DOS van del lado del servidor, no solo la privada: la publica viaja en
+ * la cabecera de cada aviso (el `k=`) para que el servicio de push sepa con
+ * que verificar la firma. Que ademas tenga que estar en el navegador no la
+ * exime de estar aca.
+ */
 export function clavesDelEntorno(): Claves | null {
-  const publica = Deno.env.get('VAPID_PUBLIC')?.trim();
-  const privada = Deno.env.get('VAPID_PRIVATE')?.trim();
-  if (!publica || !privada) return null;
-  return { publica, privada, contacto: Deno.env.get('VAPID_SUBJECT')?.trim() || 'mailto:avisos@bishusha.app' };
+  if (faltanClaves().length) return null;
+  return {
+    publica: Deno.env.get('VAPID_PUBLIC')!.trim(),
+    privada: Deno.env.get('VAPID_PRIVATE')!.trim(),
+    contacto: Deno.env.get('VAPID_SUBJECT')?.trim() || 'mailto:avisos@bishusha.app'
+  };
+}
+
+/** Cuales faltan, por nombre: un "faltan las claves" a secas no se puede arreglar. */
+export function faltanClaves(): string[] {
+  return ['VAPID_PUBLIC', 'VAPID_PRIVATE'].filter(n => !Deno.env.get(n)?.trim());
 }

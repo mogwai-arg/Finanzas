@@ -166,12 +166,11 @@ export function formRecurrente(r = null) {
     moneda: select([{ value: 'ARS', label: 'Pesos' }, { value: 'USD', label: 'Dólares' }],
                    { value: r?.moneda || 'ARS' }),
     dia: selectorDeDia(r?.dia_vencimiento || 10, { titulo: '¿Qué día vence?' }),
-    cat: select([{ value: '', label: 'Sin categoría' },
-      ...state.categories.filter(x => x.tipo === 'gasto').map(x => ({ value: x.id, label: x.nombre }))],
-      { value: r?.category_id || '' }),
+    cat: select(opcionesCategoria('gasto'), { value: r?.category_id || '' }),
     cuenta: select([{ value: '', label: '—' }, ...cuentas.map(x => ({ value: x.id, label: etiquetaCuenta(x) }))],
                    { value: r?.account_id || '' })
   };
+  conectarCategoria(c.cat, () => 'gasto');
   const cVar = h('input', { type: 'checkbox', checked: !!r?.variable });
 
   const cerrar = hoja(nuevo ? 'Nuevo gasto fijo' : 'Editar gasto fijo', h('div',
@@ -346,6 +345,66 @@ export function formPromo(p = null) {
 // =====================================================================
 // CATEGORIAS
 // =====================================================================
+
+/**
+ * Crear una categoría sin salir de donde estabas.
+ *
+ * Cargando un gasto uno descubre que le falta "Mascotas", y mandarlo a
+ * Ajustes es perder el gasto a medio cargar. Devuelve la categoría creada, o
+ * null si cerró sin guardar.
+ */
+export function nuevaCategoriaRapida(tipo = 'gasto') {
+  return new Promise(resolve => {
+    let hecha = null, ic = null;
+    const nom = h('input', { type: 'text', placeholder: 'Mascotas' });
+    const cerrar = hoja('Nueva categoría', h('div',
+      campo('Nombre', nom),
+      h('div.f', h('label', 'Ícono'),
+        h('div.small.mut', { style: { marginTop: '-3px', marginBottom: '9px' } },
+          'El primero lo elige solo, según el nombre.'),
+        selectorDeIcono(null, { alElegir: v => ic = v })),
+      h('button.btn', { style: { marginTop: '4px' }, onclick: async () => {
+        const nombre = nom.value.trim();
+        if (!nombre) { nom.focus(); aviso('Falta el nombre'); return; }
+        hecha = await guardar('categories', {
+          nombre, tipo, icono: ic, orden: state.categories.length + 1 });
+        cerrar();
+        aviso('Categoría creada');
+      } }, 'Crear')), { onClose: () => resolve(hecha) });
+    setTimeout(() => nom.focus(), 120);
+  });
+}
+
+const NUEVA = '__nueva__';
+
+/** Las categorías de ese tipo, más la opción de crear una ahí mismo. */
+export const opcionesCategoria = tipo => [
+  { value: '', label: 'Sin categoría' },
+  ...state.categories.filter(c => c.tipo === tipo).map(c => ({ value: c.id, label: c.nombre })),
+  { value: NUEVA, label: '+ Crear una categoría…' }
+];
+
+/** Vuelve a armar las opciones de un select de categoría, dejando `valor` elegido. */
+export function pintarCategorias(sel, tipo, valor) {
+  sel.replaceChildren(...opcionesCategoria(tipo).map(o =>
+    h('option', { value: o.value }, o.label)));
+  sel.value = valor || '';
+}
+
+/**
+ * Deja que un select de categoría cree una nueva cuando se elige esa opción.
+ * `alCambiar` recibe el id elegido, incluido el de la recién creada.
+ */
+export function conectarCategoria(sel, tipoDe = () => 'gasto', alCambiar = () => {}) {
+  let previo = sel.value;
+  sel.addEventListener('change', async () => {
+    if (sel.value !== NUEVA) { previo = sel.value; alCambiar(sel.value); return; }
+    const cat = await nuevaCategoriaRapida(tipoDe());
+    pintarCategorias(sel, tipoDe(), cat ? cat.id : previo);
+    previo = sel.value;
+    alCambiar(sel.value);
+  });
+}
 export function formCategorias() {
   const lista = h('div.grp');
   const pintar = () => {

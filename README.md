@@ -136,7 +136,8 @@ En este orden, que importa: primero el SQL, después las funciones.
    | `MP_CLIENT_SECRET` | el de Mercado Pago (o vacío por ahora) |
    | `FUNCTIONS_URL` | `https://<TU-PROJECT-REF>.supabase.co/functions/v1` |
    | `APP_URL` | `https://<TU-APP>.pages.dev` |
-   | `VAPID_PRIVATE` | para los avisos al teléfono (ver abajo) |
+   | `VAPID_PUBLIC` | para los avisos al teléfono (ver abajo) |
+   | `VAPID_PRIVATE` | ídem |
    | `VAPID_SUBJECT` | `mailto:tu@correo.com` |
 
    `SUPABASE_URL` y `SUPABASE_SERVICE_ROLE_KEY` ya están: los pone Supabase.
@@ -225,9 +226,12 @@ y hay que volver a prenderlos de a uno.
 
    Apagarle el *Verify JWT* a `cron-avisos` para evitar esto sería peor: deja
    el cron abierto a que cualquiera lo dispare.
-2. `VAPID_PRIVATE` y `VAPID_SUBJECT` van a **Supabase → Edge Functions →
-   Secrets**.
-3. `VAPID_PUBLIC` va a **Cloudflare Pages → Settings → Environment
+2. En **Supabase → Edge Functions → Secrets** van **las tres**:
+   `VAPID_PRIVATE`, `VAPID_SUBJECT` y también `VAPID_PUBLIC`. La pública no es
+   solo cosa del navegador: viaja en la cabecera de cada aviso (el `k=`) para
+   que el servicio de push sepa con qué verificar la firma. Sin ella el aviso
+   de prueba contesta `falta VAPID_PUBLIC en los secretos de Supabase`.
+3. `VAPID_PUBLIC` va **además** a **Cloudflare Pages → Settings → Environment
    variables**, y hay que volver a publicar para que entre en `config.js`.
 4. Volver a la app: **Ajustes → Avisos → Prender los avisos**, y después
    **Mandarme uno de prueba**. Si llega, está.

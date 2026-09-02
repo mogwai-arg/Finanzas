@@ -14,6 +14,7 @@
 // =====================================================================
 import { h, icono, iconoDe, hoja, aviso, campo, select, confirmar } from '../ui.js';
 import { state, guardar, borrar } from '../db.js';
+import { opcionesCategoria, pintarCategorias, conectarCategoria } from './formularios.js';
 import { plata, hoyISO, nombreDe, etiquetaCuenta, tituloTx, aNumero } from '../formato.js';
 
 const TIPOS = [['gasto', 'Gasto'], ['ingreso', 'Ingreso'], ['transferencia', 'Movida']];
@@ -56,8 +57,13 @@ export function formMovimiento(tx = null) {
   const cDestino = select([{ value: '', label: 'Elegí una' }, ...opcCuentas],
                           { value: tx?.destino_account_id || '', onchange: () => actualizar() });
   // La categoria elegida se guarda al vuelo: la lista se vuelve a armar cada
-  // vez que cambia el tipo o la cuenta, y sin esto se perdia la eleccion.
-  const cCat = select([], { onchange: e => d.category_id = e.target.value });
+  // vez que cambia el tipo o la cuenta, y sin esto se perdia la eleccion. La
+  // lista incluye "crear una", porque la categoria que falta se descubre
+  // justo acá, cargando el gasto, y mandar a Ajustes es perderlo a medio
+  // cargar.
+  const cCat = select(opcionesCategoria('gasto'), {});
+  conectarCategoria(cCat, () => d.tipo === 'ingreso' ? 'ingreso' : 'gasto',
+                    v => d.category_id = v);
   const cCuotas = h('input', { type: 'number', min: '1', max: '60',
                                value: String(tx?.cuotas || 1), inputmode: 'numeric' });
   // El tipo de cambio se escribe siempre igual: cuantos pesos vale un dolar.
@@ -131,10 +137,7 @@ export function formMovimiento(tx = null) {
                       monedaDe(cDestino.value) === monedaDe(cCuenta.value);
     pintarCambio();
 
-    cCat.replaceChildren(...[{ value: '', label: 'Sin categoría' },
-      ...state.categories.filter(c => c.tipo === (esIngreso ? 'ingreso' : 'gasto'))
-        .map(c => ({ value: c.id, label: c.nombre }))]
-      .map(o => h('option', { value: o.value, selected: o.value === d.category_id }, o.label)));
+    pintarCategorias(cCat, esIngreso ? 'ingreso' : 'gasto', d.category_id);
 
     atajos.hidden = !nuevo || esMovida;
     if (!atajos.hidden) pintarAtajos();
@@ -219,7 +222,7 @@ export function formMovimiento(tx = null) {
       account_id: cCuenta.value,
       destino_account_id: esMovida ? cDestino.value : null,
       monto_destino, moneda_destino,
-      category_id: esMovida ? null : (cCat.value || null),
+      category_id: esMovida ? null : (d.category_id || cCat.value || null),
       cuotas: bloqueCuotas.hidden ? 1 : Math.max(1, Number(cCuotas.value) || 1),
       fuente: tx?.fuente || 'manual',
       revisado: true

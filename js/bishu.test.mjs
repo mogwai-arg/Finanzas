@@ -10,6 +10,29 @@ const d = s => F.parseFecha(s);
 
 console.log('\nLO QUE DICE BISHU');
 
+t('una promo de hoy va antes que todo: hoy se vence', () => {
+  const r = queDiceBishu({ diasSinCargar: 5,
+    promos: [{ dias: 0, titulo: 'YPF 25%', valor: 25, tipo: 'descuento', medio: 'MODO' }] },
+    d('2026-09-10'));
+  assert.match(r.texto, /Hoy es la de YPF/);
+  assert.match(r.texto, /25 % de descuento con MODO/);
+  assert.equal(r.ir, '/promos');
+});
+
+t('la que cae pronto se avisa, la que falta mucho no', () => {
+  const prox = p => queDiceBishu({ promos: [{ dias: p, cuando: 'jueves 10', titulo: 'YPF 25%',
+                                              valor: 25, tipo: 'descuento' }] }, d('2026-09-08'));
+  assert.match(prox(2).texto, /El jueves 10 cae la de YPF/);
+  assert.match(prox(1).texto, /Mañana cae la de YPF/);
+  assert.doesNotMatch(prox(9).texto, /YPF/);
+});
+
+t('el silencio de tres días gana a la promo que todavía no es hoy', () => {
+  const r = queDiceBishu({ diasSinCargar: 4,
+    promos: [{ dias: 2, cuando: 'jueves 10', titulo: 'YPF 25%' }] }, d('2026-09-08'));
+  assert.match(r.texto, /4 días/);
+});
+
 t('el silencio de tres días gana a cualquier otra cosa', () => {
   const r = queDiceBishu({ diasSinCargar: 3, gastadoEsteMesAlDia: 100000,
                            gastadoMesPasadoAlDia: 500000 }, d('2026-09-15'));

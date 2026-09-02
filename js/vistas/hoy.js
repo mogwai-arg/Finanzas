@@ -30,7 +30,6 @@ export function vistaHoy(root, { moneda = 'ARS' } = {}) {
       conexionCaida(),
       moneda === 'ARS' ? heroMes(res, hoy, p) : heroDolares(),
       loQueSeViene(hoy, moneda),
-      moneda === 'ARS' ? promosMarcadas(hoy) : null,
       moneda === 'ARS' ? proximoSueldo() : null,
       presupuesto(res, p),
       moneda === 'ARS' ? tiraBishu(hoy) : null,
@@ -246,6 +245,15 @@ function loQueSeViene(hoy, moneda) {
 }
 
 
+/** 'hoy', 'mañana', 'el jueves 10', y de ahí en más los días que faltan. */
+const DIAS_LARGOS = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
+function cuandoCae(d, fecha) {
+  if (d <= 0) return 'hoy';
+  if (d === 1) return 'mañana';
+  if (d <= 13) return `${DIAS_LARGOS[fecha.getDay()]} ${fecha.getDate()}`;
+  return `en ${d} días`;
+}
+
 // -------------------------------------------------------------- bishu
 /**
  * Bishu dice una cosa: la que no está en ninguna otra parte de la pantalla.
@@ -257,13 +265,20 @@ function loQueSeViene(hoy, moneda) {
 function tiraBishu(hoy) {
   const p = per();
   const datos = {
+    // Las promos marcadas, con cuántos días faltan: Bishu las dice él mismo
+    // en vez de que haya una sección arriba repitiendo lo mismo.
+    promos: F.promosQueSeVienen(state.promos, hoy, 14).map(({ promo, fecha }) => {
+      const d = Math.round((fecha - new Date(hoy.toDateString())) / 86400000);
+      return { dias: d, cuando: cuandoCae(d, fecha), titulo: promo.titulo || promo.comercio,
+               valor: promo.valor, tipo: promo.tipo, medio: promo.medio_pago };
+    }),
     diasSinCargar: F.diasSinCargar(state.transactions, hoy),
     gastadoEsteMesAlDia: F.gastadoAlDia(state.transactions, p, hoy.getDate()),
     gastadoMesPasadoAlDia: F.gastadoAlDia(state.transactions, F.mesAnterior(p), hoy.getDate()),
     cargoHoy: state.transactions.some(t =>
       (!t.fuente || t.fuente === 'manual') && String(t.fecha).slice(0, 10) === hoyISO())
   };
-  const { animo, texto } = queDiceBishu(datos, hoy);
+  const { animo, texto, ir } = queDiceBishu(datos, hoy);
   const color = animo === 'festejo' ? 'var(--pos)' : animo === 'alerta' ? 'var(--amb)' : 'var(--bra)';
 
   return h('section',
@@ -274,80 +289,11 @@ function tiraBishu(hoy) {
                             marginBottom: '2px' } }, '¡Hola! Soy Bishu'),
         h('div', { style: { fontSize: '14.5px', lineHeight: '1.45', color: 'var(--tx2)' } }, texto),
         h('button', { style: { background: 'none', border: '0', padding: '6px 0 0',
-                               color: 'var(--tx3)', fontSize: '12.5px', cursor: 'pointer' },
-                      onclick: () => irA('/ajustes') }, 'Elegí de qué te aviso'))));
+                               color: ir ? 'var(--bra)' : 'var(--tx3)', fontSize: '12.5px',
+                               cursor: 'pointer' },
+                      onclick: () => irA(ir || '/ajustes') },
+          ir ? 'Ver las promos' : 'Elegí de qué te aviso'))));
 }
-
-// ------------------------------------------------------------- promos
-/**
- * Las promos que pediste que te recuerde, con el dia en que caen.
- *
- * Solo las marcadas y a proposito: el buscador trae cincuenta por rubro y
- * ninguna sirve si hay que leerlas todas. Las de una vez al mes —la de
- * combustible de Galicia cae un solo dia— son justo las que uno se pierde,
- * asi que aparecen desde varios dias antes y no el mismo dia.
- */
-function promosMarcadas(hoy) {
-  const proximas = F.promosQueSeVienen(state.promos, hoy, 14);
-
-  if (!proximas.length) {
-    // Sin ninguna marcada la seccion es una sola linea, no un hueco: decir
-    // que se puede elegir vale mas que esconderlo.
-    const hay = (state.promos || []).some(x => x.activa !== false);
-    return h('section',
-      h('div.ghead', 'Promos'),
-      h('div.grp',
-        h('button.li', { onclick: () => irA('/promos') },
-          h('div.av', icono('campana', 17)),
-          h('div.m', h('div.t', hay ? 'Elegí cuáles te recuerdo' : 'Traé las promos de hoy'),
-            h('div.s', hay ? 'Tocá la campana en la que te interese'
-                           : 'Las vigentes de tus tarjetas y billeteras')),
-          h('span.chev', icono('chev', 15)))));
-  }
-
-  return h('section',
-    h('div.ghead', 'Promos', h('button', { onclick: () => irA('/promos') }, 'Ver todas')),
-    h('div.grp', proximas.slice(0, 5).map(({ promo, fecha }) => {
-      const d = Math.round((fecha - new Date(hoy.toDateString())) / 86400000);
-      const tope = Number(promo.tope) || 0;
-      const uso = (state.promo_usos || []).find(u =>
-        u.promo_id === promo.id && u.periodo === per());
-      const usado = uso ? Number(uso.usado) : 0;
-      const agotada = tope > 0 && usado >= tope;
-
-      return h('div', { class: 'li' + (d === 0 && !agotada ? ' sev sev-amb' : '') },
-        h('button', { style: { display: 'flex', alignItems: 'center', gap: '12px',
-                               flex: '1', minWidth: '0', background: 'none', border: '0',
-                               padding: '0', textAlign: 'left', cursor: 'pointer' },
-                      onclick: () => irA('/promos') },
-          h('div', { class: 'av' + (d === 0 && !agotada ? ' amb' : '') },
-            icono(iconoDe(promo.comercio || promo.titulo || ''), 17)),
-          h('div.m',
-            h('div.t', promo.titulo || promo.comercio || 'Promo'),
-            h('div.s', [cuandoCae(d, fecha),
-                        agotada ? 'tope agotado' : null,
-                        promo.medio_pago].filter(Boolean).join(' · '))),
-          h('div.v', { class: promo.tipo === 'reintegro' ? 'pos' : '' },
-            `${Number(promo.valor) || 0}%`)),
-        // Sacarla de acá es un toque: si dejó de servir, que no siga ocupando
-        // la pantalla que se mira todos los días.
-        h('button.iconbtn', { 'aria-label': `Dejar de recordarme ${promo.titulo || 'la promo'}`,
-          style: { flex: 'none' },
-          onclick: async () => {
-            await guardar('promos', { ...promo, recordar: false });
-            aviso('No te la recuerdo más');
-          } }, icono('cerrar', 17)));
-    })));
-}
-
-/** 'hoy', 'mañana', 'el jueves 10', y de ahí en más los días que faltan. */
-function cuandoCae(d, fecha) {
-  if (d <= 0) return 'hoy';
-  if (d === 1) return 'mañana';
-  if (d <= 13) return `el ${DIAS_LARGOS[fecha.getDay()]} ${fecha.getDate()}`;
-  return `en ${d} días`;
-}
-const DIAS_LARGOS = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
 
 // ------------------------------------------------------- proximo sueldo
 /**
