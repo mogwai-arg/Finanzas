@@ -19,21 +19,25 @@ import { bishu, queDiceBishu } from '../bishu.js';
 
 const per = () => hoyISO().slice(0, 7);
 
-export function vistaHoy(root, { moneda = 'ARS' } = {}) {
+/**
+ * `arranca` dice en qué ficha del carrusel abrir. Existe para que el link
+ * viejo de dólares siga llevando a los dólares, ahora que no son una pestaña
+ * aparte sino la tercera ficha.
+ */
+export function vistaHoy(root, { arranca = 0 } = {}) {
   const hoy = new Date();
   const p = per();
-  const res = F.resumenMes(state.transactions, p, moneda);
+  const res = F.resumenMes(state.transactions, p, 'ARS');
 
   root.append(
     h('div.flow',
-      selectorMoneda(moneda),
       sinRevisar(),
       conexionCaida(),
-      moneda === 'ARS' ? carrusel(heroMes(res, hoy, p), plataLibre(hoy)) : heroDolares(),
-      loQueSeViene(hoy, moneda),
-      moneda === 'ARS' ? proximoSueldo() : null,
+      carrusel(arranca, heroMes(res, hoy, p), plataLibre(hoy), heroDolares()),
+      loQueSeViene(hoy),
+      proximoSueldo(),
       presupuesto(res, p),
-      moneda === 'ARS' ? tiraBishu(hoy) : null,
+      tiraBishu(hoy),
       antesDeComprar()
     )
   );
@@ -47,14 +51,15 @@ export function vistaHoy(root, { moneda = 'ARS' } = {}) {
  * uno al lado del otro, ninguno se lee. Así cada uno tiene la pantalla
  * entera y cambiar cuesta un gesto.
  */
-function carrusel(...paneles) {
+function carrusel(arranca, ...paneles) {
   const vivos = paneles.filter(Boolean);
   if (vivos.length < 2) return vivos[0] || null;
+  const inicio = Math.min(Math.max(0, arranca), vivos.length - 1);
 
   const via = h('div.heroes', ...vivos);
   const puntos = h('div.puntos', ...vivos.map((_, i) =>
     h('button.punto', { 'aria-label': `Ver ${i + 1} de ${vivos.length}`,
-                        'aria-selected': String(i === 0),
+                        'aria-selected': String(i === inicio),
                         onclick: () => via.scrollTo({ left: i * via.clientWidth,
                                                       behavior: 'smooth' }) })));
 
@@ -68,6 +73,10 @@ function carrusel(...paneles) {
         b.setAttribute('aria-selected', String(j === i)));
     });
   }, { passive: true });
+
+  // Sin animación y después de pintar: al abrir hay que estar en la ficha
+  // pedida, no verla pasar.
+  if (inicio) setTimeout(() => { via.scrollLeft = inicio * via.clientWidth; }, 0);
 
   return h('div', { style: { display: 'flex', flexDirection: 'column', gap: '12px' } },
     via, puntos);
@@ -124,16 +133,6 @@ function plataLibre(hoy) {
   );
 }
 
-// ------------------------------------------------------------ moneda
-function selectorMoneda(actual) {
-  const btn = (v, txt) => h('button', {
-    role: 'tab', 'aria-selected': String(actual === v),
-    onclick: () => irA(v === 'ARS' ? '/hoy' : '/hoy/usd')
-  }, txt);
-  return h('div.seg', { role: 'tablist', 'aria-label': 'Moneda' },
-    btn('ARS', 'Pesos'), btn('USD', 'Dólares'));
-}
-
 // ------------------------------------------------- lo que entro solo
 function sinRevisar() {
   const n = state.transactions.filter(t => t.revisado === false).length;
@@ -186,6 +185,7 @@ function heroMes(res, hoy, p) {
   const { simbolo, numero } = plataPartida(Math.round(res.gastos), 'ARS');
 
   return h('div.grp.pad',
+    h('div.ghead', { style: { margin: '0 0 5px' } }, 'Este mes'),
     h('div', { style: { display: 'flex', justifyContent: 'space-between',
                         alignItems: 'flex-start', gap: '10px' } },
       h('div',
@@ -234,12 +234,15 @@ const topeDelMes = p => state.budgets.filter(b => b.periodo === p && b.moneda !=
 function heroDolares() {
   const res = F.resumenMes(state.transactions, per(), 'USD');
   const cuentas = state.accounts.filter(a => a.moneda === 'USD' && a.activo !== false);
+  // Sin nada en dólares, una ficha vacía es una ficha de más.
+  if (!cuentas.length && !res.gastos && !res.ingresos) return null;
   const total = cuentas.reduce((s, a) => s + F.saldoDeCuenta(a, state.transactions, new Date(),
                                                              a.saldo_inicial || 0, a.saldo_al), 0);
   const ref = Number(state.settings?.usd_ref) || 0;
   const { simbolo, numero } = plataPartida(res.gastos, 'USD');
 
   return h('div.grp.pad',
+    h('div.ghead', { style: { margin: '0 0 5px' } }, 'Dólares'),
     h('div.cifra', h('em', simbolo), numero),
     h('div.small.mut', { style: { marginTop: '5px' } },
       res.ingresos > 0 ? `gastados este mes · entraron ${plata(res.ingresos, 'USD')}`
@@ -264,7 +267,7 @@ function heroDolares() {
 }
 
 // ---------------------------------------------------- lo que se viene
-function loQueSeViene(hoy, moneda) {
+function loQueSeViene(hoy) {
   const items = [];
 
   // Tarjetas: lo que hay que pagar y cuando
@@ -274,6 +277,7 @@ function loQueSeViene(hoy, moneda) {
     // Sin cierre cargado, la fecha de vencimiento seria inventada: no entra
     // en una lista que ordena justamente por cuando hay que pagar.
     if (!F.tieneCiclo(t)) continue;
+    const moneda = t.moneda || 'ARS';
     const c = F.resumenAPagar(t, hoy) || F.proximoCiclo(t, hoy);
     const total = F.totalTarjetaEnPeriodo(state.transactions, t, F.periodo(c.vence), moneda);
     if (!total) continue;
@@ -282,7 +286,7 @@ function loQueSeViene(hoy, moneda) {
     if (!falta) continue;
     const pagado = total - falta;
     items.push({ id: t.id, nombre: t.nombre, monto: falta, vence: c.vence,
-                 icono: 'tarjeta',
+                 icono: 'tarjeta', moneda,
                  nota: pagado > 0 ? `pagaste ${plata(Math.round(pagado), moneda)}`
                                   : (c.declarado ? null : 'estimado'),
                  tarjeta: t, ciclo: c,
@@ -292,13 +296,14 @@ function loQueSeViene(hoy, moneda) {
   // Gastos fijos sin pagar
   const p = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}`;
   for (const r of F.recurrentesDelMes(state.recurrings, state.recurring_payments, p, hoy)) {
-    if (r.pagado || r.moneda !== moneda) continue;
+    if (r.pagado) continue;
     // Un fijo que cae solo en la tarjeta no se paga aparte: entra al resumen
     // y sale cuando se paga el resumen. Listarlo acá lo cobraría dos veces.
     // El que se paga a mano queda, aunque a veces lo pagues con la tarjeta:
     // hay que acordarse igual, y con qué se paga se decide ese día.
     if (F.debitoEnTarjeta(r, state.accounts)) continue;
     items.push({ id: r.id, nombre: r.nombre, monto: r.monto, vence: r.vence,
+                 moneda: r.moneda || 'ARS',
                  icono: iconoDe(r.nombre), recurrente: r, periodo: p, ir: `/mes` });
   }
 
@@ -324,13 +329,13 @@ function loQueSeViene(hoy, moneda) {
           h('div', { class: `av ${d < 0 ? 'neg' : d <= 3 ? 'amb' : ''}` }, icono(it.icono, 17)),
           h('div.m', h('div.t', it.nombre),
             h('div.s', cuandoVence(iso, hoy) + (it.nota ? ` · ${it.nota}` : ''))),
-          h('div.v', plata(moneda === 'USD' ? it.monto : Math.round(it.monto), moneda))),
+          h('div.v', plata(it.moneda === 'USD' ? it.monto : Math.round(it.monto), it.moneda))),
         // Anotar el pago desde acá: es donde uno lo mira, y si hay que ir a
         // buscarlo a otra pantalla se anota después, o nunca. Vale para las
         // dos cosas que se pagan: el resumen y el gasto fijo.
         (it.tarjeta || it.recurrente) ? h('button.iconbtn', {
           'aria-label': `Pagar ${it.nombre}`, style: { flex: 'none' },
-          onclick: () => it.tarjeta ? formPagoTarjeta(it.tarjeta, it.ciclo, it.monto, moneda)
+          onclick: () => it.tarjeta ? formPagoTarjeta(it.tarjeta, it.ciclo, it.monto, it.moneda)
                                     : formPago(it.recurrente, it.periodo) },
           icono('check', 18)) : null);
     }))

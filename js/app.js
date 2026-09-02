@@ -24,8 +24,10 @@ const tabs = document.getElementById('tabs');
 
 // Cada entrada: patron -> { titulo, sub, vista, tab, atras, acciones }
 const RUTAS = [
-  ['/hoy',            { tab: 'hoy',      titulo: 'Hoy',        sub: () => fechaLarga(new Date()), vista: r => vistaHoy(r, { moneda: 'ARS' }), acciones: ['campana', 'ajustes'] }],
-  ['/hoy/usd',        { tab: 'hoy',      titulo: 'Hoy',        sub: () => fechaLarga(new Date()), vista: r => vistaHoy(r, { moneda: 'USD' }), acciones: ['campana', 'ajustes'] }],
+  ['/hoy',            { tab: 'hoy',      titulo: 'Hoy',        sub: () => fechaLarga(new Date()), vista: r => vistaHoy(r), acciones: ['campana', 'ajustes'] }],
+  // Los dólares dejaron de ser una pestaña y son la tercera ficha del
+  // carrusel; el link viejo sigue llevando ahí.
+  ['/hoy/usd',        { tab: 'hoy',      titulo: 'Hoy',        sub: () => fechaLarga(new Date()), vista: r => vistaHoy(r, { arranca: 2 }), acciones: ['campana', 'ajustes'] }],
   ['/revisar',        { tab: 'hoy',      titulo: 'Revisar',    vista: vistaRevisar, atras: true }],
   ['/pago',           { tab: 'hoy',      titulo: '¿Con qué pago?', vista: vistaPago, atras: true }],
   ['/donde',          { tab: 'hoy',      titulo: 'Dónde está', vista: vistaDonde, atras: true, acciones: ['ojo'] }],

@@ -155,6 +155,10 @@ export const DEMO = {
       category_id: id('c4'), account_id: id('gal'), variable: true, activo: true, orden: 5 },
     // Spotify cae solo en la tarjeta; el colegio y OSDE se pagan a mano, y
     // según el mes salen por transferencia o con la tarjeta.
+    // El alquiler se paga en dólares y a mano: entra en "Lo que se viene"
+    // con su moneda, al lado de los de pesos.
+    { id: id('rc7'), nombre: 'Alquiler', monto_estimado: 850, moneda: 'USD', dia_vencimiento: 5,
+      category_id: id('c8'), account_id: id('usd'), variable: false, activo: true, orden: 7 },
     { id: id('rc6'), nombre: 'Spotify', monto_estimado: 8999, moneda: 'ARS', dia_vencimiento: 12,
       category_id: id('c7'), account_id: id('mpc'), variable: false, activo: true,
       debito_automatico: true, orden: 6 }
