@@ -256,17 +256,25 @@ export async function sincronizar(opciones = {}) {
 
   try {
     await flushCola(opciones);
-    const res = await Promise.all(TABLAS.map(t => {
-      const q = sb.from(t).select('*');
-      return desde ? q.gt('updated_at', desde) : q;
-    }));
+    // Si la consulta incremental falla —tipico: a la tabla le falta la
+    // columna updated_at— se vuelve a pedir entera. Antes solo se anotaba el
+    // error en la consola y esa tabla no llegaba nunca: nada se rompia a la
+    // vista, simplemente faltaban datos.
+    const traer = async t => {
+      if (!desde) return await sb.from(t).select('*');
+      const r = await sb.from(t).select('*').gt('updated_at', desde);
+      if (!r.error) return r;
+      console.warn(`${t}: sin updated_at, se pide entera`, r.error.message);
+      return { ...(await sb.from(t).select('*')), completa: true };
+    };
+    const res = await Promise.all(TABLAS.map(traer));
 
     TABLAS.forEach((t, i) => {
-      const { data, error } = res[i] || {};
+      const { data, error, completa } = res[i] || {};
       if (error) { console.warn(t, error.message); return; }
       if (!data) return;
       if (t === 'settings') { if (data[0]) state.settings = data[0]; return; }
-      if (!desde) { state[t] = data; return; }
+      if (!desde || completa) { state[t] = data; return; }
       // Diferencial: se pisa lo que cambio y se agrega lo nuevo.
       const idx = new Map(state[t].map(f => [f.id, f]));
       for (const fila of data) idx.set(fila.id, fila);
