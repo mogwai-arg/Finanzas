@@ -480,6 +480,31 @@ export function ordenPromo(a, b) {
       || ((Number(b.valor) || 0) - (Number(a.valor) || 0));
 }
 
+/**
+ * De las promos que trae el buscador, cuales son de medios que tenes.
+ *
+ * El listado completo son cincuenta y pico por rubro, casi todas de bancos
+ * ajenos: mostrarlas todas es ruido. Se comparan por palabra clave contra el
+ * nombre y el banco de cada cuenta cargada.
+ */
+export function promosQueTePuedenServir(promos, cuentas) {
+  const mios = new Set();
+  for (const c of cuentas) {
+    if (c.activo === false) continue;
+    const t = `${c.nombre || ''} ${c.banco || ''}`.toLowerCase().replace(/[^a-z]/g, '');
+    for (const clave of ['galicia', 'mercadopago', 'personalpay', 'modo', 'naranja',
+                         'santander', 'bbva', 'macro', 'nacion', 'brubank', 'uala'])
+      if (t.includes(clave)) mios.add(clave);
+  }
+  // MODO paga con las tarjetas del banco, asi que si hay una de un banco que
+  // MODO soporta, esas promos tambien sirven.
+  if (mios.has('galicia')) mios.add('modo');
+
+  return promos
+    .filter(p => mios.has(String(p.emisor || '').toLowerCase().replace(/[^a-z]/g, '')))
+    .sort(ordenPromo);
+}
+
 /** Reintegro estimado de una compra bajo una promo. */
 export function reintegroEstimado(monto, promo) {
   if (!promo || promo.tipo === 'cuotas') return 0;

@@ -3,8 +3,8 @@
 // La barra de tope consumido es lo que hace honesta la pantalla: una promo
 // de "25 %" con el tope al 62 % ya no es del 25 %.
 // =====================================================================
-import { h, icono, iconoDe, aviso } from '../ui.js';
-import { state } from '../db.js';
+import { h, icono, iconoDe, aviso, hoja } from '../ui.js';
+import { state, guardar, traerPromos } from '../db.js';
 import * as F from '../finance.js';
 import { plata, hoyISO } from '../formato.js';
 import { formPromo } from './formularios.js';
@@ -126,7 +126,8 @@ export function vistaPromos(root) {
   root.append(h('div.flow', seg, cercania, lista,
     h('div.small.mut', { style: { padding: '0 4px', lineHeight: '1.45' } },
       'El tope consumido es lo que hace honesta la promo: "25 % de reintegro" con el tope lleno es 0 %.'),
-    h('button.btn.sec', { onclick: () => formPromo() }, icono('mas', 17), 'Agregar promo'),
+    h('button.btn', { onclick: () => hojaTraer() }, icono('buscar', 17), 'Traer las de hoy'),
+    h('button.btn.sec', { onclick: () => formPromo() }, icono('mas', 17), 'Agregar a mano'),
     buscadores()));
 }
 
@@ -166,4 +167,89 @@ function buscadores() {
       'Cuando encuentres una que uses, cargala acá y la app te la recuerda el ',
       'día que aplica y te lleva la cuenta del tope. Los reintegros van primero ',
       'que los descuentos: el reintegro vuelve a tu cuenta.'));
+}
+
+// =====================================================================
+// TRAER LAS VIGENTES
+// =====================================================================
+const RUBROS = [
+  ['supermercado', 'Súper'], ['combustible', 'Nafta'], ['gastronomia', 'Comida'],
+  ['salud', 'Farmacia'], ['transporte', 'Transporte']
+];
+
+/**
+ * Las promos vigentes del rubro, filtradas por los medios que tenés.
+ *
+ * El listado completo son cincuenta y pico por rubro y casi todas son de
+ * bancos ajenos: mostrarlas todas sería ruido. Se puede ver el resto igual,
+ * pero atrás.
+ */
+function hojaTraer() {
+  let rubro = 'supermercado';
+  const lista = h('div');
+  const seg = h('div.seg', { role: 'tablist', style: { marginBottom: '16px' } },
+    ...RUBROS.map(([id, txt]) => h('button', {
+      role: 'tab', 'aria-selected': String(id === rubro),
+      onclick: () => {
+        rubro = id;
+        seg.querySelectorAll('button').forEach((b, i) =>
+          b.setAttribute('aria-selected', String(RUBROS[i][0] === id)));
+        cargar();
+      }
+    }, txt)));
+
+  hoja('Promos de hoy', h('div',
+    h('div.small.mut', { style: { lineHeight: '1.5', marginBottom: '14px' } },
+      'Las que están vigentes ahora, de Clash. Primero las de tus tarjetas y ',
+      'billeteras, y los reintegros antes que los descuentos.'),
+    seg, lista));
+
+  async function cargar() {
+    lista.replaceChildren(h('div.small.mut', 'Buscando…'));
+    try {
+      const todas = await traerPromos(rubro);
+      const mias = F.promosQueTePuedenServir(todas, state.accounts);
+      const resto = todas.filter(p => !mias.includes(p)).sort(F.ordenPromo);
+
+      lista.replaceChildren(
+        mias.length
+          ? h('div', h('div.ghead', 'Con lo que tenés'), h('div.grp', mias.map(fila)))
+          : h('div.grp.pad', h('div.small.mut', { style: { lineHeight: '1.5' } },
+              'Ninguna de las vigentes es para tus tarjetas o billeteras. ',
+              'Abajo están todas por si te sirve alguna.')),
+        resto.length ? h('div', { style: { marginTop: '18px' } },
+          h('div.ghead', `Las demás · ${resto.length}`),
+          h('div.grp', resto.slice(0, 25).map(fila))) : null);
+    } catch (e) {
+      lista.replaceChildren(h('div.small.mut', { style: { lineHeight: '1.5' } },
+        String(e.message || e)));
+    }
+  }
+  cargar();
+}
+
+/** Una promo traída, con el botón para guardarla como propia. */
+function fila(p) {
+  const dias = p.dias?.length ? p.dias.map(d => DIAS[d]).join(' y ') : 'todos los días';
+  return h('div.li',
+    h('div', { class: 'cifra' + (p.tipo === 'reintegro' ? ' pos' : ''),
+               style: { fontSize: '19px', flex: 'none', minWidth: '48px' } }, `${p.valor}%`),
+    h('div.m',
+      h('div.t', String(p.comercio || '').replace(/\b\w/g, c => c.toUpperCase())),
+      h('div.s', [p.tipo, p.emisor, dias].filter(Boolean).join(' · ')),
+      p.nota ? h('div.s', { style: { color: 'var(--tx3)' } }, p.nota) : null,
+      p.tope ? h('div.s', { style: { color: 'var(--tx3)' } },
+        `tope ${plata(p.tope)}${p.topePeriodo ? ' por mes' : ''}`) : null),
+    h('button.iconbtn', { 'aria-label': 'Guardarla', onclick: async e => {
+      const b = e.currentTarget; b.disabled = true;
+      await guardar('promos', {
+        titulo: `${p.comercio} ${p.valor}%`, comercio: p.comercio,
+        valor: p.valor, tipo: p.tipo, emisor: p.emisor,
+        tope: p.tope, tope_periodo: p.topePeriodo || 'mensual',
+        dias: p.dias || [], medio_pago: p.emisor, rubro: 'otros', canal: 'ambos',
+        url: p.url || null, notas: p.nota || null,
+        marcas: [p.comercio], activa: true, favorita: false
+      });
+      aviso('Guardada');
+    } }, icono('mas', 18)));
 }

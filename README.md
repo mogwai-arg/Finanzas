@@ -185,6 +185,7 @@ supabase functions deploy oauth-callback --no-verify-jwt
 supabase functions deploy gmail-sync
 supabase functions deploy mp-sync
 supabase functions deploy cron-avisos
+supabase functions deploy promos-clash
 ```
 
 Después, en **SQL Editor**, corré `supabase/cron.sql` reemplazando

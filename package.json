@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node js/finance.test.mjs && node js/sueldo.test.mjs && node js/resumen.test.mjs && node js/texto.test.mjs && node js/filas.test.mjs && node --experimental-strip-types supabase/functions/_shared/parsers.test.ts",
+    "test": "node js/finance.test.mjs && node js/sueldo.test.mjs && node js/resumen.test.mjs && node js/texto.test.mjs && node js/filas.test.mjs && node --experimental-strip-types supabase/functions/_shared/parsers.test.ts && node --experimental-strip-types supabase/functions/_shared/clash.test.ts",
     "serve": "python3 -m http.server 8080",
     "demo": "node build-demo.mjs",
     "build": "node build-web.mjs",

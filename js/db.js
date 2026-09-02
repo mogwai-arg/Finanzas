@@ -214,6 +214,21 @@ export async function mirarBandeja() {
   return d;
 }
 
+/** Las promos vigentes de un rubro, traidas por la funcion. */
+export async function traerPromos(rubro) {
+  if (!FUNCTIONS_URL) throw new Error('Falta FUNCTIONS_URL en la configuración.');
+  const t = await token();
+  const r = await fetch(`${FUNCTIONS_URL}/promos-clash`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${t}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ rubro })
+  });
+  if (r.status === 404) throw new Error('Falta subir la función promos-clash.');
+  const d = await r.json().catch(() => null);
+  if (!r.ok || !d || d.error) throw new Error(d?.error || 'No pude traer las promos.');
+  return d.promos || [];
+}
+
 // ------------------------------------------------------------------- auth
 export async function sesion() {
   if (DEMO) {
