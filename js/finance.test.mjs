@@ -70,6 +70,63 @@ t('el mes trae el saldo que queda despues de pagar', () => {
   assert.equal(r.saldoDespues, 50);     // lo que se lleva a julio
 });
 
+const MANUAL = [
+  { id: 'm1', fuente: 'manual', tipo: 'gasto', moneda: 'ARS', monto: 45300,
+    fecha: '2026-08-28', account_id: 'visa', comercio: 'super' },
+  { id: 'm2', fuente: 'manual', tipo: 'gasto', moneda: 'ARS', monto: 12000,
+    fecha: '2026-08-10', account_id: null, comercio: 'nafta' },
+  { id: 'a1', fuente: 'resumen', tipo: 'gasto', moneda: 'ARS', monto: 99000,
+    fecha: '2026-08-28', account_id: 'visa', comercio: 'COTO' }
+];
+
+t('el mismo gasto del resumen reconoce al que anoté a mano', () => {
+  const d = F.duplicadoManual({ monto: 45300, fecha: '2026-08-29', tipo: 'gasto',
+    moneda: 'ARS', account_id: 'visa' }, MANUAL);
+  assert.equal(d?.id, 'm1');       // un día de diferencia, el mismo importe
+});
+
+t('sin cuenta cargada igual lo reconoce', () => {
+  const d = F.duplicadoManual({ monto: 12000, fecha: '2026-08-11', tipo: 'gasto',
+    moneda: 'ARS', account_id: 'mp' }, MANUAL);
+  assert.equal(d?.id, 'm2');
+});
+
+t('otra tarjeta es otro movimiento', () => {
+  const d = F.duplicadoManual({ monto: 45300, fecha: '2026-08-28', tipo: 'gasto',
+    moneda: 'ARS', account_id: 'master' }, MANUAL);
+  assert.equal(d, null);
+});
+
+t('lejos en el tiempo no es el mismo', () => {
+  const d = F.duplicadoManual({ monto: 45300, fecha: '2026-09-15', tipo: 'gasto',
+    moneda: 'ARS', account_id: 'visa' }, MANUAL);
+  assert.equal(d, null);
+});
+
+t('otro importe no es el mismo', () => {
+  const d = F.duplicadoManual({ monto: 45400, fecha: '2026-08-28', tipo: 'gasto',
+    moneda: 'ARS', account_id: 'visa' }, MANUAL);
+  assert.equal(d, null);
+});
+
+t('un ingreso no se confunde con un gasto del mismo importe', () => {
+  const d = F.duplicadoManual({ monto: 45300, fecha: '2026-08-28', tipo: 'ingreso',
+    moneda: 'ARS', account_id: 'visa' }, MANUAL);
+  assert.equal(d, null);
+});
+
+t('los dólares no se cruzan con los pesos', () => {
+  const d = F.duplicadoManual({ monto: 45300, fecha: '2026-08-28', tipo: 'gasto',
+    moneda: 'USD', account_id: 'visa' }, MANUAL);
+  assert.equal(d, null);
+});
+
+t('no toca los que ya vinieron de un origen automático', () => {
+  const d = F.duplicadoManual({ monto: 99000, fecha: '2026-08-28', tipo: 'gasto',
+    moneda: 'ARS', account_id: 'visa' }, MANUAL);
+  assert.equal(d, null);          // ese ya se deduplica por su identificador
+});
+
 t('un dia de cierre que no es un dia del mes no sirve', () => {
   assert.equal(F.diaDelMes(5), true);
   assert.equal(F.diaDelMes('31'), true);

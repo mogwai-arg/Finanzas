@@ -283,7 +283,7 @@ async function mirar(sb, it) {
 async function sincronizar(sb, it) {
   const token = await accessToken(sb, it);
   const lista = await api(`messages?q=${encodeURIComponent(QUERY)}&maxResults=60`, token);
-  let cargados = 0, ignorados = 0;
+  let cargados = 0, ignorados = 0, adoptados = 0;
   const { data: cuentas } = await sb.from("accounts").select("*").eq("user_id", it.user_id);
   const { data: cats } = await sb.from("categories").select("*").eq("user_id", it.user_id);
   const { data: reglas } = await sb.from("reglas").select("*").eq("user_id", it.user_id);
@@ -335,6 +335,15 @@ async function sincronizar(sb, it) {
       await sb.from("ingest_log").insert({ ...log, estado: "duplicado" });
       continue;
     }
+    if (tx === "adoptado") {
+      await sb.from("ingest_log").insert({
+        ...log,
+        estado: "duplicado",
+        detalle: "ya estaba anotado a mano; se complet\xF3"
+      });
+      adoptados++;
+      continue;
+    }
     await sb.from("ingest_log").insert({ ...log, estado: "cargado", transaction_id: tx.id });
     cargados++;
     nuevos.push(`${mov.comercio} ${mov.moneda === "USD" ? "U$S" : "$"}${mov.monto.toLocaleString("es-AR")}`);
@@ -348,7 +357,7 @@ async function sincronizar(sb, it) {
       cuerpo: nuevos.slice(0, 4).join(" \xB7 ")
     });
   }
-  return { user: it.user_id, cargados, ignorados };
+  return { user: it.user_id, cargados, ignorados, adoptados };
 }
 async function insertar(sb, userId, mov, cuentas, cats, reglas, externoId) {
   let cuenta = mov.ultimos4 ? cuentas.find((c) => c.ultimos4 === mov.ultimos4) : null;
@@ -359,6 +368,20 @@ async function insertar(sb, userId, mov, cuentas, cats, reglas, externoId) {
   const texto = mov.comercio.toLowerCase();
   let catId = reglas.sort((a, b) => b.prioridad - a.prioridad).find((r) => texto.includes(String(r.patron).toLowerCase()))?.category_id ?? null;
   if (!catId) catId = porPalabraClave(texto, cats);
+  const desde = new Date(new Date(mov.fecha).getTime() - 4 * 864e5).toISOString().slice(0, 10);
+  const hasta = new Date(new Date(mov.fecha).getTime() + 4 * 864e5).toISOString().slice(0, 10);
+  const { data: previos } = await sb.from("transactions").select("*").eq("user_id", userId).eq("fuente", "manual").eq("tipo", mov.tipo).eq("moneda", mov.moneda).gte("fecha", desde).lte("fecha", hasta);
+  const previo = (previos ?? []).find((p) => Math.abs(Number(p.monto) - mov.monto) <= 1 && (!p.account_id || !cuenta?.id || p.account_id === cuenta.id));
+  if (previo) {
+    await sb.from("transactions").update({
+      account_id: previo.account_id ?? cuenta?.id ?? null,
+      cuotas: mov.cuotas,
+      externo_id: externoId,
+      fuente: "gmail",
+      revisado: true
+    }).eq("id", previo.id);
+    return "adoptado";
+  }
   const fila = {
     user_id: userId,
     fecha: mov.fecha,

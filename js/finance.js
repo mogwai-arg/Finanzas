@@ -401,6 +401,36 @@ export function aPagarRecurrente(recurring, pagos, per) {
   return { valor, saldo, sugerido: round2(Math.max(0, valor - saldo)) };
 }
 
+/**
+ * Busca un movimiento cargado a mano que sea el mismo que este.
+ *
+ * POR QUE: anotar un gasto en el momento y despues importarlo del resumen es
+ * el uso normal, no un error. Si cada camino crea su propia fila, el mes
+ * queda inflado justo cuando uno empieza a confiar en el numero.
+ *
+ * Se compara importe, fecha y cuenta, no el texto: el nombre que uno escribe
+ * ('super') no se parece en nada al del resumen ('COTO CICSA 3456').
+ *
+ * Solo mira los cargados a mano: entre dos automaticos ya no puede haber
+ * repetidos, porque cada uno trae su identificador de origen.
+ */
+export function duplicadoManual(tx, existentes, { dias = 4, centavos = 1 } = {}) {
+  const monto = Math.abs(Number(tx.monto) || 0);
+  if (!monto) return null;
+  const f = parseFecha(tx.fecha);
+
+  return existentes.find(e => {
+    if (e.id === tx.id) return null;
+    if ((e.fuente || 'manual') !== 'manual') return false;   // los de origen ya se deduplican solos
+    if (e.tipo !== tx.tipo) return false;
+    if ((e.moneda || 'ARS') !== (tx.moneda || 'ARS')) return false;
+    // Una cuenta distinta es otro movimiento; sin cuenta, se le da el beneficio de la duda.
+    if (e.account_id && tx.account_id && e.account_id !== tx.account_id) return false;
+    if (Math.abs(Math.abs(Number(e.monto) || 0) - monto) > centavos) return false;
+    return Math.abs((parseFecha(e.fecha) - f) / 86400000) <= dias;
+  }) || null;
+}
+
 /** Presupuesto vs gastado por categoria. */
 export function estadoPresupuesto(budgets, resumen, alertPct = 80) {
   return budgets.map(b => {

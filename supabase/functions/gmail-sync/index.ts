@@ -84,7 +84,7 @@ async function mirar(sb: any, it: any) {
 async function sincronizar(sb: any, it: any) {
   const token = await accessToken(sb, it);
   const lista = await api(`messages?q=${encodeURIComponent(QUERY)}&maxResults=60`, token);
-  let cargados = 0, ignorados = 0;
+  let cargados = 0, ignorados = 0, adoptados = 0;
 
   const { data: cuentas } = await sb.from('accounts').select('*').eq('user_id', it.user_id);
   const { data: cats }    = await sb.from('categories').select('*').eq('user_id', it.user_id);
@@ -145,6 +145,11 @@ async function sincronizar(sb: any, it: any) {
       await sb.from('ingest_log').insert({ ...log, estado: 'duplicado' });
       continue;
     }
+    if (tx === 'adoptado') {
+      await sb.from('ingest_log').insert({
+        ...log, estado: 'duplicado', detalle: 'ya estaba anotado a mano; se completó' });
+      adoptados++; continue;
+    }
     await sb.from('ingest_log').insert({ ...log, estado: 'cargado', transaction_id: tx.id });
     cargados++;
     nuevos.push(`${mov.comercio} ${mov.moneda === 'USD' ? 'U$S' : '$'}${mov.monto.toLocaleString('es-AR')}`);
@@ -160,7 +165,7 @@ async function sincronizar(sb: any, it: any) {
       cuerpo: nuevos.slice(0, 4).join(' · ')
     });
   }
-  return { user: it.user_id, cargados, ignorados };
+  return { user: it.user_id, cargados, ignorados, adoptados };
 }
 
 // ---------------------------------------------------------------------
@@ -183,6 +188,27 @@ async function insertar(sb: any, userId: string, mov: Movimiento, cuentas: any[]
   let catId = reglas.sort((a, b) => b.prioridad - a.prioridad)
     .find(r => texto.includes(String(r.patron).toLowerCase()))?.category_id ?? null;
   if (!catId) catId = porPalabraClave(texto, cats);
+
+  // ¿Ya lo anotaste a mano? Anotar en el momento y que despues llegue el
+  // aviso es el uso normal, no un error. Se completa esa fila en vez de crear
+  // otra, y se respeta lo que hayas escrito.
+  const desde = new Date(new Date(mov.fecha).getTime() - 4 * 86400000).toISOString().slice(0, 10);
+  const hasta = new Date(new Date(mov.fecha).getTime() + 4 * 86400000).toISOString().slice(0, 10);
+  const { data: previos } = await sb.from('transactions').select('*')
+    .eq('user_id', userId).eq('fuente', 'manual').eq('tipo', mov.tipo)
+    .eq('moneda', mov.moneda).gte('fecha', desde).lte('fecha', hasta);
+
+  const previo = (previos ?? []).find((p: any) =>
+    Math.abs(Number(p.monto) - mov.monto) <= 1 &&
+    (!p.account_id || !cuenta?.id || p.account_id === cuenta.id));
+
+  if (previo) {
+    await sb.from('transactions').update({
+      account_id: previo.account_id ?? cuenta?.id ?? null,
+      cuotas: mov.cuotas, externo_id: externoId, fuente: 'gmail', revisado: true
+    }).eq('id', previo.id);
+    return 'adoptado';
+  }
 
   const fila = {
     user_id: userId, fecha: mov.fecha, descripcion: mov.comercio, comercio: mov.comercio,

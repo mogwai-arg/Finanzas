@@ -357,12 +357,23 @@ export async function guardarVarios(tabla, filas) {
   const nuevas = filas.map(f => normalizar(tabla,
     { ...f, id: f.id || uuid(), user_id: state.user.id, updated_at: ahora }));
 
+  // Se arma un mapa por id y se vuelca de nuevo a la lista.
+  //
+  // La version anterior guardaba las POSICIONES de cada id y despues hacia
+  // unshift de las filas nuevas: cada unshift corre todo un lugar y las
+  // posiciones guardadas dejan de apuntar a donde apuntaban. El resultado era
+  // una fila que se actualizaba y ademas se duplicaba, con el mismo id dos
+  // veces. Se vio importando un resumen sobre gastos ya anotados a mano.
   const lista = state[tabla] || (state[tabla] = []);
-  const porId = new Map(lista.map((x, i) => [x.id, i]));
+  const porId = new Map(lista.map(x => [x.id, x]));
+  const agregadas = [];
   for (const n of nuevas) {
-    const i = porId.get(n.id);
-    if (i >= 0) lista[i] = { ...lista[i], ...n }; else lista.unshift(n);
+    if (porId.has(n.id)) porId.set(n.id, { ...porId.get(n.id), ...n });
+    else { porId.set(n.id, n); agregadas.push(n.id); }
   }
+  // Lo nuevo arriba, como cuando se guarda de a una.
+  state[tabla] = [...agregadas.map(id => porId.get(id)),
+                  ...lista.map(x => porId.get(x.id))];
   guardarCache(); emit();
 
   if (DEMO) return nuevas;

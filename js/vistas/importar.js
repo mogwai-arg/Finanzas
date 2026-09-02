@@ -8,6 +8,7 @@
 // =====================================================================
 import { h, icono, hoja, aviso, campo, select } from '../ui.js';
 import { state, guardar, guardarVarios } from '../db.js';
+import * as F from '../finance.js';
 import { parseResumen, aMovimientos } from '../resumen.js';
 import { plata, aFecha } from '../formato.js';
 
@@ -76,6 +77,11 @@ export function formImportarResumen() {
     const repetidos = movs.length - nuevos.length;
     const enCuotas = nuevos.filter(m => m.cuotas > 1).length;
 
+    // Los que ya anotaste a mano no se cargan de nuevo: se completan con lo
+    // que dice el resumen. Anotar en el momento y despues importar es el uso
+    // normal, no un error.
+    const reconocidos = propuesta ? planear(nuevos, propuesta.id).adoptados : 0;
+
     salida.append(
       h('div.grp', { style: { marginTop: '14px' } },
         dato('Tarjeta', `${r.producto || MARCAS[r.marca] || r.marca}${r.ultimos4 ? ' · ' + r.ultimos4 : ''}`),
@@ -83,7 +89,8 @@ export function formImportarResumen() {
         r.total.ars != null ? dato('Total a pagar', plata(r.total.ars)) : null,
         r.total.usd ? dato('En dólares', plata(r.total.usd, 'USD')) : null,
         dato('Consumos nuevos', String(nuevos.length) + (enCuotas ? ` · ${enCuotas} en cuotas` : '')),
-        repetidos ? dato('Ya cargados', `${repetidos}, no se repiten`) : null,
+        repetidos ? dato('Ya importados', `${repetidos}, no se repiten`) : null,
+        reconocidos ? dato('Ya anotados a mano', `${reconocidos}, se completan`) : null,
         r.impuestos.length ? dato('Impuestos', `${r.impuestos.length} · ${plata(sumaImp(r), 'ARS', { signo: true })}`) : null),
       h('div', { style: { marginTop: '14px' } }, campo('Cargar todo en', cual),
         pedirU4 ? h('div',
@@ -122,7 +129,7 @@ export function formImportarResumen() {
     // Un consumo del resumen no es una adivinanza: el banco ya lo cobró, con
     // fecha e importe. Entra confirmado. La excepción son las cuotas, que si
     // entran mal arrastran el error doce meses: esas sí van al mazo.
-    const filas = nuevos.map(m => ({ ...m, account_id: cuenta.id, revisado: m.cuotas <= 1 }));
+    const { filas, adoptados } = planear(nuevos, cuenta.id);
 
     // Los impuestos y percepciones también se pagan: entran como un gasto más.
     for (const i of r.impuestos) {
@@ -141,10 +148,44 @@ export function formImportarResumen() {
 
     cerrar();
     const aRevisar = nuevos.filter(m => m.cuotas > 1).length;
+    const cargados = nuevos.length - adoptados;
     aviso(!nuevos.length ? 'Fechas del ciclo guardadas'
-      : aRevisar ? `${nuevos.length} importados · ${aRevisar} en cuotas para revisar`
-      : `${nuevos.length} movimientos importados`);
+      : [cargados ? `${cargados} importados` : null,
+         adoptados ? `${adoptados} ya estaban` : null,
+         aRevisar ? `${aRevisar} en cuotas para revisar` : null].filter(Boolean).join(' · '));
   }
+}
+
+/**
+ * Decide, para cada consumo del resumen, si crea una fila nueva o completa la
+ * que ya habias anotado a mano.
+ *
+ * Al adoptar se le pega el identificador del resumen —para que no vuelva a
+ * entrar en otra importacion—, las cuotas y la cuenta, y se respeta lo que
+ * hayas escrito: el comercio que pusiste y la categoria que elegiste.
+ *
+ * `tomados` existe porque dos consumos del mismo dia por el mismo importe
+ * podrian adoptar los dos la misma fila y perderse uno.
+ */
+function planear(nuevos, cuentaId) {
+  const tomados = new Set();
+  const filas = [];
+  let adoptados = 0;
+
+  for (const m of nuevos) {
+    const candidatos = state.transactions.filter(t => !tomados.has(t.id));
+    const previo = F.duplicadoManual({ ...m, account_id: cuentaId }, candidatos);
+    if (previo) {
+      tomados.add(previo.id);
+      filas.push({ ...previo, account_id: cuentaId, externo_id: m.externo_id,
+                   cuotas: m.cuotas, fecha: m.fecha, fuente: 'resumen',
+                   revisado: m.cuotas <= 1 });
+      adoptados++;
+    } else {
+      filas.push({ ...m, account_id: cuentaId, revisado: m.cuotas <= 1 });
+    }
+  }
+  return { filas, adoptados };
 }
 
 // Las fechas nuevas se suman a las que ya estaban, sin repetir cierres.
