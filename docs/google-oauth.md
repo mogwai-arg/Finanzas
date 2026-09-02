@@ -36,11 +36,21 @@ Google va a pedir una página de inicio y una de privacidad. Dos cosas:
    misma cuenta de Google cuyos mails va a leer la app. Elegir el proyecto en el
    selector de arriba a la izquierda, o crear uno nuevo llamado `bishusha`.
 
-2. **Menú lateral → APIs y servicios → Plataforma de autenticación de Google.**
+2. **Habilitar la API de Gmail.** Menú lateral → **APIs y servicios →
+   Biblioteca**, buscar **Gmail API** y tocar **Habilitar**.
+
+   Es fácil saltearse este paso porque no se menciona en ninguna pantalla de
+   OAuth, y sin él el permiso falla de la peor manera: Google ni siquiera
+   muestra la pantalla de consentimiento. Se ve la barra azul cargando y
+   vuelve enseguida, como si el usuario hubiera cancelado. Un proyecto puede
+   tener la credencial y los permisos declarados y aun así no tener la API
+   prendida.
+
+3. **Menú lateral → APIs y servicios → Plataforma de autenticación de Google.**
    Vas a ver cuatro secciones: *Identidad de marca*, *Público*, *Acceso a datos*
    y *Clientes*.
 
-3. **Identidad de marca (Branding).** Completar:
+4. **Identidad de marca (Branding).** Completar:
    - Nombre de la aplicación: `BISHUSHA`
    - Correo de asistencia al usuario: el tuyo
    - **Logotipo: dejarlo vacío.** La misma pantalla lo avisa: subir un logo
@@ -59,7 +69,7 @@ Google va a pedir una página de inicio y una de privacidad. Dos cosas:
 
    Guardar.
 
-4. **Clientes (Clients).** Acá se crea la credencial y, sobre todo, se
+5. **Clientes (Clients).** Acá se crea la credencial y, sobre todo, se
    registra a dónde vuelve Google después del permiso.
 
    - **Crear cliente → Tipo: Aplicación web.** Nombre: `BISHUSHA`.
@@ -79,22 +89,22 @@ Google va a pedir una página de inicio y una de privacidad. Dos cosas:
 
    Un cambio acá puede tardar unos minutos en tomar efecto.
 
-5. **Acceso a datos (Data Access).** Verificar que el único permiso pedido sea
+6. **Acceso a datos (Data Access).** Verificar que el único permiso pedido sea
    `https://www.googleapis.com/auth/gmail.readonly`. Si hay otros, sacarlos:
    cuantos menos permisos, menos fricción.
 
-6. **Público (Audience).** Acá está el estado de publicación. Debería decir
+7. **Público (Audience).** Acá está el estado de publicación. Debería decir
    **Externo** y **En prueba**. Tocar **PUBLICAR APP**.
 
-7. **Google avisa que vas a necesitar verificación para algunos permisos.
+8. **Google avisa que vas a necesitar verificación para algunos permisos.
    Confirmar igual.** El estado pasa a **En producción**. Esto es lo único que
    hacía falta.
 
-8. **Volver a BISHUSHA → Ajustes → Conectar Gmail.** Va a aparecer la pantalla
+9. **Volver a BISHUSHA → Ajustes → Conectar Gmail.** Va a aparecer la pantalla
    *"Google no verificó esta aplicación"*. Entrar por **Configuración avanzada →
    Ir a bishusha-xxx.pages.dev (no seguro)** y dar el permiso. Es una sola vez.
 
-9. **Anotar la fecha.** Si a los diez días sigue sincronizando, quedó resuelto.
+10. **Anotar la fecha.** Si a los diez días sigue sincronizando, quedó resuelto.
 
 ---
 
@@ -117,6 +127,7 @@ Errores frecuentes:
 | `redirect_uri_mismatch` | la dirección de vuelta no coincide con la registrada |
 | `access_denied` | se tocó "Volver a seguridad" en la pantalla de app sin verificar |
 | `no vino el código; llegó: …` | Google mandó de vuelta sin código; los parámetros que sí llegaron dicen qué pasó |
+| Vuelve sin mostrar la pantalla de permisos | falta habilitar la **Gmail API** en Biblioteca (paso 2) |
 | `Requested function was not found` | la función está publicada con otro nombre: el nombre es la URL |
 
 ---
