@@ -3,7 +3,7 @@
 // =====================================================================
 import { h, icono, aviso, confirmar, hoja, campo } from '../ui.js';
 import { state, salir, sincronizar, exportarJSON, pendientes, fallidas, DEMO,
-         FUNCTIONS_URL, conectar, desconectar, leerAhora } from '../db.js';
+         FUNCTIONS_URL, conectar, desconectar, leerAhora, mirarBandeja } from '../db.js';
 import { plata, fechaRelativa } from '../formato.js';
 import { irA } from '../ruteo.js';
 import { formCategorias } from './formularios.js';
@@ -147,6 +147,10 @@ function seccionLectura() {
   return h('section',
     h('div.ghead', 'Lectura automática'),
     h('div.grp', PROVEEDORES.map(p => filaProveedor(p))),
+    (state.integrations || []).some(x => x.proveedor === 'gmail' && x.activo !== false)
+      ? h('button.btn.sec', { style: { marginTop: '12px' }, onclick: () => hojaBandeja() },
+          icono('buscar', 16), '¿No entra nada? Ver qué mails encuentro')
+      : null,
     h('div.small.mut', { style: { padding: '10px 4px 0', lineHeight: '1.5' } },
       'Solo de lectura: la app no manda correos ni toca tu casilla. Podés cortar ',
       'el permiso cuando quieras, acá o desde tu cuenta de Google.'));
@@ -213,3 +217,42 @@ function avisoOAuth() {
 
 const hora = ms => new Date(ms).toLocaleTimeString('es-AR',
   { hour: '2-digit', minute: '2-digit', hour12: false });
+
+/**
+ * Que hay en la bandeja y que haria la app con cada mail.
+ *
+ * "No entra nada" tiene dos causas opuestas —el banco no manda avisos, o los
+ * manda y la app no los reconoce— y desde afuera se ven igual. Esto las
+ * separa sin tener que adivinar.
+ */
+function hojaBandeja() {
+  const cuerpo = h('div', h('div.small.mut', 'Buscando…'));
+  hoja('Qué encuentro en tu correo', h('div',
+    h('div.small.mut', { style: { lineHeight: '1.5', marginBottom: '14px' } },
+      'Los últimos 30 días de bancos y billeteras, y qué haría con cada uno. ',
+      'Esto no carga nada.'),
+    cuerpo));
+
+  mirarBandeja().then(d => {
+    if (!d.vistos?.length) {
+      cuerpo.replaceChildren(h('div.small.mut', { style: { lineHeight: '1.5' } },
+        'No encontré ningún correo de bancos ni billeteras en los últimos 30 días. ',
+        'Eso quiere decir que los avisos no te están llegando por mail: fijate en ',
+        'el home banking que estén activados los avisos por correo, no solo los ',
+        'push o los SMS.'));
+      return;
+    }
+    cuerpo.replaceChildren(
+      h('div.small.mut', { style: { marginBottom: '10px' } },
+        `${d.encontrados} correos encontrados`),
+      h('div.grp', d.vistos.map(v => h('div.li',
+        h('div.m',
+          h('div.t', { style: { fontSize: '14px' } }, v.asunto || '(sin asunto)'),
+          h('div.s', v.fecha, ' · ', v.de.replace(/.*</, '').replace('>', '')),
+          h('div.s', { style: { marginTop: '3px',
+            color: v.veredicto.startsWith('SE CARGA') ? 'var(--pos)' : 'var(--tx3)' } },
+            v.veredicto))))));
+  }).catch(e => {
+    cuerpo.replaceChildren(h('div.small.mut', String(e.message || e)));
+  });
+}

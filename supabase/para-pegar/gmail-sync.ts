@@ -234,6 +234,7 @@ var REMITENTES = [
   "mercadolibre.com.ar"
 ];
 var QUERY = `from:(${REMITENTES.join(" OR ")}) newer_than:14d`;
+var QUERY_ANCHA = "from:(galicia OR bancogalicia OR modo OR mercadopago OR mercadolibre OR personalpay OR naranja OR uala OR brubank) newer_than:30d";
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
   const sb = admin();
@@ -241,6 +242,11 @@ Deno.serve(async (req) => {
   let q = sb.from("integrations").select("*").eq("proveedor", "gmail").eq("activo", true);
   if (body.user_id) q = q.eq("user_id", body.user_id);
   const { data: integraciones } = await q;
+  if (body.solo_ver) {
+    const it = (integraciones ?? [])[0];
+    if (!it) return json({ error: "no hay Gmail conectado" }, 400);
+    return json(await mirar(sb, it));
+  }
   const resumen = [];
   for (const it of integraciones ?? []) {
     try {
@@ -252,6 +258,28 @@ Deno.serve(async (req) => {
   }
   return json({ ok: true, resumen });
 });
+async function mirar(sb, it) {
+  const token = await accessToken(sb, it);
+  const lista = await api(`messages?q=${encodeURIComponent(QUERY_ANCHA)}&maxResults=25`, token);
+  const vistos = [];
+  for (const m of (lista.messages ?? []).slice(0, 25)) {
+    const msg = await api(`messages/${m.id}?format=full`, token);
+    const cab = (n) => msg.payload?.headers?.find((h) => h.name.toLowerCase() === n)?.value ?? "";
+    const remitente = cab("from"), asunto = cab("subject");
+    const cuerpo = textoDe(msg.payload);
+    const muestra = asunto + " " + cuerpo.slice(0, 600);
+    const fecha = new Date(Number(msg.internalDate || Date.now())).toISOString().slice(0, 10);
+    let veredicto;
+    if (ES_RUIDO.test(muestra)) veredicto = "descartado \xB7 parece publicidad o aviso";
+    else if (!ES_CONSUMO.test(muestra)) veredicto = "descartado \xB7 no dice que algo ya pas\xF3";
+    else {
+      const mov = parsearMail(remitente, asunto, cuerpo, fecha);
+      veredicto = !mov ? "descartado \xB7 ninguna regla lo entiende" : mov.confianza < 75 ? `descartado \xB7 poca confianza (${mov.confianza})` : `SE CARGA \xB7 ${mov.tipo} ${mov.moneda} ${mov.monto} \xB7 ${mov.comercio}`;
+    }
+    vistos.push({ fecha, de: remitente.slice(0, 60), asunto: asunto.slice(0, 80), veredicto });
+  }
+  return { encontrados: (lista.messages ?? []).length, busqueda: QUERY_ANCHA, vistos };
+}
 async function sincronizar(sb, it) {
   const token = await accessToken(sb, it);
   const lista = await api(`messages?q=${encodeURIComponent(QUERY)}&maxResults=60`, token);

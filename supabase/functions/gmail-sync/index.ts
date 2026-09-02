@@ -11,6 +11,12 @@ const REMITENTES = [
 ];
 const QUERY = `from:(${REMITENTES.join(' OR ')}) newer_than:14d`;
 
+// Para el diagnostico se busca mas ancho a proposito: la pregunta ahi no es
+// "que puedo cargar" sino "que me esta llegando". Sirve para distinguir "el
+// banco no manda nada" de "manda, pero no lo reconozco".
+const QUERY_ANCHA = 'from:(galicia OR bancogalicia OR modo OR mercadopago OR mercadolibre OR ' +
+  'personalpay OR naranja OR uala OR brubank) newer_than:30d';
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS });
   const sb = admin();
@@ -19,6 +25,13 @@ Deno.serve(async (req) => {
   let q = sb.from('integrations').select('*').eq('proveedor', 'gmail').eq('activo', true);
   if (body.user_id) q = q.eq('user_id', body.user_id);
   const { data: integraciones } = await q;
+
+  // Modo diagnostico: mira que llega y por que se descarta, sin cargar nada.
+  if (body.solo_ver) {
+    const it = (integraciones ?? [])[0];
+    if (!it) return json({ error: 'no hay Gmail conectado' }, 400);
+    return json(await mirar(sb, it));
+  }
 
   const resumen: unknown[] = [];
   for (const it of integraciones ?? []) {
@@ -30,6 +43,42 @@ Deno.serve(async (req) => {
   }
   return json({ ok: true, resumen });
 });
+
+// ---------------------------------------------------------------------
+/**
+ * Que hay en la bandeja y que haria la app con cada mail. No escribe nada.
+ *
+ * Existe porque "no entra nada" tiene dos causas opuestas —el banco no manda
+ * avisos, o los manda y no los reconozco— y desde afuera se ven igual.
+ */
+async function mirar(sb: any, it: any) {
+  const token = await accessToken(sb, it);
+  const lista = await api(`messages?q=${encodeURIComponent(QUERY_ANCHA)}&maxResults=25`, token);
+  const vistos: unknown[] = [];
+
+  for (const m of (lista.messages ?? []).slice(0, 25)) {
+    const msg = await api(`messages/${m.id}?format=full`, token);
+    const cab = (n: string) => msg.payload?.headers?.find((h: any) =>
+      h.name.toLowerCase() === n)?.value ?? '';
+    const remitente = cab('from'), asunto = cab('subject');
+    const cuerpo = textoDe(msg.payload);
+    const muestra = asunto + ' ' + cuerpo.slice(0, 600);
+    const fecha = new Date(Number(msg.internalDate || Date.now())).toISOString().slice(0, 10);
+
+    let veredicto: string;
+    if (ES_RUIDO.test(muestra)) veredicto = 'descartado · parece publicidad o aviso';
+    else if (!ES_CONSUMO.test(muestra)) veredicto = 'descartado · no dice que algo ya pasó';
+    else {
+      const mov = parsearMail(remitente, asunto, cuerpo, fecha);
+      veredicto = !mov ? 'descartado · ninguna regla lo entiende'
+        : mov.confianza < 75 ? `descartado · poca confianza (${mov.confianza})`
+        : `SE CARGA · ${mov.tipo} ${mov.moneda} ${mov.monto} · ${mov.comercio}`;
+    }
+    vistos.push({ fecha, de: remitente.slice(0, 60), asunto: asunto.slice(0, 80), veredicto });
+  }
+
+  return { encontrados: (lista.messages ?? []).length, busqueda: QUERY_ANCHA, vistos };
+}
 
 // ---------------------------------------------------------------------
 async function sincronizar(sb: any, it: any) {

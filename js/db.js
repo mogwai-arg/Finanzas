@@ -199,6 +199,21 @@ export async function leerAhora(proveedor) {
   return texto;
 }
 
+/** Que hay en la bandeja y que haria la app con cada mail. No carga nada. */
+export async function mirarBandeja() {
+  if (!FUNCTIONS_URL) throw new Error('Falta FUNCTIONS_URL en la configuración.');
+  const t = await token();
+  const r = await fetch(`${FUNCTIONS_URL}/gmail-sync`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${t}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ user_id: state.user.id, solo_ver: true })
+  });
+  if (r.status === 404) throw new Error('Falta subir gmail-sync, o quedó con otro nombre.');
+  const d = await r.json().catch(() => null);
+  if (!r.ok || !d) throw new Error('No pude leer la bandeja.');
+  return d;
+}
+
 // ------------------------------------------------------------------- auth
 export async function sesion() {
   if (DEMO) {
