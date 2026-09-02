@@ -2,7 +2,7 @@
   "name": "BISHUSHA",
   "short_name": "BISHUSHA",
   "description": "Tus finanzas: tarjetas con cuotas, gastos fijos, presupuesto y promos.",
-  "start_url": "./index.html#/hoy",
+  "start_url": "./#/hoy",
   "scope": "./",
   "display": "standalone",
   "orientation": "portrait",

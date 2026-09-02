@@ -55,6 +55,7 @@ const decirEstado = txt => {
 
 async function iniciar() {
   aplicarTema();
+  servicioOffline();
 
   // Si tarda, avisar en vez de dejar la marca latiendo sin explicación.
   const lento = setTimeout(() => {
@@ -89,9 +90,24 @@ async function iniciar() {
     sincronizar().catch(e => console.warn('sync', e));
   }
 
-  if ('serviceWorker' in navigator && location.protocol !== 'file:') {
-    navigator.serviceWorker.register('sw.js').catch(() => {});
-  }
+}
+
+// Se registra siempre, aun sin sesión: si sólo corriera después del login,
+// una versión vieja del worker se quedaría atendiendo para siempre a quien no
+// llegó a entrar.
+function servicioOffline() {
+  if (!('serviceWorker' in navigator) || location.protocol === 'file:') return;
+  const habia = !!navigator.serviceWorker.controller;
+  let recargando = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    // Con un worker nuevo al mando conviene recargar una vez, para no quedar
+    // con la mitad de la app vieja y la mitad nueva. En la primera visita no
+    // hace falta: no había nada que reemplazar.
+    if (!habia || recargando) return;
+    recargando = true;
+    location.reload();
+  });
+  navigator.serviceWorker.register('sw.js').catch(() => {});
 }
 
 function aplicarTema() {
