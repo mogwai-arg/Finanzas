@@ -135,14 +135,27 @@ function avisarVueltaDeOAuth() {
   if (!ok && !error) return;
 
   const nombre = p => p === 'mercadopago' ? 'Mercado Pago' : 'Gmail';
-  location.hash = h.slice(0, i);        // limpiar, para no repetirlo al recargar
+
+  // Se limpia sin dejar rastro en el historial. Con location.hash quedaba una
+  // entrada mas, y la app instalada reabre la ultima direccion: al volver
+  // aparecia otra vez el mismo error, con la hora de ese momento, como si
+  // acabara de pasar. Perseguimos un fantasma un buen rato por esto.
+  const limpia = location.pathname + location.search + h.slice(0, i);
+  history.replaceState(null, '', limpia);
+
   // Un aviso se va en tres segundos, y el motivo de que falle un permiso es
   // justo lo que hay que poder leer con calma: queda guardado hasta que se
   // conecte bien o se descarte a mano.
   try {
     if (ok) localStorage.removeItem('bishusha.oauth.error');
-    else localStorage.setItem('bishusha.oauth.error',
-      JSON.stringify({ msg: error, cuando: Date.now() }));
+    else {
+      // La hora es la de la primera vez que apareció este error, no la de
+      // cada vez que se abre la app: si no, uno viejo se ve siempre recién.
+      let antes = null;
+      try { antes = JSON.parse(localStorage.getItem('bishusha.oauth.error') || 'null'); } catch { /* nada */ }
+      const cuando = antes && antes.msg === error && antes.cuando ? antes.cuando : Date.now();
+      localStorage.setItem('bishusha.oauth.error', JSON.stringify({ msg: error, cuando }));
+    }
   } catch { /* modo privado */ }
   setTimeout(() => {
     if (ok) { aviso(`${nombre(ok)} conectado`); sincronizar().catch(() => {}); }
