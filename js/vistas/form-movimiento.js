@@ -101,13 +101,16 @@ export function formMovimiento(tx = null) {
     cMoneda.disabled = esMovida;
     cMoneda.style.opacity = esMovida ? '.55' : '';
 
+    // En una movida la plata no se gasta ni entra: cambia de lugar. "Cuánto
+    // sale" hacía pensar en un gasto.
     bloqueMonto.querySelector('label').textContent =
-      esMovida ? 'Cuánto sale' : esIngreso ? 'Cuánto entró' : 'Cuánto gastaste';
+      esMovida ? 'Importe' : esIngreso ? 'Cuánto entró' : 'Cuánto gastaste';
     bloqueDonde.hidden = esMovida;
     bloqueDonde.querySelector('label').textContent = esIngreso ? 'De quién' : 'Dónde';
     cComercio.placeholder = esIngreso ? 'Sueldo, cliente, venta…' : 'Coto, Shell, Dexter…';
     bloqueQue.querySelector('label').textContent =
-      esIngreso ? 'Detalle' : esMovida ? 'Por qué' : 'Qué';
+      esIngreso ? 'Detalle' : esMovida ? 'Detalle (opcional)' : 'Qué';
+    cQue.placeholder = esMovida ? 'Ahorro, pago de tarjeta…' : 'Opcional';
     bloqueCuenta.querySelector('label').textContent =
       esMovida ? 'De qué cuenta sale' : esIngreso ? 'En qué cuenta entró' : 'Con qué pagaste';
     bloqueDestino.hidden = !esMovida;

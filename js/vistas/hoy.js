@@ -246,7 +246,9 @@ function tiraBishu(hoy) {
     h('div.grp.pad', { style: { display: 'flex', alignItems: 'center', gap: '13px' } },
       h('div', { style: { color, flex: 'none' } }, bishu(animo, 46)),
       h('div', { style: { flex: '1', minWidth: '0' } },
-        h('div', { style: { fontSize: '14.5px', lineHeight: '1.45' } }, texto),
+        h('div', { style: { fontWeight: '600', fontSize: '14.5px', letterSpacing: '-.015em',
+                            marginBottom: '2px' } }, '¡Hola! Soy Bishu'),
+        h('div', { style: { fontSize: '14.5px', lineHeight: '1.45', color: 'var(--tx2)' } }, texto),
         h('button', { style: { background: 'none', border: '0', padding: '6px 0 0',
                                color: 'var(--tx3)', fontSize: '12.5px', cursor: 'pointer' },
                       onclick: () => irA('/ajustes') }, 'Elegí de qué te aviso'))));
