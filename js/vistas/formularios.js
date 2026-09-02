@@ -4,7 +4,7 @@
 // =====================================================================
 import { h, icono, iconoDe, hoja, aviso, campo, select, confirmar } from '../ui.js';
 import { state, guardar, borrar } from '../db.js';
-import { plata, periodoLargo, hoyISO, nombreDe } from '../formato.js';
+import { plata, periodoLargo, hoyISO, nombreDe, etiquetaCuenta } from '../formato.js';
 
 const num = v => Number(String(v ?? '').replace(/\./g, '').replace(',', '.')) || 0;
 const DIAS = [['1','lun'],['2','mar'],['3','mié'],['4','jue'],['5','vie'],['6','sáb'],['0','dom']];
@@ -152,7 +152,7 @@ export function formRecurrente(r = null) {
     cat: select([{ value: '', label: 'Sin categoría' },
       ...state.categories.filter(x => x.tipo === 'gasto').map(x => ({ value: x.id, label: x.nombre }))],
       { value: r?.category_id || '' }),
-    cuenta: select([{ value: '', label: '—' }, ...cuentas.map(x => ({ value: x.id, label: x.nombre }))],
+    cuenta: select([{ value: '', label: '—' }, ...cuentas.map(x => ({ value: x.id, label: etiquetaCuenta(x) }))],
                    { value: r?.account_id || '' })
   };
   const cVar = h('input', { type: 'checkbox', checked: !!r?.variable });

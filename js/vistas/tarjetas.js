@@ -3,13 +3,15 @@
 // El grafico muestra lo que YA debes, no lo que gastaste: las barras bajan
 // solas a medida que se terminan las cuotas.
 // =====================================================================
-import { h, icono } from '../ui.js';
+import { h, icono, iconoDe } from '../ui.js';
 import { state } from '../db.js';
 import * as F from '../finance.js';
-import { plata, plataPartida, diasHasta, fechaISO, mesCorto, periodoLargo, buscar } from '../formato.js';
+import { plata, plataPartida, diasHasta, fechaISO, mesCorto, periodoLargo, buscar,
+         fechaRelativa } from '../formato.js';
 import { irA } from '../ruteo.js';
 import { formCuenta } from './formularios.js';
 import { formImportarResumen } from './importar.js';
+import { formMovimiento } from './form-movimiento.js';
 
 const isoDe = d => fechaISO(d);
 
@@ -40,6 +42,7 @@ export function vistaTarjeta(root, { id }) {
   root.append(h('div.flow',
     plastico(t, hoy, false),
     limite(t, hoy),
+    consumosDelCiclo(t, hoy),
     cuotasVivas(t, hoy),
     proximosResumenes(t, hoy),
     h('button.btn.sec', { onclick: () => formCuenta(t) }, icono('ajustes', 17), 'Editar tarjeta'),
@@ -124,6 +127,53 @@ function cuotasVivas(t, hoy) {
           actual === tx.cuotas ? ' · última' : '')),
       h('div.v', plata(tx.monto / tx.cuotas, tx.moneda),
         h('small', `de ${plata(tx.monto, tx.moneda)}`))))));
+}
+
+/**
+ * Los consumos del resumen que se esta mirando.
+ *
+ * Sin esto una tarjeta en cero no se puede explicar: puede ser que no haya
+ * consumos, o que se hayan cargado en la cuenta del mismo banco en vez de en
+ * la tarjeta. Viendo la lista, el error salta.
+ */
+function consumosDelCiclo(t, hoy) {
+  const c = F.resumenAPagar(t, hoy) || F.proximoCiclo(t, hoy);
+  const per = F.periodo(c.vence);
+  const moneda = t.moneda || 'ARS';
+
+  const filas = [];
+  for (const tx of state.transactions) {
+    if (tx.account_id !== t.id || tx.tipo !== 'gasto') continue;
+    for (const cu of F.cronograma(tx, t, hoy)) {
+      if (cu.periodoVenc !== per) continue;
+      filas.push({ tx, monto: cu.monto, nro: cu.nro, total: cu.total });
+    }
+  }
+  filas.sort((a, b) => (a.tx.fecha < b.tx.fecha ? 1 : -1));
+
+  const titulo = F.resumenAPagar(t, hoy) ? 'Lo que se paga' : 'Lo que va del resumen';
+  if (!filas.length) {
+    return h('section',
+      h('div.ghead', titulo),
+      h('div.grp.pad',
+        h('div.small.mut', { style: { lineHeight: '1.5' } },
+          'Todavía no hay consumos en este resumen. Si cargaste alguno y no aparece acá, ',
+          'fijate que lo hayas puesto en la tarjeta y no en la cuenta del mismo banco: ',
+          'en el formulario dicen el tipo al lado del nombre.')));
+  }
+  return h('section',
+    h('div.ghead', titulo, h('span.mut', `${filas.length}`)),
+    h('div.grp', filas.slice(0, 12).map(f => h('button.li', {
+      onclick: () => formMovimiento(state.transactions.find(x => x.id === f.tx.id))
+    },
+      h('div.av', icono(iconoDe(f.tx.comercio || f.tx.descripcion), 17)),
+      h('div.m',
+        h('div.t', f.tx.comercio || f.tx.descripcion),
+        h('div.s', fechaRelativa(f.tx.fecha, hoy) +
+          (f.total > 1 ? ` · cuota ${f.nro} de ${f.total}` : ''))),
+      h('div.v', plata(moneda === 'USD' ? f.monto : Math.round(f.monto), moneda)))),
+      filas.length > 12 ? h('div.li', h('div.m', h('div.s.mut',
+        `y ${filas.length - 12} más`))) : null));
 }
 
 // --------------------------------------------------- proximos resumenes

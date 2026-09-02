@@ -5,7 +5,7 @@
 // =====================================================================
 import { h, icono, iconoDe, hoja, aviso, campo, select, confirmar } from '../ui.js';
 import { state, guardar, borrar } from '../db.js';
-import { plata, hoyISO, nombreDe } from '../formato.js';
+import { plata, hoyISO, nombreDe, etiquetaCuenta } from '../formato.js';
 
 export function formMovimiento(tx = null) {
   const nuevo = !tx;
@@ -24,7 +24,7 @@ export function formMovimiento(tx = null) {
   };
 
   const cuentas = state.accounts.filter(a => a.activo !== false);
-  const opcCuentas = cuentas.map(a => ({ value: a.id, label: a.nombre }));
+  const opcCuentas = cuentas.map(a => ({ value: a.id, label: etiquetaCuenta(a) }));
 
   const cMonto = h('input', { type: 'text', inputmode: 'decimal', value: String(d.monto),
                               placeholder: '0', 'aria-label': 'Monto' });

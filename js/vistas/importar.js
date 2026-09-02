@@ -7,7 +7,7 @@
 // las cuotas y los impuestos.
 // =====================================================================
 import { h, icono, hoja, aviso, campo, select } from '../ui.js';
-import { state, guardar } from '../db.js';
+import { state, guardar, guardarVarios } from '../db.js';
 import { parseResumen, aMovimientos } from '../resumen.js';
 import { plata, aFecha } from '../formato.js';
 
@@ -122,20 +122,19 @@ export function formImportarResumen() {
     // Un consumo del resumen no es una adivinanza: el banco ya lo cobró, con
     // fecha e importe. Entra confirmado. La excepción son las cuotas, que si
     // entran mal arrastran el error doce meses: esas sí van al mazo.
-    for (const m of nuevos) {
-      await guardar('transactions', { ...m, account_id: cuenta.id, revisado: m.cuotas <= 1 });
-    }
+    const filas = nuevos.map(m => ({ ...m, account_id: cuenta.id, revisado: m.cuotas <= 1 }));
 
     // Los impuestos y percepciones también se pagan: entran como un gasto más.
     for (const i of r.impuestos) {
       const id = `${r.marca}:${r.ciclo?.cierre || ''}:imp:${i.fecha}:${i.concepto}:${i.monto}`;
       if (state.transactions.some(t => t.externo_id === id)) continue;
-      await guardar('transactions', {
+      filas.push({
         fecha: i.fecha, descripcion: i.concepto, comercio: i.concepto,
         monto: i.monto, moneda: 'ARS', tipo: 'gasto', cuotas: 1,
         account_id: cuenta.id, fuente: 'resumen', revisado: true, externo_id: id
       });
     }
+    await guardarVarios('transactions', filas);
 
     cerrar();
     const aRevisar = nuevos.filter(m => m.cuotas > 1).length;

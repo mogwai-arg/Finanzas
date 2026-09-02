@@ -227,13 +227,19 @@ export function aviso(msg, ms = 2800) {
 
 export function confirmar(msg, textoOk = 'Borrar', { peligro = true } = {}) {
   return new Promise(ok => {
+    // La respuesta se registra ANTES de cerrar. Cerrar dispara onClose, que
+    // responde que no: si el boton de aceptar cerraba primero, la promesa ya
+    // habia quedado en `false` y el `ok(true)` de despues no hacia nada. Toda
+    // confirmacion de la app decia que si y no pasaba nada.
+    let respondido = false;
+    const responder = v => { if (respondido) return; respondido = true; ok(v); };
     const cerrar = hoja('¿Seguro?', h('div',
       h('p.mut', { style: { margin: '-6px 0 20px', fontSize: '14.5px', lineHeight: '1.45' } }, msg),
       h('div.fila',
-        h('button.btn.sec', { onclick: () => { cerrar(); ok(false); } }, 'Cancelar'),
+        h('button.btn.sec', { onclick: () => { responder(false); cerrar(); } }, 'Cancelar'),
         h(peligro ? 'button.btn.dg' : 'button.btn',
-          { onclick: () => { cerrar(); ok(true); } }, textoOk))
-    ), { onClose: () => ok(false) });
+          { onclick: () => { responder(true); cerrar(); } }, textoOk))
+    ), { onClose: () => responder(false) });
   });
 }
 

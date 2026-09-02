@@ -240,6 +240,40 @@ export async function guardar(tabla, fila) {
   return nueva;
 }
 
+/**
+ * Guarda muchas filas de una vez: una sola pasada por el estado, un solo
+ * repintado y un solo viaje a la red.
+ *
+ * Hacerlo con guardar() en un for era medio minuto de espera para cincuenta
+ * filas —cincuenta viajes de ida y vuelta, y cincuenta repintados que dejaban
+ * la pantalla como si no pasara nada— y encima si el quinto fallaba los
+ * cuatro primeros ya estaban subidos.
+ */
+export async function guardarVarios(tabla, filas) {
+  if (!filas.length) return [];
+  const ahora = new Date().toISOString();
+  const nuevas = filas.map(f => ({ ...f, id: f.id || uuid(), user_id: state.user.id, updated_at: ahora }));
+
+  const lista = state[tabla] || (state[tabla] = []);
+  const porId = new Map(lista.map((x, i) => [x.id, i]));
+  for (const n of nuevas) {
+    const i = porId.get(n.id);
+    if (i >= 0) lista[i] = { ...lista[i], ...n }; else lista.unshift(n);
+  }
+  guardarCache(); emit();
+
+  if (DEMO) return nuevas;
+  if (navigator.onLine) {
+    try {
+      const { error } = await sb.from(tabla).upsert(nuevas);
+      if (error) throw new Error(error.message);
+      return nuevas;
+    } catch (e) { /* abajo se encolan */ }
+  }
+  for (const n of nuevas) encolar({ accion: 'upsert', tabla, fila: n });
+  return nuevas;
+}
+
 export async function borrar(tabla, id) {
   state[tabla] = (state[tabla] || []).filter(x => x.id !== id);
   guardarCache(); emit();

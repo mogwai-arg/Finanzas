@@ -63,5 +63,17 @@ export const diasHasta = (iso, ref = new Date()) =>
   Math.round((aFecha(iso) - new Date(ref.toDateString())) / 86400000);
 
 /** Busca en el estado por id, sin explotar si no esta. */
+const TIPO_CUENTA = { credito: 'tarjeta', debito: 'débito', cuenta: 'banco',
+                      billetera: 'billetera', efectivo: 'efectivo' };
+
+/**
+ * 'Mercado Pago · billetera'. La billetera y la tarjeta de credito de un mismo
+ * emisor se llaman casi igual, y elegir la equivocada manda el gasto a la
+ * cuenta y deja la tarjeta en cero sin que nada lo diga.
+ */
+export const etiquetaCuenta = a =>
+  `${a.nombre}${TIPO_CUENTA[a.tipo] ? ' · ' + TIPO_CUENTA[a.tipo] : ''}` +
+  (a.moneda === 'USD' ? ' (US$)' : '');
+
 export const buscar = (tabla, id) => (state[tabla] || []).find(x => x.id === id) || null;
 export const nombreDe = (tabla, id, porDefecto = '—') => (buscar(tabla, id) || {}).nombre || porDefecto;

@@ -9,7 +9,7 @@
 // mal, arrastra el error doce meses.
 // =====================================================================
 import { h, icono, iconoDe, aviso, hoja, confirmar } from '../ui.js';
-import { state, guardar, borrar } from '../db.js';
+import { state, guardar, guardarVarios, borrar } from '../db.js';
 import * as F from '../finance.js';
 import { plata, plataPartida, fechaRelativa, nombreDe, buscar, aFecha } from '../formato.js';
 import { irA } from '../ruteo.js';
@@ -43,7 +43,7 @@ function confirmarTodo(pend, alTerminar) {
     if (!await confirmar(`¿Dar por buenos los ${pend.length} que quedan? ` +
       'Quedan cargados tal como están; siempre los podés editar después.',
       'Confirmar todos', { peligro: false })) return;
-    for (const t of pend) await guardar('transactions', { ...t, revisado: true });
+    await guardarVarios('transactions', pend.map(t => ({ ...t, revisado: true })));
     aviso(`${pend.length} confirmados`);
     alTerminar();
   } }, `Confirmar los ${pend.length} de una vez`);

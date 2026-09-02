@@ -5,6 +5,7 @@ import { h, icono, iconoDe, hoja, aviso } from '../ui.js';
 import { state, guardar } from '../db.js';
 import * as F from '../finance.js';
 import { plata, cuandoVence, nombreDe, fechaISO, hoyISO } from '../formato.js';
+import { irA } from '../ruteo.js';
 import { formRecurrente, formPresupuesto } from './formularios.js';
 
 export function vistaMes(root) {
@@ -14,14 +15,30 @@ export function vistaMes(root) {
   const res = F.resumenMes(state.transactions, p, 'ARS');
   const budgets = state.budgets.filter(b => b.periodo === p);
   const faltan = rec.filter(r => !r.pagado);
-  const total = faltan.reduce((s, r) => s + r.monto, 0);
+  const tarjetas = resumenesDelMes(hoy);
+  const esteMes = tarjetas.filter(t => F.periodo(t.vence) === p);
+  const total = faltan.reduce((s, r) => s + r.monto, 0) +
+                esteMes.reduce((s, t) => s + t.monto, 0);
 
   root.append(h('div.flow',
-    faltan.length ? h('div.grp.pad',
+    (faltan.length || esteMes.length) ? h('div.grp.pad',
       h('div.ghead', { style: { margin: '0' } }, 'Falta pagar'),
       h('div', { class: 'cifra', style: { fontSize: '30px', marginTop: '5px' } }, plata(Math.round(total))),
       h('div.small.mut', { style: { marginTop: '4px' } },
-        `${faltan.length} de ${rec.length} gastos fijos`)) : null,
+        [esteMes.length ? `${esteMes.length} ${esteMes.length === 1 ? 'resumen' : 'resúmenes'}` : null,
+         rec.length ? `${faltan.length} de ${rec.length} gastos fijos` : null]
+          .filter(Boolean).join(' · '))) : null,
+
+    // Los resúmenes son casi siempre el número más grande del mes: van
+    // primero. Antes esta pantalla solo mostraba los gastos fijos, así que
+    // el "Ver todo" de Hoy llevaba a una lista donde faltaba lo principal.
+    tarjetas.length ? h('section',
+      h('div.ghead', 'Tarjetas'),
+      h('div.grp', tarjetas.map(t => h('button.li', { onclick: () => irA(`/tarjetas/${t.id}`) },
+        h('div.av', icono('tarjeta', 17)),
+        h('div.m', h('div.t', t.nombre),
+          h('div.s', cuandoVence(fechaISO(t.vence), hoy) + (t.declarado ? '' : ' · estimado'))),
+        h('div.v', plata(Math.round(t.monto), 'ARS')))))) : null,
 
     h('section',
       h('div.ghead', 'Gastos fijos',
@@ -44,6 +61,18 @@ export function vistaMes(root) {
             'Sin topes cargados no hay con qué comparar el gasto del mes. ',
             'Empezá por tres categorías, no por diez.')))
   ));
+}
+
+/** Lo que hay que pagar de cada tarjeta, ordenado por vencimiento. */
+function resumenesDelMes(hoy) {
+  const out = [];
+  for (const t of state.accounts.filter(a => a.tipo === 'credito' && a.activo !== false)) {
+    const c = F.resumenAPagar(t, hoy) || F.proximoCiclo(t, hoy);
+    const monto = F.totalTarjetaEnPeriodo(state.transactions, t, F.periodo(c.vence), 'ARS');
+    if (!monto) continue;
+    out.push({ id: t.id, nombre: t.nombre, monto, vence: c.vence, declarado: c.declarado });
+  }
+  return out.sort((a, b) => a.vence - b.vence);
 }
 
 function filaRecurrente(r, periodo, hoy) {
