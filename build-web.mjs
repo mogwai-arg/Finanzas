@@ -13,7 +13,7 @@
 //   Output:         dist
 //   Variables:      SUPABASE_URL, SUPABASE_ANON_KEY
 // =====================================================================
-import { cpSync, mkdirSync, rmSync, writeFileSync, readdirSync, existsSync } from 'node:fs';
+import { cpSync, mkdirSync, rmSync, writeFileSync, readFileSync, readdirSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 
 const OUT = 'dist';
@@ -30,16 +30,24 @@ if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
 // El demo empaquetado no se pisa: se genera aparte con `npm run demo`.
 const demo = join(OUT, 'bishusha-demo.html');
 const guardarDemo = existsSync(demo);
-const copia = guardarDemo ? (await import('node:fs')).readFileSync(demo) : null;
+const copia = guardarDemo ? readFileSync(demo) : null;
 rmSync(OUT, { recursive: true, force: true });
 mkdirSync(OUT, { recursive: true });
 if (copia) writeFileSync(demo, copia);
 
 // Lo que el navegador necesita, y nada mas.
 for (const d of ['css', 'vendor', 'icons', 'marca']) cpSync(d, join(OUT, d), { recursive: true });
-for (const f of ['index.html', 'manifest.webmanifest', 'sw.js', 'privacidad.html']) {
+for (const f of ['index.html', 'manifest.webmanifest', 'privacidad.html']) {
   if (existsSync(f)) cpSync(f, join(OUT, f));
 }
+
+// El service worker lleva la version del deploy adentro. Sin esto el archivo
+// sale identico en cada publicacion, el navegador no ve nada nuevo, no vuelve
+// a instalar y sigue sirviendo el JS viejo del cache para siempre: se publica
+// una funcion y en el telefono no aparece nunca.
+const version = (process.env.CF_PAGES_COMMIT_SHA || '').slice(0, 8) || String(Date.now());
+writeFileSync(join(OUT, 'sw.js'),
+  readFileSync('sw.js', 'utf8').replace(/const V = '[^']*'/, `const V = 'bishusha-${version}'`));
 
 // js/ sin las pruebas ni los fixtures.
 mkdirSync(join(OUT, 'js/vistas'), { recursive: true });
@@ -62,4 +70,4 @@ window.CONFIG = {
 };
 `);
 
-console.log(`dist/ listo · ${SUPABASE_URL}`);
+console.log(`dist/ listo · ${SUPABASE_URL} · worker bishusha-${version}`);

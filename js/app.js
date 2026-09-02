@@ -107,7 +107,14 @@ function servicioOffline() {
     recargando = true;
     location.reload();
   });
-  navigator.serviceWorker.register('sw.js').catch(() => {});
+  navigator.serviceWorker.register('sw.js').then(reg => {
+    // Al volver a la app, preguntar si hay una version nueva publicada. Sin
+    // esto un deploy puede tardar en aparecer en un telefono que nunca cierra
+    // la pestaña.
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') reg.update().catch(() => {});
+    });
+  }).catch(() => {});
 }
 
 function aplicarTema() {

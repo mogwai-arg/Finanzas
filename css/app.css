@@ -173,10 +173,20 @@ input[type=checkbox]{width:auto;min-height:0}
 .mask{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:60;display:flex;
       align-items:flex-end;justify-content:center;animation:fade var(--d-micro) var(--e-entra)}
 .hoja{background:var(--card);border-radius:var(--r-hoja) var(--r-hoja) 0 0;width:100%;max-width:560px;
-      max-height:92vh;overflow:auto;padding:8px 18px calc(24px + var(--safe-b));
+      max-height:92vh;overflow:auto;overscroll-behavior:contain;
+      padding:8px 18px calc(24px + var(--safe-b));
       animation:sube var(--d-hoja) var(--e-entra)}
-.hoja .tirador{width:36px;height:5px;border-radius:3px;background:var(--line);margin:0 auto 14px}
+/* El tirador se agarra: area de toque mas alta que la barrita que se ve. */
+.hoja .tirador{height:22px;margin:-8px auto 6px;display:flex;align-items:center;
+      justify-content:center;touch-action:none;cursor:grab}
+.hoja .tirador::before{content:"";width:36px;height:5px;border-radius:3px;background:var(--line)}
+.hoja-tope{display:flex;align-items:flex-start;gap:12px;margin-bottom:16px;touch-action:none}
+.hoja-tope h2{flex:1;margin-bottom:0}
 .hoja h2{font-family:var(--f-display);font-size:20px;font-weight:800;letter-spacing:-.025em;margin-bottom:16px}
+.cerrar-hoja{flex:none;width:32px;height:32px;border-radius:50%;border:0;display:grid;
+      place-items:center;background:var(--fill);color:var(--tx2);cursor:pointer;
+      -webkit-tap-highlight-color:transparent}
+.cerrar-hoja:active{background:var(--line)}
 @media(min-width:600px){
   .mask{align-items:center}
   .hoja{border-radius:var(--r-hoja);max-height:86vh;padding-bottom:24px}

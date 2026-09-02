@@ -136,9 +136,13 @@ export function iconoDe(texto = '') {
 // -------------------------------------------------------------- hojas
 export function hoja(titulo, contenido, { onClose } = {}) {
   const mask = h('div.mask', { onclick: e => { if (e.target === mask) cerrar(); } });
+  const tirador = h('div.tirador');
+  const cruz = h('button.cerrar-hoja', { type: 'button', 'aria-label': 'Cerrar',
+                                         onclick: () => cerrar() }, icono('cerrar', 17));
   const caja = h('div.hoja', { role: 'dialog', 'aria-modal': 'true', 'aria-label': titulo },
-    h('div.tirador'), titulo && h('h2', titulo));
+    tirador, titulo ? h('div.hoja-tope', h('h2', titulo), cruz) : cruz);
   mask.append(caja);
+  arrastrarParaCerrar(caja, tirador, () => cerrar());
 
   const antes = document.activeElement;
   const cerrar = () => {
@@ -166,6 +170,53 @@ export function hoja(titulo, contenido, { onClose } = {}) {
   if (primero && matchMedia('(min-width:600px)').matches) setTimeout(() => primero.focus(), 80);
   return cerrar;
 }
+
+/**
+ * Bajar la hoja con el dedo para cerrarla, que es lo que uno intenta primero.
+ * El gesto arranca en el tirador o en el encabezado, o en cualquier parte si el
+ * contenido ya esta arriba de todo: asi no le roba el scroll a la lista.
+ */
+function arrastrarParaCerrar(caja, tirador, cerrar) {
+  let y0 = null, dy = 0, t0 = 0;
+
+  const puedeArrancar = destino =>
+    tirador.contains(destino) || destino.closest('.hoja-tope,h2') || caja.scrollTop <= 0;
+
+  caja.addEventListener('touchstart', e => {
+    if (e.touches.length !== 1 || !puedeArrancar(e.target)) { y0 = null; return; }
+    y0 = e.touches[0].clientY; dy = 0; t0 = Date.now();
+    caja.style.transition = 'none';
+  }, { passive: true });
+
+  caja.addEventListener('touchmove', e => {
+    if (y0 == null) return;
+    dy = e.touches[0].clientY - y0;
+    // Para arriba no se estira: eso es scroll del contenido.
+    if (dy <= 0) { if (caja.scrollTop <= 0) dy = 0; else { y0 = null; caja.style.transition = ''; return; } }
+    if (dy > 0 && e.cancelable) e.preventDefault();
+    caja.style.transform = `translateY(${dy}px)`;
+    fondoDe(caja).style.opacity = String(Math.max(0, 1 - dy / 420));
+  }, { passive: false });
+
+  const soltar = () => {
+    if (y0 == null) return;
+    const rapido = dy / Math.max(1, Date.now() - t0) > 0.5;   // px por ms
+    caja.style.transition = 'transform .22s cubic-bezier(.32,.72,0,1)';
+    fondoDe(caja).style.transition = 'opacity .22s linear';
+    if (dy > caja.offsetHeight * 0.28 || (rapido && dy > 60)) {
+      caja.style.transform = `translateY(${caja.offsetHeight}px)`;
+      fondoDe(caja).style.opacity = '0';
+      setTimeout(cerrar, 200);
+    } else {
+      caja.style.transform = '';
+      fondoDe(caja).style.opacity = '';
+    }
+    y0 = null;
+  };
+  caja.addEventListener('touchend', soltar);
+  caja.addEventListener('touchcancel', soltar);
+}
+const fondoDe = caja => caja.parentElement || caja;
 
 export function aviso(msg, ms = 2800) {
   document.querySelectorAll('.toast').forEach(t => t.remove());
