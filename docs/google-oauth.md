@@ -43,9 +43,18 @@ Google va a pedir una página de inicio y una de privacidad. Dos cosas:
 3. **Identidad de marca (Branding).** Completar:
    - Nombre de la aplicación: `BISHUSHA`
    - Correo de asistencia al usuario: el tuyo
-   - Dominios autorizados: `pages.dev`
-   - Página principal: la URL de Cloudflare Pages
-   - Política de privacidad: esa misma URL + `/privacidad.html`
+   - **Logotipo: dejarlo vacío.** La misma pantalla lo avisa: subir un logo
+     obliga a mandar la app a verificación, salvo que quede en estado Prueba.
+     Como el objetivo es publicarla, un logo cuesta el trámite entero. La
+     pantalla de permiso va a mostrar el nombre sin ícono, una sola vez.
+   - Página principal: `https://bishusha.pages.dev`
+   - Política de privacidad: `https://bishusha.pages.dev/privacidad.html`
+   - Condiciones del Servicio: vacío, es opcional.
+   - Dominios autorizados: `bishusha.pages.dev` — el subdominio entero, no
+     `pages.dev`. Google pide un *top private domain*, y `pages.dev` está en la
+     Public Suffix List: para Google es un sufijo público, como `com.ar`, así
+     que lo rechaza. Si algún día ponés dominio propio, ahí sí va el dominio
+     pelado.
    - Datos de contacto del desarrollador: tu correo
 
    Guardar.
