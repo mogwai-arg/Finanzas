@@ -174,7 +174,7 @@ export const DEMO = {
     { id: id('p1'), titulo: 'Coto', comercio: 'Coto', rubro: 'supermercado', emisor: 'galicia',
       tipo: 'reintegro', valor: 25, tope: 20000, tope_periodo: 'mensual', dias: [3, 6],
       medio_pago: 'Galicia Visa', canal: 'presencial', activa: true, favorita: true,
-      osm_filtro: 'shop=supermarket', marcas: ['Coto'] },
+      recordar: true, osm_filtro: 'shop=supermarket', marcas: ['Coto'] },
     { id: id('p2'), titulo: 'Shell', comercio: 'Shell', rubro: 'combustible', emisor: 'modo',
       tipo: 'reintegro', valor: 15, tope: 8000, tope_periodo: 'mensual', dias: [],
       medio_pago: 'MODO', canal: 'presencial', activa: true, favorita: false,
@@ -182,7 +182,15 @@ export const DEMO = {
     { id: id('p3'), titulo: 'Farmacity', comercio: 'Farmacity', rubro: 'salud', emisor: 'modo',
       tipo: 'reintegro', valor: 20, tope: 15000, tope_periodo: 'mensual', dias: [4],
       medio_pago: 'MODO', canal: 'presencial', activa: true, favorita: false,
-      osm_filtro: 'amenity=pharmacy', marcas: ['Farmacity'] }
+      osm_filtro: 'amenity=pharmacy', marcas: ['Farmacity'] },
+    // Una de una vez al mes, como la de combustible de Galicia: cae un solo
+    // día y por eso está marcada para que aparezca en Hoy desde antes.
+    { id: id('p4'), titulo: 'YPF 25%', comercio: 'YPF', rubro: 'combustible', emisor: 'galicia',
+      tipo: 'descuento', valor: 25, tope: 20000, tope_periodo: 'mensual', dias: [4],
+      vigencia_desde: '2026-09-10', vigencia_hasta: '2026-09-10',
+      medio_pago: 'MODO, Mastercard Platinum', canal: 'presencial', activa: true,
+      favorita: false, recordar: true, notas: 'Cuenta Sueldo · Jueves 10/09',
+      osm_filtro: 'amenity=fuel', marcas: ['YPF'] }
   ],
 
   promo_usos: [

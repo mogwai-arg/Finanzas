@@ -492,6 +492,44 @@ export function promosDelDia(promos, ref = hoy()) {
 }
 
 /**
+ * El proximo dia en que la promo aplica, o null si ya no aplica mas.
+ *
+ * Hay tres formas de que una promo tenga dia y las tres conviven:
+ *   - todos los jueves            -> dias: [4]
+ *   - una vez al mes, el 10       -> vigencia_desde = vigencia_hasta = ese dia
+ *   - todos los dias hasta el 30  -> dias: [], vigencia_hasta
+ * Buscar dia por dia dentro de la ventana es mas corto que tratar cada caso
+ * aparte, y no se equivoca cuando se combinan.
+ */
+export function proximaFechaPromo(promo, ref = hoy(), dentroDe = 60) {
+  if (!promo || promo.activa === false) return null;
+  for (let i = 0; i <= dentroDe; i++) {
+    const d = new Date(ref.getFullYear(), ref.getMonth(), ref.getDate() + i);
+    const iso = fechaISO(d);
+    if (promo.vigencia_desde && iso < promo.vigencia_desde) continue;
+    if (promo.vigencia_hasta && iso > promo.vigencia_hasta) return null;
+    const dias = promo.dias || [];
+    if (!dias.length || dias.includes(d.getDay())) return d;
+  }
+  return null;
+}
+
+/**
+ * Las promos marcadas que aplican hoy o estan por venir, con su fecha.
+ *
+ * Solo las marcadas: la gracia de elegir cuales recordar es que Hoy no se
+ * llene de las cincuenta que trae el buscador.
+ */
+export function promosQueSeVienen(promos, ref = hoy(), dentroDe = 14) {
+  const limite = new Date(ref.getFullYear(), ref.getMonth(), ref.getDate() + dentroDe);
+  return (promos || [])
+    .filter(p => p.recordar && p.activa !== false)
+    .map(p => ({ promo: p, fecha: proximaFechaPromo(p, ref, dentroDe) }))
+    .filter(x => x.fecha && x.fecha <= limite)
+    .sort((a, b) => (a.fecha - b.fecha) || ordenPromo(a.promo, b.promo));
+}
+
+/**
  * Primero las marcadas, despues las de reintegro, y recien ahi por porcentaje.
  *
  * Un reintegro vuelve a la cuenta y se puede usar en cualquier cosa; un

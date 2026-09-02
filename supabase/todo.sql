@@ -143,6 +143,7 @@ create table if not exists public.promos (
   notas         text,
   activa        boolean not null default true,
   favorita      boolean not null default false,
+  recordar      boolean not null default false, -- que aparezca en Hoy el dia que aplica
   updated_at    timestamptz not null default now()
 );
 create index if not exists promos_user_idx on public.promos (user_id, activa);
@@ -627,3 +628,17 @@ alter table public.notificaciones add column if not exists datos jsonb;
 create unique index if not exists notif_aumento_idx
   on public.notificaciones (user_id, ref_id, ((datos->>'monto')))
   where tipo = 'aumento';
+
+-- ---------------------------------------------------------------------
+-- 010 — poder elegir que promo te avise
+--
+-- POR QUE: hay promos que son una vez al mes (la de combustible de Galicia
+-- cae un solo dia, el 10 de septiembre) y otras que son todos los jueves.
+-- Mostrarlas todas en Hoy seria ruido y no mostrarlas es no enterarse: hace
+-- falta un lugar donde decir "de esta avisame".
+-- ---------------------------------------------------------------------
+alter table public.promos add column if not exists recordar boolean not null default false;
+
+-- Las promos marcadas se buscan por dia; sin indice el cron las recorre todas.
+create index if not exists promos_recordar_idx
+  on public.promos (user_id, recordar) where recordar;

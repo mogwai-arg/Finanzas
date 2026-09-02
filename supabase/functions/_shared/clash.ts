@@ -31,6 +31,7 @@ export type PromoClash = {
   tope: number | null;
   topePeriodo: string | null;
   dias: number[];
+  fechas: string[];
   medios: string[];
   nota: string | null;
   url: string | null;
@@ -56,6 +57,39 @@ function plata(s: string | null): number | null {
   if (!m) return null;
   const n = Number(m[1].replace(/\./g, ''));
   return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+/**
+ * Las fechas sueltas que aparecen en la letra chica: "Jueves 10/09", "10/09".
+ *
+ * Son las promos de una vez al mes —la de combustible de Galicia es la que
+ * mas importa aca— y sin esto quedaban guardadas como "todos los jueves",
+ * que es cuatro veces mas seguido de lo que existen.
+ *
+ * El anio no lo dice nadie: se elige el que deja la fecha mas cerca de hoy,
+ * porque una pagina de promos vigentes no habla de hace ocho meses.
+ */
+export function fechasDe(texto: string | null, ref = new Date()): string[] {
+  if (!texto) return [];
+  const out: string[] = [];
+  for (const m of texto.matchAll(/\b(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?\b/g)) {
+    const [dia, mes] = [Number(m[1]), Number(m[2])];
+    if (dia < 1 || dia > 31 || mes < 1 || mes > 12) continue;
+    const anio = m[3] ? Number(m[3].length === 2 ? '20' + m[3] : m[3]) : cerca(mes, dia, ref);
+    const d = new Date(anio, mes - 1, dia);
+    if (d.getMonth() !== mes - 1) continue;              // 31/02 y parecidos
+    const iso = `${anio}-${String(mes).padStart(2, '0')}-${String(dia).padStart(2, '0')}`;
+    if (!out.includes(iso)) out.push(iso);
+  }
+  return out.sort();
+}
+
+/** El anio que deja el dia/mes mas cerca de hoy, para adelante o para atras. */
+function cerca(mes: number, dia: number, ref: Date): number {
+  const cand = [ref.getFullYear() - 1, ref.getFullYear(), ref.getFullYear() + 1];
+  return cand.reduce((mejor, a) =>
+    Math.abs(new Date(a, mes - 1, dia).getTime() - ref.getTime()) <
+    Math.abs(new Date(mejor, mes - 1, dia).getTime() - ref.getTime()) ? a : mejor);
 }
 
 /** Los dias marcados con dy--on, en el mismo formato que usa la app. */
@@ -108,7 +142,7 @@ function bloques(html: string): string[] {
     html.slice(m.index!, i + 1 < inicios.length ? inicios[i + 1].index! : m.index! + 4000));
 }
 
-export function leerPromosClash(html: string): PromoClash[] {
+export function leerPromosClash(html: string, ref = new Date()): PromoClash[] {
   const out: PromoClash[] = [];
   const vistos = new Set<string>();
 
@@ -144,6 +178,7 @@ export function leerPromosClash(html: string): PromoClash[] {
       topePeriodo: meta && /x\s*mes/i.test(meta) ? 'mensual'
                  : meta && /x\s*semana/i.test(meta) ? 'semanal' : null,
       dias: dias(bloque),
+      fechas: fechasDe(nota, ref),
       medios: medios(bloque),
       // La condicion ("Cuenta Sueldo", "Plan Black+") importa tanto como la
       // letra chica, y muchas promos traen una sola de las dos.

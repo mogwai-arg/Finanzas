@@ -135,6 +135,7 @@ create table if not exists public.promos (
   notas         text,
   activa        boolean not null default true,
   favorita      boolean not null default false,
+  recordar      boolean not null default false, -- que aparezca en Hoy el dia que aplica
   updated_at    timestamptz not null default now()
 );
 create index if not exists promos_user_idx on public.promos (user_id, activa);

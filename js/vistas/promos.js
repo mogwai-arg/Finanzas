@@ -57,23 +57,39 @@ export function vistaPromos(root) {
       ? DIAS[p.dias.slice().sort((a, b) => ((a - hoy.getDay() + 7) % 7) - ((b - hoy.getDay() + 7) % 7))[0]]
       : null;
 
-    return h('button.grp.pad', { style: { width: '100%', textAlign: 'left', border: '0',
-                                          display: 'block', cursor: 'pointer',
-                                          opacity: aplicaHoy ? '1' : '.62' },
-                                 onclick: () => formPromo(p) },
+    const cae = F.proximaFechaPromo(p, hoy);
+    const cuando = p.dias?.length || p.vigencia_hasta
+      ? (cae ? cuandoCae(Math.round((cae - new Date(hoy.toDateString())) / 86400000), cae) : 'ya pasó')
+      : 'todos los días';
+
+    return h('div.grp.pad', { style: { opacity: aplicaHoy ? '1' : '.62' } },
       h('div', { style: { display: 'flex', alignItems: 'flex-start', gap: '11px' } },
-        h('div', { class: 'cifra' + (aplicaHoy ? ' pos' : ''), style: { fontSize: '22px' } },
-          Number.isFinite(Number(p.valor)) && Number(p.valor) > 0
-            ? `${Number(p.valor)}${p.tipo === 'cuotas' ? '×' : '%'}` : '—'),
-        h('div', { style: { flex: '1', minWidth: '0' } },
-          h('div', { style: { fontWeight: '600', fontSize: '15.5px', letterSpacing: '-.015em' } },
-            p.titulo),
-          h('div.small.mut', { style: { marginTop: '1px' } },
-            [etiqueta, p.medio_pago,
-             p.dias?.length ? p.dias.map(d => DIAS[d]).join(' y ') : 'todos los días']
-              .filter(Boolean).join(' · '))),
+        h('button', { style: { display: 'flex', alignItems: 'flex-start', gap: '11px',
+                               flex: '1', minWidth: '0', background: 'none', border: '0',
+                               padding: '0', textAlign: 'left', cursor: 'pointer' },
+                      onclick: () => formPromo(p) },
+          h('div', { class: 'cifra' + (aplicaHoy ? ' pos' : ''), style: { fontSize: '22px' } },
+            Number.isFinite(Number(p.valor)) && Number(p.valor) > 0
+              ? `${Number(p.valor)}${p.tipo === 'cuotas' ? '×' : '%'}` : '—'),
+          h('div', { style: { flex: '1', minWidth: '0' } },
+            h('div', { style: { fontWeight: '600', fontSize: '15.5px', letterSpacing: '-.015em' } },
+              p.titulo),
+            h('div.small.mut', { style: { marginTop: '1px' } },
+              [etiqueta, p.medio_pago, cuando].filter(Boolean).join(' · ')))),
         p.favorita && h('span.pill.bra', 'preferida'),
-        proximo && h('span.pill.mut', proximo)),
+        proximo && h('span.pill.mut', proximo),
+        // Un toque para que aparezca en Hoy el día que cae, y otro para que
+        // deje de aparecer. Es la única forma de que la de una vez al mes no
+        // se pase: nadie entra a esta pantalla el día justo.
+        h('button.iconbtn', { 'aria-label': p.recordar ? 'No recordarme esta promo'
+                                                       : 'Recordarme esta promo',
+          'aria-pressed': String(!!p.recordar),
+          style: { flex: 'none', color: p.recordar ? 'var(--bra)' : 'var(--tx3)' },
+          onclick: async e => {
+            e.stopPropagation();
+            await guardar('promos', { ...p, recordar: !p.recordar });
+            aviso(p.recordar ? 'No te la recuerdo más' : 'Te la recuerdo en Hoy');
+          } }, icono('campana', 18))),
       tope > 0 && h('div', { style: { marginTop: '11px' } },
         h('div', { style: { display: 'flex', justifyContent: 'space-between',
                             fontSize: '11.5px', color: 'var(--tx2)', marginBottom: '5px' } },
@@ -170,6 +186,15 @@ function buscadores() {
       'que los descuentos: el reintegro vuelve a tu cuenta.'));
 }
 
+/** 'hoy', 'mañana', 'el jueves 10', y de ahí en más los días que faltan. */
+const DIAS_LARGOS = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
+function cuandoCae(d, fecha) {
+  if (d <= 0) return 'hoy';
+  if (d === 1) return 'mañana';
+  if (d <= 13) return `el ${DIAS_LARGOS[fecha.getDay()]} ${fecha.getDate()}`;
+  return `en ${d} días`;
+}
+
 // =====================================================================
 // TRAER LAS VIGENTES
 // =====================================================================
@@ -250,7 +275,8 @@ function hojaTraer() {
 
 /** Una promo traída, con el botón para guardarla como propia. */
 function fila(p) {
-  const dias = p.dias?.length ? p.dias.map(d => DIAS[d]).join(' y ') : 'todos los días';
+  const dias = p.fechas?.length ? p.fechas.map(f => `el ${Number(f.slice(8))}/${Number(f.slice(5, 7))}`).join(' y ')
+             : p.dias?.length ? p.dias.map(d => DIAS[d]).join(' y ') : 'todos los días';
   const titulo = String(p.comercio || p.emisor || 'Promo').replace(/\b\w/g, c => c.toUpperCase());
   // Number() y no p.valor a secas: un campo vacío escribía "null%" en la
   // cifra más grande de la fila.
@@ -272,6 +298,8 @@ function fila(p) {
                               : p.topePeriodo ? ' por mes' : ''}`) : null),
     h('button.iconbtn', { 'aria-label': 'Guardarla', onclick: async e => {
       const b = e.currentTarget; b.disabled = true;
+      // Guardarla ES elegirla: por eso queda marcada para que aparezca en Hoy
+      // el día que cae. La campana de la tarjeta la desmarca.
       await guardar('promos', {
         titulo: `${titulo} ${cifra}`, comercio: p.comercio || null,
         valor: Number.isFinite(valor) ? valor : null,
@@ -280,9 +308,15 @@ function fila(p) {
         tope: p.tope || null, tope_periodo: p.topePeriodo || 'mensual',
         dias: p.dias || [], medio_pago: (p.medios || []).join(', ') || p.emisor,
         rubro: 'otros', canal: 'ambos',
+        // Una promo con fecha propia —"Jueves 10/09"— es de un solo día, no
+        // de todos los jueves: guardarla como semanal la haría aparecer
+        // cuatro veces al mes y ninguna sería cierta.
+        vigencia_desde: p.fechas?.[0] || null,
+        vigencia_hasta: p.fechas?.length ? p.fechas[p.fechas.length - 1] : null,
         url: p.url || null, notas: p.nota || null,
-        marcas: p.comercio ? [p.comercio] : [], activa: true, favorita: false
+        marcas: p.comercio ? [p.comercio] : [], activa: true, favorita: false,
+        recordar: true
       });
-      aviso('Guardada');
+      aviso('Guardada, te la recuerdo en Hoy');
     } }, icono('mas', 18)));
 }

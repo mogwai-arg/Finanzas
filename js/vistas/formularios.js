@@ -271,12 +271,14 @@ export function formPromo(p = null) {
                  { value: 'amenity=pharmacy', label: 'Farmacias' },
                  { value: 'amenity=restaurant', label: 'Restaurantes' }],
                 { value: p?.osm_filtro || '' }),
+    desde: h('input', { type: 'date', value: p?.vigencia_desde || '' }),
     hasta: h('input', { type: 'date', value: p?.vigencia_hasta || '' }),
     url: h('input', { type: 'url', value: p?.url || '', placeholder: 'https://…' }),
     notas: h('input', { type: 'text', value: p?.notas || '',
                         placeholder: 'Solo Eminent, tope por cuenta' })
   };
   const cFavorita = h('input', { type: 'checkbox', checked: !!p?.favorita });
+  const cRecordar = h('input', { type: 'checkbox', checked: !!p?.recordar });
 
   const chips = h('div.chips', { style: { flexWrap: 'wrap' } });
   const pintarDias = () => {
@@ -303,13 +305,21 @@ export function formPromo(p = null) {
         'Ninguno marcado = todos los días.'), chips),
     campo('Rubro', c.rubro),
     campo('Buscar sucursales cerca', c.osm),
-    campo('Vence el', c.hasta),
+    h('div.f', h('label', 'Desde y hasta'),
+      h('div.small.mut', { style: { marginTop: '-3px', marginBottom: '9px', lineHeight: '1.45' } },
+        'Si la promo es de un solo día —las de combustible suelen serlo— poné la misma ',
+        'fecha en las dos. Vacío = siempre.'),
+      h('div.fila', c.desde, c.hasta)),
     campo('Link a la promo', c.url),
     campo('Notas', c.notas),
     h('label.li', { style: { padding: '11px 0' } },
       h('div.m', h('div.t', 'Marcarla como preferida'),
         h('div.s', 'Va primero en la lista y en "¿Con qué pago?"')),
       cFavorita),
+    h('label.li', { style: { padding: '11px 0' } },
+      h('div.m', h('div.t', 'Recordármela'),
+        h('div.s', 'Aparece en Hoy desde unos días antes y el día que cae')),
+      cRecordar),
 
     h('div.fila', { style: { marginTop: '4px' } },
       !nuevo && h('button.btn.dg', { onclick: async () => {
@@ -324,9 +334,10 @@ export function formPromo(p = null) {
           tope_periodo: 'mensual', medio_pago: c.medio.value.trim() || null,
           rubro: c.rubro.value, tipo: c.tipo.value, emisor: c.emisor.value, canal: 'ambos',
           dias: dias.map(Number).sort(), osm_filtro: c.osm.value || null,
-          marcas: [comercio], vigencia_hasta: c.hasta.value || null,
+          marcas: [comercio],
+          vigencia_desde: c.desde.value || null, vigencia_hasta: c.hasta.value || null,
           url: c.url.value.trim() || null, notas: c.notas.value.trim() || null,
-          activa: true, favorita: cFavorita.checked });
+          activa: true, favorita: cFavorita.checked, recordar: cRecordar.checked });
         cerrar(); aviso(nuevo ? 'Promo creada' : 'Actualizada');
       } }, nuevo ? 'Guardar' : 'Guardar cambios'))));
 }

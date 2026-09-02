@@ -295,6 +295,38 @@ t('el sabado aparece la de sabado', () => {
   const p = F.promosDelDia(promos, d('2026-09-05'));
   assert.deepEqual(p.map(x => x.id), [2, 3]);
 });
+t('la promo de una vez al mes cae solo ese día', () => {
+  // "Jueves 10/09" es el jueves 10, no todos los jueves.
+  const nafta = { id: 'g', activa: true, recordar: true, dias: [4], valor: 25,
+                  vigencia_desde: '2026-09-10', vigencia_hasta: '2026-09-10' };
+  assert.equal(F.fechaISO(F.proximaFechaPromo(nafta, d('2026-09-02'))), '2026-09-10');
+  assert.equal(F.proximaFechaPromo(nafta, d('2026-09-11')), null);
+  assert.deepEqual(F.promosDelDia([nafta], d('2026-09-03')).map(x => x.id), []); // el jueves 3, no
+  assert.deepEqual(F.promosDelDia([nafta], d('2026-09-10')).map(x => x.id), ['g']);
+});
+
+t('la de todos los jueves cae el jueves que viene', () => {
+  const j = { id: 'j', activa: true, recordar: true, dias: [4], valor: 15 };
+  assert.equal(F.fechaISO(F.proximaFechaPromo(j, d('2026-09-02'))), '2026-09-03');
+  assert.equal(F.fechaISO(F.proximaFechaPromo(j, d('2026-09-04'))), '2026-09-10');
+});
+
+t('en Hoy solo se ven las que pediste que te recuerde', () => {
+  const lista = [
+    { id: 'g', activa: true, recordar: true, dias: [4], valor: 25,
+      vigencia_desde: '2026-09-10', vigencia_hasta: '2026-09-10' },
+    { id: 'j', activa: true, recordar: true, dias: [4], valor: 15 },
+    { id: 'x', activa: true, recordar: false, dias: [], valor: 40 },
+    { id: 'v', activa: true, recordar: true, dias: [], valor: 10, vigencia_hasta: '2026-08-31' }
+  ];
+  const v = F.promosQueSeVienen(lista, d('2026-09-02'), 14);
+  // La de todos los jueves es mañana; la del 10 va después; la vencida no está,
+  // y la que no marcó tampoco.
+  assert.deepEqual(v.map(x => x.promo.id), ['j', 'g']);
+  assert.equal(F.fechaISO(v[0].fecha), '2026-09-03');
+  assert.equal(F.fechaISO(v[1].fecha), '2026-09-10');
+});
+
 t('el reintegro respeta el tope', () => {
   assert.equal(F.reintegroEstimado(200000, promos[0]), 20000);
   assert.equal(F.reintegroEstimado(50000, promos[0]), 10000);

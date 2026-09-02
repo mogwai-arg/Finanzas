@@ -1,7 +1,7 @@
 // node --experimental-strip-types supabase/functions/_shared/clash.test.ts
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { leerPromosClash } from './clash.ts';
+import { leerPromosClash, fechasDe } from './clash.ts';
 
 let ok = 0, mal = 0;
 const t = (n: string, fn: () => void) => { try { fn(); console.log('  ok  ' + n); ok++; }
@@ -95,6 +95,31 @@ t('si falta el porcentaje lo saca del link', () => {
   const html = '<a class="ci ci--link" href="/combustibles/promocion/15-off-en-shell-con-galicia-b_9/"' +
                ' data-pid="b_9" data-bk="galicia" data-mc="shell"><span class="ci__x">off</span></a>';
   assert.equal(leerPromosClash(html)[0].valor, 15);
+});
+
+t('la promo de una vez al mes queda con su fecha, no con su día', () => {
+  // "Jueves 10/09" no es todos los jueves: es el jueves 10.
+  const p = promos.find(x => x.id === 'm_galicia_ypf_mtk9x5lk')!;
+  assert.deepEqual(p.fechas, ['2026-09-10']);
+});
+
+t('lee la fecha aunque no diga el día de la semana', () => {
+  const ref = new Date(2026, 8, 2);
+  assert.deepEqual(fechasDe('10/09', ref), ['2026-09-10']);
+  assert.deepEqual(fechasDe('Del 10/09 al 12/09', ref), ['2026-09-10', '2026-09-12']);
+});
+
+t('elige el año que deja la fecha más cerca', () => {
+  // Leída el 28 de diciembre, "02/01" es del año que viene.
+  assert.deepEqual(fechasDe('Viernes 02/01', new Date(2026, 11, 28)), ['2027-01-02']);
+  // Y leída el 2 de enero, "28/12" es del que pasó.
+  assert.deepEqual(fechasDe('28/12', new Date(2027, 0, 2)), ['2026-12-28']);
+});
+
+t('una fecha imposible no se inventa', () => {
+  assert.deepEqual(fechasDe('31/02'), []);
+  assert.deepEqual(fechasDe('Tope: $10.000'), []);
+  assert.deepEqual(fechasDe(null), []);
 });
 
 t('una página vacía no rompe', () => {

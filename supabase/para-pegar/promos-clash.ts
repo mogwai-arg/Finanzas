@@ -25,6 +25,24 @@ function plata(s) {
   const n = Number(m[1].replace(/\./g, ""));
   return Number.isFinite(n) && n > 0 ? n : null;
 }
+function fechasDe(texto, ref = /* @__PURE__ */ new Date()) {
+  if (!texto) return [];
+  const out = [];
+  for (const m of texto.matchAll(/\b(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?\b/g)) {
+    const [dia, mes] = [Number(m[1]), Number(m[2])];
+    if (dia < 1 || dia > 31 || mes < 1 || mes > 12) continue;
+    const anio = m[3] ? Number(m[3].length === 2 ? "20" + m[3] : m[3]) : cerca(mes, dia, ref);
+    const d = new Date(anio, mes - 1, dia);
+    if (d.getMonth() !== mes - 1) continue;
+    const iso = `${anio}-${String(mes).padStart(2, "0")}-${String(dia).padStart(2, "0")}`;
+    if (!out.includes(iso)) out.push(iso);
+  }
+  return out.sort();
+}
+function cerca(mes, dia, ref) {
+  const cand = [ref.getFullYear() - 1, ref.getFullYear(), ref.getFullYear() + 1];
+  return cand.reduce((mejor, a) => Math.abs(new Date(a, mes - 1, dia).getTime() - ref.getTime()) < Math.abs(new Date(mejor, mes - 1, dia).getTime() - ref.getTime()) ? a : mejor);
+}
 function dias(html) {
   if (/class="[^"]*\bci__alldays\b/.test(html)) return [];
   const bloque = html.match(/class="[^"]*\bci__days\b[\s\S]*?<\/div>/i);
@@ -57,7 +75,7 @@ function bloques(html) {
   const inicios = [...html.matchAll(/<(?:a|div|li|article)\s[^>]*\bdata-pid="[^"]+"[^>]*>/g)];
   return inicios.map((m, i) => html.slice(m.index, i + 1 < inicios.length ? inicios[i + 1].index : m.index + 4e3));
 }
-function leerPromosClash(html) {
+function leerPromosClash(html, ref = /* @__PURE__ */ new Date()) {
   const out = [];
   const vistos = /* @__PURE__ */ new Set();
   for (const bloque of bloques(html)) {
@@ -85,6 +103,7 @@ function leerPromosClash(html) {
       tope: plata(meta),
       topePeriodo: meta && /x\s*mes/i.test(meta) ? "mensual" : meta && /x\s*semana/i.test(meta) ? "semanal" : null,
       dias: dias(bloque),
+      fechas: fechasDe(nota, ref),
       medios: medios(bloque),
       // La condicion ("Cuenta Sueldo", "Plan Black+") importa tanto como la
       // letra chica, y muchas promos traen una sola de las dos.
