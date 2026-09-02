@@ -203,6 +203,15 @@ const RUBROS = [
   ['salud', 'Farmacia'], ['transporte', 'Transporte']
 ];
 
+// Con qué se buscan las sucursales cerca en OpenStreetMap. Se guarda al traer
+// la promo para que "Ver las más cercanas" funcione sin tener que editarla:
+// Clash no dice dónde está cada comercio, y muchas promos son de una sola
+// ciudad.
+const OSM = {
+  supermercado: 'shop=supermarket', combustible: 'amenity=fuel',
+  gastronomia: 'amenity=restaurant', salud: 'amenity=pharmacy', transporte: ''
+};
+
 /**
  * Las promos vigentes del rubro, filtradas por los medios que tenés.
  *
@@ -245,13 +254,13 @@ function hojaTraer() {
       lista.replaceChildren(
         conLoQueTengo.length
           ? h('div', h('div.ghead', 'Con lo que tenés'),
-              h('div.grp', conLoQueTengo.map(fila)))
+              h('div.grp', conLoQueTengo.map(x => fila(x, rubro))))
           : h('div.grp.pad', h('div.small.mut', { style: { lineHeight: '1.5' } },
               'Ninguna de las vigentes es para tus tarjetas o billeteras. ',
               'Abajo están todas por si te sirve alguna.')),
         lasDemas.length ? h('div', { style: { marginTop: '18px' } },
           h('div.ghead', `Las demás · ${lasDemas.length}`),
-          h('div.grp', lasDemas.slice(0, 25).map(fila))) : null);
+          h('div.grp', lasDemas.slice(0, 25).map(x => fila(x, rubro)))) : null);
     } catch (e) {
       lista.replaceChildren(h('div.small.mut', { style: { lineHeight: '1.5' } },
         String(e.message || e)));
@@ -300,7 +309,7 @@ function porComercio(promos) {
 }
 
 /** Una promo traída, con el botón para guardarla como propia. */
-function fila(p) {
+function fila(p, rubro) {
   const dias = p.fechas?.length ? p.fechas.map(f => `el ${Number(f.slice(8))}/${Number(f.slice(5, 7))}`).join(' y ')
              : p.dias?.length ? p.dias.map(d => DIAS[d]).join(' y ') : 'todos los días';
   const titulo = String(p.comercio || p.emisor || 'Promo').replace(/\b\w/g, c => c.toUpperCase());
@@ -336,7 +345,10 @@ function fila(p) {
         emisor: p.emisor || 'otro',
         tope: p.tope || null, tope_periodo: p.topePeriodo || 'mensual',
         dias: p.dias || [], medio_pago: (p.medios || []).join(', ') || p.emisor,
-        rubro: 'otros', canal: 'ambos',
+        rubro: rubro || 'otros', canal: 'ambos',
+        // Con esto "Ver las más cercanas" ya funciona: Clash no dice dónde
+        // está cada comercio y muchas promos son de una sola ciudad.
+        osm_filtro: OSM[rubro] || null,
         // Una promo con fecha propia —"Jueves 10/09"— es de un solo día, no
         // de todos los jueves: guardarla como semanal la haría aparecer
         // cuatro veces al mes y ninguna sería cierta.
