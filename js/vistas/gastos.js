@@ -5,7 +5,7 @@
 // =====================================================================
 import { h, icono, iconoDe } from '../ui.js';
 import { state } from '../db.js';
-import { plata, fechaRelativa, nombreDe, buscar } from '../formato.js';
+import { plata, fechaRelativa, nombreDe, buscar, tituloTx, dondeTx } from '../formato.js';
 import { formMovimiento } from './form-movimiento.js';
 
 export function vistaGastos(root) {
@@ -73,8 +73,8 @@ export function vistaGastos(root) {
       h('div', { class: 'av' + (esIngreso ? ' pos' : '') },
         icono(esTransf ? 'sync' : iconoDe(t.comercio || t.descripcion || cat), 17)),
       h('div.m',
-        h('div.t', t.comercio || t.descripcion),
-        h('div.s', esTransf && destino ? `a ${destino.nombre}` : cat,
+        h('div.t', tituloTx(t)),
+        h('div.s', esTransf && destino ? `a ${destino.nombre}` : [dondeTx(t), cat].filter(Boolean).join(' · '),
           cuenta ? ` · ${cuenta.nombre}${cuenta.ultimos4 ? ' ·' + cuenta.ultimos4 : ''}` : '',
           t.cuotas > 1 ? ` · ${t.cuotas} cuotas` : '')),
       h('div', { class: 'v' + (esIngreso ? ' pos' : '') },

@@ -7,7 +7,7 @@ import { h, icono, iconoDe } from '../ui.js';
 import { state } from '../db.js';
 import * as F from '../finance.js';
 import { plata, plataPartida, diasHasta, fechaISO, mesCorto, periodoLargo, buscar,
-         fechaRelativa } from '../formato.js';
+         fechaRelativa, tituloTx, dondeTx } from '../formato.js';
 import { irA } from '../ruteo.js';
 import { formCuenta } from './formularios.js';
 import { formImportarResumen } from './importar.js';
@@ -157,9 +157,9 @@ function cuotasVivas(t, hoy) {
     h('div.grp', vivas.map(({ tx, cron, actual }) => h('div.li',
       h('div.av', icono('tarjeta', 17)),
       h('div.m',
-        h('div.t', tx.comercio || tx.descripcion),
-        h('div.s', `cuota ${actual} de ${tx.cuotas}`,
-          actual === tx.cuotas ? ' · última' : '')),
+        h('div.t', tituloTx(tx)),
+        h('div.s', [dondeTx(tx), `cuota ${actual} de ${tx.cuotas}`,
+                    actual === tx.cuotas ? 'última' : null].filter(Boolean).join(' · '))),
       h('div.v', plata(tx.monto / tx.cuotas, tx.moneda),
         h('small', `de ${plata(tx.monto, tx.moneda)}`))))));
 }
@@ -203,11 +203,12 @@ function consumosDelCiclo(t, hoy) {
     h('div.grp', filas.slice(0, 12).map(f => h('button.li', {
       onclick: () => formMovimiento(state.transactions.find(x => x.id === f.tx.id))
     },
-      h('div.av', icono(iconoDe(f.tx.comercio || f.tx.descripcion), 17)),
+      h('div.av', icono(iconoDe(f.tx.comercio || tituloTx(f.tx)), 17)),
       h('div.m',
-        h('div.t', f.tx.comercio || f.tx.descripcion),
-        h('div.s', fechaRelativa(f.tx.fecha, hoy) +
-          (f.total > 1 ? ` · cuota ${f.nro} de ${f.total}` : ''))),
+        h('div.t', tituloTx(f.tx)),
+        h('div.s', [dondeTx(f.tx), fechaRelativa(f.tx.fecha, hoy),
+                    f.total > 1 ? `cuota ${f.nro} de ${f.total}` : null]
+                     .filter(Boolean).join(' · '))),
       h('div.v', plata(moneda === 'USD' ? f.monto : Math.round(f.monto), moneda)))),
       filas.length > 12 ? h('div.li', h('div.m', h('div.s.mut',
         `y ${filas.length - 12} más`))) : null));

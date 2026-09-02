@@ -11,7 +11,7 @@
 import { h, icono, iconoDe, aviso, hoja, confirmar } from '../ui.js';
 import { state, guardar, guardarVarios, borrar } from '../db.js';
 import * as F from '../finance.js';
-import { plata, plataPartida, fechaRelativa, nombreDe, buscar, aFecha } from '../formato.js';
+import { plata, plataPartida, fechaRelativa, nombreDe, buscar, aFecha, tituloTx, dondeTx } from '../formato.js';
 import { irA } from '../ruteo.js';
 
 export function vistaRevisar(root) {
@@ -77,13 +77,13 @@ function tarjeta(tx, i, total, siguiente) {
   cont.append(
     h('div', { style: { display: 'flex', alignItems: 'center', gap: '11px' } },
       h('div.av', { style: { width: '38px', height: '38px', borderRadius: '11px' } },
-        icono(iconoDe(tx.comercio || tx.descripcion), 19)),
+        icono(iconoDe(tx.comercio || tituloTx(tx)), 19)),
       h('div', { style: { flex: '1', minWidth: '0' } },
         h('div', { style: { fontSize: '16px', fontWeight: '600', letterSpacing: '-.02em',
                             overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } },
-          tx.comercio || tx.descripcion),
+          tituloTx(tx)),
         h('div.small.mut', { style: { marginTop: '1px' } },
-          [cuenta?.nombre, cuenta?.ultimos4 && '·' + cuenta.ultimos4,
+          [dondeTx(tx), cuenta?.nombre, cuenta?.ultimos4 && '·' + cuenta.ultimos4,
            fechaRelativa(tx.fecha)].filter(Boolean).join(' · '))),
       h('span.pill.bra', tx.fuente === 'gmail' ? 'Gmail' : tx.fuente || 'auto')),
     h('div.cifra', { style: { fontSize: '40px', marginTop: '16px' } }, h('em', simbolo), numero)

@@ -75,5 +75,7 @@ export const etiquetaCuenta = a =>
   `${a.nombre}${TIPO_CUENTA[a.tipo] ? ' · ' + TIPO_CUENTA[a.tipo] : ''}` +
   (a.moneda === 'USD' ? ' (US$)' : '');
 
+export { tituloTx, dondeTx } from './texto.js';
+
 export const buscar = (tabla, id) => (state[tabla] || []).find(x => x.id === id) || null;
 export const nombreDe = (tabla, id, porDefecto = '—') => (buscar(tabla, id) || {}).nombre || porDefecto;

@@ -19,7 +19,7 @@ const SHELL = [
   './', './index.html', './config.js', './manifest.webmanifest',
   './css/app.css', './css/tokens.css',
   './js/app.js', './js/db.js', './js/finance.js', './js/formato.js',
-  './js/geo.js', './js/resumen.js', './js/ruteo.js', './js/sueldo.js',
+  './js/geo.js', './js/resumen.js', './js/ruteo.js', './js/sueldo.js', './js/texto.js',
   './js/ui.js', './js/demo.js',
   './js/vistas/hoy.js', './js/vistas/revisar.js', './js/vistas/pago.js',
   './js/vistas/donde.js', './js/vistas/gastos.js', './js/vistas/tarjetas.js',

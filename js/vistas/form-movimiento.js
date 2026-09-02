@@ -5,7 +5,7 @@
 // =====================================================================
 import { h, icono, iconoDe, hoja, aviso, campo, select, confirmar } from '../ui.js';
 import { state, guardar, borrar } from '../db.js';
-import { plata, hoyISO, nombreDe, etiquetaCuenta } from '../formato.js';
+import { plata, hoyISO, nombreDe, etiquetaCuenta, tituloTx } from '../formato.js';
 
 export function formMovimiento(tx = null) {
   const nuevo = !tx;
@@ -28,8 +28,14 @@ export function formMovimiento(tx = null) {
 
   const cMonto = h('input', { type: 'text', inputmode: 'decimal', value: String(d.monto),
                               placeholder: '0', 'aria-label': 'Monto' });
-  const cComercio = h('input', { type: 'text', value: d.comercio || d.descripcion,
-                                 placeholder: 'Dónde', 'aria-label': 'Comercio' });
+  const cComercio = h('input', { type: 'text', value: d.comercio || '',
+                                 placeholder: 'Coto, Shell, Dexter…', 'aria-label': 'Comercio' });
+  // Que compraste va aparte de donde: 'zapatillas' en Dexter, 'super de la
+  // semana' en Coto. Sin esto, dentro de un mes la lista dice diez veces
+  // 'Coto' y no hay forma de acordarse de cual fue cual.
+  const cQue = h('input', { type: 'text',
+                            value: (d.descripcion && d.descripcion !== d.comercio) ? d.descripcion : '',
+                            placeholder: 'Opcional', 'aria-label': 'Qué compraste' });
   const cFecha = h('input', { type: 'date', value: d.fecha });
   const cCuenta = select(opcCuentas, { value: d.account_id });
   const cDestino = select([{ value: '', label: '—' }, ...opcCuentas], { value: d.destino_account_id });
@@ -39,6 +45,7 @@ export function formMovimiento(tx = null) {
   const cCuotas = h('input', { type: 'number', min: '1', max: '60', value: String(d.cuotas),
                                inputmode: 'numeric' });
 
+  const bloqueQue = campo('Qué', cQue);
   const bloqueDestino = campo('A qué cuenta', cDestino);
   const bloqueCat = campo('Categoría', cCat);
   const bloqueCuotas = campo('Cuotas', cCuotas);
@@ -53,6 +60,8 @@ export function formMovimiento(tx = null) {
       } }, txt)));
 
   function actualizar() {
+    bloqueQue.querySelector('label').textContent =
+      d.tipo === 'ingreso' ? 'De qué' : d.tipo === 'transferencia' ? 'Por qué' : 'Qué';
     bloqueDestino.hidden = d.tipo !== 'transferencia';
     bloqueCat.hidden = d.tipo === 'transferencia';
     const cuenta = state.accounts.find(a => a.id === cCuenta.value);
@@ -86,12 +95,13 @@ export function formMovimiento(tx = null) {
              { value: d.moneda, style: { flex: '0 0 84px' },
                onchange: e => d.moneda = e.target.value }))),
     campo('Dónde', cComercio),
+    bloqueQue,
     campo('Fecha', cFecha),
     campo('Cuenta', cCuenta),
     bloqueDestino, bloqueCat, bloqueCuotas,
     h('div.fila', { style: { marginTop: '4px' } },
       !nuevo && h('button.btn.dg', { onclick: async () => {
-        if (await confirmar(`¿Borrar "${tx.comercio || tx.descripcion}"?`)) {
+        if (await confirmar(`¿Borrar "${tituloTx(tx)}"?`)) {
           await borrar('transactions', tx.id); cerrar(); aviso('Borrado');
         }
       } }, 'Borrar'),
@@ -103,12 +113,14 @@ export function formMovimiento(tx = null) {
     const monto = Number(String(cMonto.value).replace(/\./g, '').replace(',', '.')) || 0;
     if (!monto) { cMonto.focus(); aviso('Falta el monto'); return; }
     const comercio = cComercio.value.trim();
+    const que = cQue.value.trim();
     if (d.tipo === 'transferencia' && !cDestino.value) { aviso('Falta a qué cuenta va'); return; }
 
     await guardar('transactions', {
       ...(tx || {}),
       fecha: cFecha.value || hoyISO(),
-      descripcion: comercio || (d.tipo === 'transferencia' ? 'Movida entre cuentas' : 'Movimiento'),
+      descripcion: que || comercio ||
+        (d.tipo === 'transferencia' ? 'Movida entre cuentas' : 'Movimiento'),
       comercio: comercio || null,
       monto, moneda: d.moneda, tipo: d.tipo,
       account_id: cCuenta.value,
