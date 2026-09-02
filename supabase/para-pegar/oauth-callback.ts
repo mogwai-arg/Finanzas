@@ -15,13 +15,15 @@ var CORS = {
 };
 
 // supabase/functions/oauth-callback/index.ts
-var REDIRECT = (p) => `${Deno.env.get("FUNCTIONS_URL")}/oauth-callback?proveedor=${p}`;
+var REDIRECT = `${Deno.env.get("FUNCTIONS_URL")}/oauth-callback`;
 var APP = Deno.env.get("APP_URL") ?? "/";
 Deno.serve(async (req) => {
   const url = new URL(req.url);
-  const prov = url.searchParams.get("proveedor") ?? "gmail";
   const code = url.searchParams.get("code");
-  const jwt = url.searchParams.get("state") ?? "";
+  const state = url.searchParams.get("state") ?? "";
+  const corte = state.indexOf("|");
+  const prov = corte > 0 ? state.slice(0, corte) : url.searchParams.get("proveedor") ?? "gmail";
+  const jwt = corte > 0 ? state.slice(corte + 1) : state;
   if (!code) return Response.redirect(`${APP}#/ajustes?error=sin_code`, 302);
   const sb = admin();
   const { data: u } = await sb.auth.getUser(jwt);
@@ -36,7 +38,7 @@ Deno.serve(async (req) => {
           code,
           client_id: Deno.env.get("GOOGLE_CLIENT_ID"),
           client_secret: Deno.env.get("GOOGLE_CLIENT_SECRET"),
-          redirect_uri: REDIRECT("gmail"),
+          redirect_uri: REDIRECT,
           grant_type: "authorization_code"
         })
       })).json();
@@ -55,7 +57,7 @@ Deno.serve(async (req) => {
           client_secret: Deno.env.get("MP_CLIENT_SECRET"),
           grant_type: "authorization_code",
           code,
-          redirect_uri: REDIRECT("mercadopago")
+          redirect_uri: REDIRECT
         })
       })).json();
       if (tok.error) throw new Error(tok.message || tok.error);

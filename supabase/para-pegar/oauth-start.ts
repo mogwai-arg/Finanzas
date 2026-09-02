@@ -10,17 +10,17 @@ var CORS = {
 };
 
 // supabase/functions/oauth-start/index.ts
-var REDIRECT = (p) => `${Deno.env.get("FUNCTIONS_URL")}/oauth-callback?proveedor=${p}`;
+var REDIRECT = `${Deno.env.get("FUNCTIONS_URL")}/oauth-callback`;
 Deno.serve((req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
   const url = new URL(req.url);
   const prov = url.searchParams.get("proveedor") ?? "gmail";
-  const estado = url.searchParams.get("t") ?? "";
+  const estado = `${prov}|${url.searchParams.get("t") ?? ""}`;
   let destino;
   if (prov === "gmail") {
     const p = new URLSearchParams({
       client_id: Deno.env.get("GOOGLE_CLIENT_ID"),
-      redirect_uri: REDIRECT("gmail"),
+      redirect_uri: REDIRECT,
       response_type: "code",
       scope: "https://www.googleapis.com/auth/gmail.readonly",
       access_type: "offline",
@@ -34,7 +34,7 @@ Deno.serve((req) => {
       client_id: Deno.env.get("MP_CLIENT_ID"),
       response_type: "code",
       platform_id: "mp",
-      redirect_uri: REDIRECT("mercadopago"),
+      redirect_uri: REDIRECT,
       state: estado
     });
     destino = "https://auth.mercadopago.com.ar/authorization?" + p;

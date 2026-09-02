@@ -59,22 +59,42 @@ Google va a pedir una página de inicio y una de privacidad. Dos cosas:
 
    Guardar.
 
-4. **Acceso a datos (Data Access).** Verificar que el único permiso pedido sea
+4. **Clientes (Clients).** Acá se crea la credencial y, sobre todo, se
+   registra a dónde vuelve Google después del permiso.
+
+   - **Crear cliente → Tipo: Aplicación web.** Nombre: `BISHUSHA`.
+   - **URI de redireccionamiento autorizados → Agregar URI**, y pegar
+     exactamente:
+
+     ```
+     https://<TU-PROJECT-REF>.supabase.co/functions/v1/oauth-callback
+     ```
+
+     Sin barra al final, sin `?proveedor=`, sin nada más. Google compara letra
+     por letra: cualquier diferencia da `Error 400: redirect_uri_mismatch`.
+   - **Orígenes de JavaScript autorizados** se deja vacío: el permiso no se
+     pide desde el navegador sino desde la función.
+   - Guardar, y copiar el **ID de cliente** y el **secreto** a los secretos de
+     Supabase (`GOOGLE_CLIENT_ID` y `GOOGLE_CLIENT_SECRET`).
+
+   Un cambio acá puede tardar unos minutos en tomar efecto.
+
+5. **Acceso a datos (Data Access).** Verificar que el único permiso pedido sea
    `https://www.googleapis.com/auth/gmail.readonly`. Si hay otros, sacarlos:
    cuantos menos permisos, menos fricción.
 
-5. **Público (Audience).** Acá está el estado de publicación. Debería decir
+6. **Público (Audience).** Acá está el estado de publicación. Debería decir
    **Externo** y **En prueba**. Tocar **PUBLICAR APP**.
 
-6. **Google avisa que vas a necesitar verificación para algunos permisos.
+7. **Google avisa que vas a necesitar verificación para algunos permisos.
    Confirmar igual.** El estado pasa a **En producción**. Esto es lo único que
    hacía falta.
 
-7. **Volver a BISHUSHA → Ajustes → Conectar Gmail.** Va a aparecer la pantalla
+8. **Volver a BISHUSHA → Ajustes → Conectar Gmail.** Va a aparecer la pantalla
    *"Google no verificó esta aplicación"*. Entrar por **Configuración avanzada →
    Ir a bishusha-xxx.pages.dev (no seguro)** y dar el permiso. Es una sola vez.
 
-8. **Anotar la fecha.** Si a los diez días sigue sincronizando, quedó resuelto.
+9. **Anotar la fecha.** Si a los diez días sigue sincronizando, quedó resuelto.
 
 ---
 

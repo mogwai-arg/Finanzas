@@ -1,14 +1,21 @@
 // Recibe el code, lo canjea por tokens y los guarda en `integrations`.
 import { admin } from '../_shared/comun.ts';
 
-const REDIRECT = (p: string) => `${Deno.env.get('FUNCTIONS_URL')}/oauth-callback?proveedor=${p}`;
+// Tiene que ser identica a la que mando oauth-start y a la registrada en la
+// consola de Google: sin parametros, sin barra al final.
+const REDIRECT = `${Deno.env.get('FUNCTIONS_URL')}/oauth-callback`;
 const APP = Deno.env.get('APP_URL') ?? '/';
 
 Deno.serve(async (req) => {
   const url = new URL(req.url);
-  const prov = url.searchParams.get('proveedor') ?? 'gmail';
   const code = url.searchParams.get('code');
-  const jwt  = url.searchParams.get('state') ?? '';
+  // `state` viene como 'proveedor|jwt'. El ?proveedor= se sigue leyendo por si
+  // quedo algun permiso a medias del formato anterior.
+  const state = url.searchParams.get('state') ?? '';
+  const corte = state.indexOf('|');
+  const prov = corte > 0 ? state.slice(0, corte)
+                         : (url.searchParams.get('proveedor') ?? 'gmail');
+  const jwt = corte > 0 ? state.slice(corte + 1) : state;
   if (!code) return Response.redirect(`${APP}#/ajustes?error=sin_code`, 302);
 
   const sb = admin();
@@ -23,7 +30,7 @@ Deno.serve(async (req) => {
         body: new URLSearchParams({
           code, client_id: Deno.env.get('GOOGLE_CLIENT_ID')!,
           client_secret: Deno.env.get('GOOGLE_CLIENT_SECRET')!,
-          redirect_uri: REDIRECT('gmail'), grant_type: 'authorization_code' })
+          redirect_uri: REDIRECT, grant_type: 'authorization_code' })
       })).json();
       if (tok.error) throw new Error(tok.error_description || tok.error);
       const perfil = await (await fetch('https://gmail.googleapis.com/gmail/v1/users/me/profile',
@@ -34,7 +41,7 @@ Deno.serve(async (req) => {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           client_id: Deno.env.get('MP_CLIENT_ID'), client_secret: Deno.env.get('MP_CLIENT_SECRET'),
-          grant_type: 'authorization_code', code, redirect_uri: REDIRECT('mercadopago') })
+          grant_type: 'authorization_code', code, redirect_uri: REDIRECT })
       })).json();
       if (tok.error) throw new Error(tok.message || tok.error);
       cuenta = String(tok.user_id ?? '');
