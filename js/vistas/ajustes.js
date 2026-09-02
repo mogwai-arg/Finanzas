@@ -5,7 +5,8 @@ import { h, icono, aviso, confirmar, hoja, campo } from '../ui.js';
 import { state, salir, sincronizar, exportarJSON, pendientes, fallidas, DEMO } from '../db.js';
 import { plata } from '../formato.js';
 import { irA } from '../ruteo.js';
-import { formCategorias, formCuenta } from './formularios.js';
+import { formCategorias } from './formularios.js';
+import { formImportarResumen } from './importar.js';
 
 export function vistaAjustes(root) {
   const tema = document.documentElement.getAttribute('data-tema') || 'auto';
@@ -36,10 +37,15 @@ export function vistaAjustes(root) {
     h('section',
       h('div.ghead', 'Tu configuración'),
       h('div.grp',
-        h('button.li', { onclick: () => formCuenta() },
+        h('button.li', { onclick: () => irA('/donde') },
           h('div.av', icono('tarjeta', 17)),
           h('div.m', h('div.t', 'Cuentas y tarjetas'),
             h('div.s', `${(state.accounts || []).length} cargadas`)),
+          h('span.chev', icono('chev', 15))),
+        h('button.li', { onclick: () => formImportarResumen() },
+          h('div.av', icono('recibo', 17)),
+          h('div.m', h('div.t', 'Importar un resumen'),
+            h('div.s', 'Pegás el PDF de la tarjeta y entra todo junto')),
           h('span.chev', icono('chev', 15))),
         h('button.li', { onclick: () => formCategorias() },
           h('div.av', icono('lista', 17)),

@@ -9,6 +9,7 @@ import * as F from '../finance.js';
 import { plata, plataPartida, diasHasta, fechaISO, mesCorto, periodoLargo, buscar } from '../formato.js';
 import { irA } from '../ruteo.js';
 import { formCuenta } from './formularios.js';
+import { formImportarResumen } from './importar.js';
 
 const isoDe = d => fechaISO(d);
 
@@ -20,13 +21,16 @@ export function vistaTarjetas(root) {
       h('div.ic', icono('tarjeta', 24)),
       h('h3', 'Todavía no hay tarjetas'),
       h('p', 'Cargá una con su cierre y su vencimiento para ver el cronograma de cuotas.'),
-      h('button.btn.sec', { onclick: () => formCuenta() }, 'Cargar una tarjeta')));
+      h('button.btn.sec', { onclick: () => formCuenta() }, 'Cargar una tarjeta'),
+      h('button.btn.sec', { style: { marginTop: '10px' }, onclick: () => formImportarResumen() },
+        'o importar un resumen')));
     return;
   }
   root.append(h('div.flow',
     ...tarjetas.map(t => plastico(t, hoy, true)),
     deudaTotal(tarjetas, hoy),
-    h('button.btn.sec', { onclick: () => formCuenta() }, icono('mas', 17), 'Agregar tarjeta')));
+    h('button.btn.sec', { onclick: () => formCuenta() }, icono('mas', 17), 'Agregar tarjeta'),
+    h('button.btn.sec', { onclick: () => formImportarResumen() }, icono('recibo', 17), 'Importar un resumen')));
 }
 
 export function vistaTarjeta(root, { id }) {
@@ -38,7 +42,8 @@ export function vistaTarjeta(root, { id }) {
     limite(t, hoy),
     cuotasVivas(t, hoy),
     proximosResumenes(t, hoy),
-    h('button.btn.sec', { onclick: () => formCuenta(t) }, icono('ajustes', 17), 'Editar tarjeta')));
+    h('button.btn.sec', { onclick: () => formCuenta(t) }, icono('ajustes', 17), 'Editar tarjeta'),
+    h('button.btn.sec', { onclick: () => formImportarResumen() }, icono('recibo', 17), 'Importar un resumen')));
 }
 
 // ---------------------------------------------------------------- cc

@@ -31,6 +31,12 @@ t('espacios de sobra no molestan', () => cerca(parseMonto('   61081,68  '), 6108
 t('texto que no es numero da null', () => igual(parseMonto('OSDE'), null));
 
 console.log('\nFECHAS: los dos formatos que usa el mismo banco');
+t('el comercio no se queda con la referencia larga', () => {
+  const r = parseResumen(leer('resumen-visa.txt'));
+  const c = r.consumos.find(x => /CUOTA SOCIAL/.test(x.comercio));
+  igual(c.comercio, 'CUOTA SOCIAL CAR');
+});
+
 t('Mastercard usa 30-Jul-26', () => igual(parseFecha('30-Jul-26'), '2026-07-30'));
 t('Visa usa 06-06-26', () => igual(parseFecha('06-06-26'), '2026-06-06'));
 t('el mes en castellano se entiende', () => igual(parseFecha('01-Ago-26'), '2026-08-01'));

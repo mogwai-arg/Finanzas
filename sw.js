@@ -25,7 +25,7 @@ const SHELL = [
   './js/vistas/donde.js', './js/vistas/gastos.js', './js/vistas/tarjetas.js',
   './js/vistas/mes.js', './js/vistas/promos.js', './js/vistas/ajustes.js',
   './js/vistas/sueldo.js', './js/vistas/form-movimiento.js',
-  './js/vistas/formularios.js',
+  './js/vistas/formularios.js', './js/vistas/importar.js',
   './vendor/supabase.js',
   './marca/isotipo.svg', './icons/icon-192.png'
 ];

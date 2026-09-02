@@ -139,7 +139,10 @@ function leerConsumo(linea, { conCuota }) {
     }
   }
 
-  const comercio = resto.replace(/\s*USD\s*[\d.,]*\s*$/i, '').replace(/\s+/g, ' ').trim();
+  // Algunos comercios arrastran una referencia larga: 'CUOTA SOCIAL CAR
+  // 000000000000000'. Ocho digitos seguidos al final nunca son parte del nombre.
+  const comercio = resto.replace(/\s*USD\s*[\d.,]*\s*$/i, '')
+    .replace(/\s+/g, ' ').trim().replace(/\s+\d{8,}$/, '').trim();
   if (!comercio) return null;
 
   return { fecha, comercio, cuota, comprobante, marca,
