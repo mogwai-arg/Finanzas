@@ -66,6 +66,31 @@ t('un mail de promociones no genera movimiento', () => {
     'Descubri 25% de ahorro en gastronomia todos los sabados.', HOY);
   assert.equal(m, null);
 });
+t('la promo de cuotas del banco no genera movimiento', () => {
+  // El caso real: entro como un gasto de $1.000 en 9 cuotas que nadie hizo.
+  assert.equal(parsearMail('novedades@bancogalicia.com.ar',
+    'Comprá en 9 cuotas sin interés',
+    'Comprá con tu tarjeta de crédito Galicia en 9 cuotas de $ 1.000 sin interés.', HOY), null);
+});
+
+t('una oferta con descuento tampoco', () => {
+  assert.equal(parsearMail('novedades@bancogalicia.com.ar',
+    'Aprovechá 30% de descuento',
+    'Aprovechá 30% de descuento pagando con tu tarjeta de débito. Válido hasta el 30/09.', HOY), null);
+});
+
+t('un aviso sin comercio ni tarjeta no alcanza', () => {
+  assert.equal(parsearMail('avisos@bancogalicia.com.ar', 'Novedades',
+    'Tenés $ 5.000 disponibles en tu cuenta.', HOY), null);
+});
+
+t('los últimos cuatro alcanzan como prueba de que pasó', () => {
+  const m = parsearMail('avisos@bancogalicia.com.ar', 'Compra con tarjeta de credito',
+    'Compra por $ 12.500,00 en LIBRERIA ABC con tu tarjeta terminada en 9817.', HOY);
+  assert.equal(m!.monto, 12500);
+  assert.equal(m!.ultimos4, '9817');
+});
+
 t('un remitente desconocido no genera movimiento', () => {
   const m = parsearMail('facturas@edesur.com.ar', 'Tu factura',
     'Pagaste $ 5.000 en Edesur', HOY);

@@ -4,7 +4,7 @@
 // o a demanda con { user_id } en el body.
 // =====================================================================
 import { admin, json, CORS, hoyISO } from '../_shared/comun.ts';
-import { parsearMail, ES_RUIDO, type Movimiento } from '../_shared/parsers.ts';
+import { parsearMail, ES_RUIDO, ES_CONSUMO, type Movimiento } from '../_shared/parsers.ts';
 
 const REMITENTES = [
   'bancogalicia.com.ar', 'galicia.ar', 'modo.com.ar', 'mercadopago.com.ar', 'mercadolibre.com.ar'
@@ -35,7 +35,7 @@ Deno.serve(async (req) => {
 async function sincronizar(sb: any, it: any) {
   const token = await accessToken(sb, it);
   const lista = await api(`messages?q=${encodeURIComponent(QUERY)}&maxResults=60`, token);
-  let cargados = 0, ignorados = 0, dudosos = 0;
+  let cargados = 0, ignorados = 0;
 
   const { data: cuentas } = await sb.from('accounts').select('*').eq('user_id', it.user_id);
   const { data: cats }    = await sb.from('categories').select('*').eq('user_id', it.user_id);
@@ -60,14 +60,33 @@ async function sincronizar(sb: any, it: any) {
       remitente, asunto, recibido_at: fechaMail.toISOString()
     };
 
-    if (ES_RUIDO.test(asunto + ' ' + cuerpo.slice(0, 400))) {
-      await sb.from('ingest_log').insert({ ...log, estado: 'ignorado', detalle: 'no es un consumo' });
+    // Tres filtros, de mas barato a mas caro, y todos hacia el mismo lado:
+    // ante la duda no se carga nada. Un gasto inventado cuesta mucho mas caro
+    // que uno que hay que anotar a mano, porque rompe la confianza en todo lo
+    // demas que la app dice.
+    const muestra = asunto + ' ' + cuerpo.slice(0, 600);
+
+    if (ES_RUIDO.test(muestra)) {
+      await sb.from('ingest_log').insert({ ...log, estado: 'ignorado', detalle: 'publicidad o aviso, no un consumo' });
+      ignorados++; continue;
+    }
+    // Un aviso cuenta algo que ya paso. Si no lo dice, no se toma.
+    if (!ES_CONSUMO.test(muestra)) {
+      await sb.from('ingest_log').insert({ ...log, estado: 'ignorado', detalle: 'no dice que la compra ya ocurrió' });
       ignorados++; continue;
     }
 
     const mov = parsearMail(remitente, asunto, cuerpo, fechaMail.toISOString().slice(0, 10));
     if (!mov) {
       await sb.from('ingest_log').insert({ ...log, estado: 'ignorado', detalle: 'sin patron que matchee' });
+      ignorados++; continue;
+    }
+    // Sin comercio reconocido, lo unico que quedaria es un importe suelto:
+    // eso no es un movimiento, es una adivinanza.
+    if (mov.confianza < 75) {
+      await sb.from('ingest_log').insert({
+        ...log, estado: 'ignorado',
+        detalle: `poca confianza (${mov.confianza}): no se reconoció el comercio` });
       ignorados++; continue;
     }
 
@@ -78,7 +97,6 @@ async function sincronizar(sb: any, it: any) {
     }
     await sb.from('ingest_log').insert({ ...log, estado: 'cargado', transaction_id: tx.id });
     cargados++;
-    if (mov.confianza < 75) dudosos++;
     nuevos.push(`${mov.comercio} ${mov.moneda === 'USD' ? 'U$S' : '$'}${mov.monto.toLocaleString('es-AR')}`);
   }
 
@@ -89,10 +107,10 @@ async function sincronizar(sb: any, it: any) {
     await sb.from('notificaciones').insert({
       user_id: it.user_id, tipo: 'carga_auto',
       titulo: `${cargados} ${cargados === 1 ? 'gasto cargado' : 'gastos cargados'} solo`,
-      cuerpo: nuevos.slice(0, 4).join(' · ') + (dudosos ? ` · ${dudosos} para revisar` : '')
+      cuerpo: nuevos.slice(0, 4).join(' · ')
     });
   }
-  return { user: it.user_id, cargados, ignorados, dudosos };
+  return { user: it.user_id, cargados, ignorados };
 }
 
 // ---------------------------------------------------------------------

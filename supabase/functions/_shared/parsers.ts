@@ -93,7 +93,7 @@ export const REGLAS: Regla[] = [
   {
     emisor: 'modo',
     remitentes: /modo|playdigital/i,
-    test: /pagaste|pago realizado|comprobante de pago/i,
+    test: /pagaste|pago realizado|comprobante de pago|operaci[oó]n realizada/i,
     extraer(t, hoy) {
       const monto = t.match(/(?:\$|ars)\s*([\d.,]+)/i);
       if (!monto) return null;
@@ -114,7 +114,7 @@ export const REGLAS: Regla[] = [
   {
     emisor: 'mercadopago',
     remitentes: /mercadopago|mercadolibre/i,
-    test: /pagaste|compraste|tu pago|comprobante/i,
+    test: /pagaste|compraste|tu pago|comprobante de (pago|compra)/i,
     extraer(t, hoy) {
       const monto = t.match(/(?:\$|ars)\s*([\d.,]+)/i);
       if (!monto) return null;
@@ -146,5 +146,40 @@ export function parsearMail(remitente: string, asunto: string, cuerpo: string, h
   return null;
 }
 
-/** Descarta avisos que no son consumos (promos, resúmenes, avisos de seguridad). */
-export const ES_RUIDO = /newsletter|promoci[oó]n|beneficio|encuesta|no responder a este mail|clave|token|alerta de seguridad|resumen disponible|vencimiento de tu resumen/i;
+/**
+ * Descarta lo que no es un consumo.
+ *
+ * La publicidad de un banco habla de tarjetas, de cuotas y de plata, igual
+ * que un aviso de compra. "Comprá con tu tarjeta de crédito en 9 cuotas de
+ * $1.000 sin interés" pasaba todos los filtros y entraba como un gasto de mil
+ * pesos en nueve cuotas que nadie hizo.
+ *
+ * La diferencia esta en el modo verbal: un aviso cuenta algo que ya paso
+ * ("realizaste"), una promo invita a hacerlo ("comprá", "aprovechá"). Eso, mas
+ * el vocabulario tipico de una oferta, alcanza para separarlas.
+ */
+export const ES_RUIDO = new RegExp([
+  // lo que ya estaba
+  'newsletter', 'promoci[oó]n', 'beneficio', 'encuesta', 'no responder a este mail',
+  'clave', 'token', 'alerta de seguridad', 'resumen disponible', 'vencimiento de tu resumen',
+  // vocabulario de oferta
+  'sin inter[eé]s', 'cuotas fijas', 'hasta \\d+ cuotas', 'descuento', 'reintegro de hasta',
+  'ahorr[aá]', '\\d+ *% *(de *)?(off|descuento)', 'promo\\b', 'promos\\b', 'sorteo',
+  'suscrib[ií]', 'te regalamos', 'exclusivo para', 'v[aá]lido hasta', 'te esperamos',
+  // imperativos: la publicidad invita, el aviso informa
+  'compr[aá]\\b', 'aprovech[aá]', 'disfrut[aá]', 'llevate', 'conoc[eé]\\b',
+  'enterate', 'descubr[ií]', 'pod[eé]s comprar', 'ingres[aá] a'
+].join('|'), 'i');
+
+/**
+ * Lo contrario del ruido: la marca de que algo YA paso. Sin una de estas, un
+ * mail no se toma como consumo por mas que hable de tarjetas y de plata.
+ */
+export const ES_CONSUMO = new RegExp([
+  'realizaste', 'realizaste un consumo', 'se realiz[oó]', 'hiciste (una )?compra',
+  'compra realizada', 'consumo realizado', 'aviso de consumo', 'compraste', 'pagaste',
+  'aprobad[ao]', 'acreditad[ao]', 'comprobante de (pago|compra)', 'tu pago',
+  'operaci[oó]n realizada', 'se debit[oó]', 'se acredit[oó]',
+  // Ninguna publicidad dice los ultimos cuatro de tu tarjeta.
+  'terminad[ao] *(en)? *\\d{4}', '\\*{2,} *\\d{4}'
+].join('|'), 'i');

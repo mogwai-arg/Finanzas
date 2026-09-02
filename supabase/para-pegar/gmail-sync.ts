@@ -70,7 +70,7 @@ var REGLAS = [
   {
     emisor: "modo",
     remitentes: /modo|playdigital/i,
-    test: /pagaste|pago realizado|comprobante de pago/i,
+    test: /pagaste|pago realizado|comprobante de pago|operaci[oó]n realizada/i,
     extraer(t, hoy) {
       const monto = t.match(/(?:\$|ars)\s*([\d.,]+)/i);
       if (!monto) return null;
@@ -95,7 +95,7 @@ var REGLAS = [
   {
     emisor: "mercadopago",
     remitentes: /mercadopago|mercadolibre/i,
-    test: /pagaste|compraste|tu pago|comprobante/i,
+    test: /pagaste|compraste|tu pago|comprobante de (pago|compra)/i,
     extraer(t, hoy) {
       const monto = t.match(/(?:\$|ars)\s*([\d.,]+)/i);
       if (!monto) return null;
@@ -130,7 +130,66 @@ ${cuerpo}`.replace(/ /g, " ");
   }
   return null;
 }
-var ES_RUIDO = /newsletter|promoci[oó]n|beneficio|encuesta|no responder a este mail|clave|token|alerta de seguridad|resumen disponible|vencimiento de tu resumen/i;
+var ES_RUIDO = new RegExp([
+  // lo que ya estaba
+  "newsletter",
+  "promoci[o\xF3]n",
+  "beneficio",
+  "encuesta",
+  "no responder a este mail",
+  "clave",
+  "token",
+  "alerta de seguridad",
+  "resumen disponible",
+  "vencimiento de tu resumen",
+  // vocabulario de oferta
+  "sin inter[e\xE9]s",
+  "cuotas fijas",
+  "hasta \\d+ cuotas",
+  "descuento",
+  "reintegro de hasta",
+  "ahorr[a\xE1]",
+  "\\d+ *% *(de *)?(off|descuento)",
+  "promo\\b",
+  "promos\\b",
+  "sorteo",
+  "suscrib[i\xED]",
+  "te regalamos",
+  "exclusivo para",
+  "v[a\xE1]lido hasta",
+  "te esperamos",
+  // imperativos: la publicidad invita, el aviso informa
+  "compr[a\xE1]\\b",
+  "aprovech[a\xE1]",
+  "disfrut[a\xE1]",
+  "llevate",
+  "conoc[e\xE9]\\b",
+  "enterate",
+  "descubr[i\xED]",
+  "pod[e\xE9]s comprar",
+  "ingres[a\xE1] a"
+].join("|"), "i");
+var ES_CONSUMO = new RegExp([
+  "realizaste",
+  "realizaste un consumo",
+  "se realiz[o\xF3]",
+  "hiciste (una )?compra",
+  "compra realizada",
+  "consumo realizado",
+  "aviso de consumo",
+  "compraste",
+  "pagaste",
+  "aprobad[ao]",
+  "acreditad[ao]",
+  "comprobante de (pago|compra)",
+  "tu pago",
+  "operaci[o\xF3]n realizada",
+  "se debit[o\xF3]",
+  "se acredit[o\xF3]",
+  // Ninguna publicidad dice los ultimos cuatro de tu tarjeta.
+  "terminad[ao] *(en)? *\\d{4}",
+  "\\*{2,} *\\d{4}"
+].join("|"), "i");
 
 // supabase/functions/gmail-sync/index.ts
 var REMITENTES = [
@@ -162,7 +221,7 @@ Deno.serve(async (req) => {
 async function sincronizar(sb, it) {
   const token = await accessToken(sb, it);
   const lista = await api(`messages?q=${encodeURIComponent(QUERY)}&maxResults=60`, token);
-  let cargados = 0, ignorados = 0, dudosos = 0;
+  let cargados = 0, ignorados = 0;
   const { data: cuentas } = await sb.from("accounts").select("*").eq("user_id", it.user_id);
   const { data: cats } = await sb.from("categories").select("*").eq("user_id", it.user_id);
   const { data: reglas } = await sb.from("reglas").select("*").eq("user_id", it.user_id);
@@ -183,14 +242,29 @@ async function sincronizar(sb, it) {
       asunto,
       recibido_at: fechaMail.toISOString()
     };
-    if (ES_RUIDO.test(asunto + " " + cuerpo.slice(0, 400))) {
-      await sb.from("ingest_log").insert({ ...log, estado: "ignorado", detalle: "no es un consumo" });
+    const muestra = asunto + " " + cuerpo.slice(0, 600);
+    if (ES_RUIDO.test(muestra)) {
+      await sb.from("ingest_log").insert({ ...log, estado: "ignorado", detalle: "publicidad o aviso, no un consumo" });
+      ignorados++;
+      continue;
+    }
+    if (!ES_CONSUMO.test(muestra)) {
+      await sb.from("ingest_log").insert({ ...log, estado: "ignorado", detalle: "no dice que la compra ya ocurri\xF3" });
       ignorados++;
       continue;
     }
     const mov = parsearMail(remitente, asunto, cuerpo, fechaMail.toISOString().slice(0, 10));
     if (!mov) {
       await sb.from("ingest_log").insert({ ...log, estado: "ignorado", detalle: "sin patron que matchee" });
+      ignorados++;
+      continue;
+    }
+    if (mov.confianza < 75) {
+      await sb.from("ingest_log").insert({
+        ...log,
+        estado: "ignorado",
+        detalle: `poca confianza (${mov.confianza}): no se reconoci\xF3 el comercio`
+      });
       ignorados++;
       continue;
     }
@@ -201,7 +275,6 @@ async function sincronizar(sb, it) {
     }
     await sb.from("ingest_log").insert({ ...log, estado: "cargado", transaction_id: tx.id });
     cargados++;
-    if (mov.confianza < 75) dudosos++;
     nuevos.push(`${mov.comercio} ${mov.moneda === "USD" ? "U$S" : "$"}${mov.monto.toLocaleString("es-AR")}`);
   }
   await sb.from("integrations").update({ ultima_sync: (/* @__PURE__ */ new Date()).toISOString(), ultimo_error: null }).eq("id", it.id);
@@ -210,10 +283,10 @@ async function sincronizar(sb, it) {
       user_id: it.user_id,
       tipo: "carga_auto",
       titulo: `${cargados} ${cargados === 1 ? "gasto cargado" : "gastos cargados"} solo`,
-      cuerpo: nuevos.slice(0, 4).join(" \xB7 ") + (dudosos ? ` \xB7 ${dudosos} para revisar` : "")
+      cuerpo: nuevos.slice(0, 4).join(" \xB7 ")
     });
   }
-  return { user: it.user_id, cargados, ignorados, dudosos };
+  return { user: it.user_id, cargados, ignorados };
 }
 async function insertar(sb, userId, mov, cuentas, cats, reglas, externoId) {
   let cuenta = mov.ultimos4 ? cuentas.find((c) => c.ultimos4 === mov.ultimos4) : null;
