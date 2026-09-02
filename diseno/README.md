@@ -16,8 +16,13 @@ Construida sobre los cuatro módulos de lógica. Se prueba sin backend:
 
 ```bash
 npm run serve      # y abrir http://localhost:8080
-npm test           # 210 pruebas
+npm test           # 221 pruebas
+npm run demo       # arma dist/bishusha-demo.html: la app entera en un archivo
 ```
+
+`build-demo.mjs` empaqueta todo —CSS, módulos y datos de ejemplo— en un solo
+HTML que se abre con doble clic, sin servidor y sin conexión. Sirve para
+probarla en el celular antes de tener Supabase y Cloudflare andando.
 
 | Archivo | Qué es |
 |---|---|

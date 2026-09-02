@@ -4,7 +4,8 @@
   "type": "module",
   "scripts": {
     "test": "node js/finance.test.mjs && node js/sueldo.test.mjs && node js/resumen.test.mjs && node --experimental-strip-types supabase/functions/_shared/parsers.test.ts",
-    "serve": "python3 -m http.server 8080"
+    "serve": "python3 -m http.server 8080",
+    "demo": "node build-demo.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.112.4",
