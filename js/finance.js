@@ -215,11 +215,21 @@ export function pagadoDeResumen(txs, tarjeta, ciclo, moneda = 'ARS') {
   return round2(total);
 }
 
-/** Lo que falta pagar de un resumen: el total menos lo ya pagado. */
+/**
+ * Lo que falta pagar de un resumen: el total menos lo ya pagado.
+ *
+ * Un resto de centavos cuenta como saldado. Uno paga 939.323 de un resumen de
+ * 939.323,25 —el banco redondea, el cajero redondea, uno tipea redondo— y si
+ * esos veinticinco centavos siguen contando, la tarjeta queda "a pagar en 2
+ * dias" para siempre por una moneda de veinticinco.
+ */
 export function faltaPagarDeResumen(txs, tarjeta, ciclo, moneda = 'ARS') {
   if (!ciclo) return 0;
   const total = totalTarjetaEnPeriodo(txs, tarjeta, periodo(ciclo.vence), moneda);
-  return round2(Math.max(0, total - pagadoDeResumen(txs, tarjeta, ciclo, moneda)));
+  const pagado = pagadoDeResumen(txs, tarjeta, ciclo, moneda);
+  if (!pagado) return round2(Math.max(0, total));
+  const resto = round2(Math.max(0, total - pagado));
+  return resto <= (moneda === 'USD' ? 0.05 : 1) ? 0 : resto;
 }
 
 /** Deuda futura: cuotas que todavia no vencieron, agrupadas por periodo. */
@@ -257,14 +267,15 @@ export function deudaFutura(txs, tarjetas, moneda = 'ARS', ref = hoy(), meses = 
  * consumido $595.729 contra un proximo resumen de $394.463: los $201.266 de
  * mas son cuotas de meses siguientes que ya tienen el limite tomado.
  */
-export function limiteDeTarjeta(tarjeta, txs, ref = hoy(), moneda = 'ARS') {
+export function limiteDeTarjeta(tarjeta, txs, ref = hoy(), moneda = 'ARS', pagado = 0) {
   const limite = Number(tarjeta.limite) || 0;
   let consumido = 0;
   for (const tx of txs) {
     if (tx.account_id !== tarjeta.id || tx.tipo !== 'gasto' || tx.moneda !== moneda) continue;
     for (const c of cronograma(tx, tarjeta, ref)) if (c.pendiente) consumido += c.monto;
   }
-  consumido = round2(consumido);
+  // Pagar el resumen libera el limite en el momento, no cuando vence.
+  consumido = round2(Math.max(0, consumido - (Number(pagado) || 0)));
   return { limite, consumido, disponible: round2(limite - consumido),
            usado: limite > 0 ? Math.round((consumido / limite) * 100) : 0 };
 }

@@ -21,7 +21,8 @@ export function vistaMes(root) {
     .map(m => F.estadoAhorro(budgets, state.transactions, p, m)).filter(Boolean);
   const faltan = rec.filter(r => !r.pagado);
   const tarjetas = resumenesDelMes(hoy);
-  const esteMes = tarjetas.filter(t => F.periodo(t.vence) === p);
+  // Para "falta pagar" solo cuentan los resúmenes que todavía se deben.
+  const esteMes = tarjetas.filter(t => F.periodo(t.vence) === p && !t.pagado);
   const total = faltan.reduce((s, r) => s + r.monto, 0) +
                 esteMes.reduce((s, t) => s + t.monto, 0);
 
@@ -44,7 +45,8 @@ export function vistaMes(root) {
       h('div.grp', tarjetas.map(t => h('button.li', { onclick: () => irA(`/tarjetas/${t.id}`) },
         h('div.av', icono('tarjeta', 17)),
         h('div.m', h('div.t', t.nombre),
-          h('div.s', cuandoVence(fechaISO(t.vence), hoy) + (t.declarado ? '' : ' · estimado'))),
+          h('div.s', (t.pagado ? 'pagado · en curso · ' : '') +
+            cuandoVence(fechaISO(t.vence), hoy) + (t.declarado ? '' : ' · estimado'))),
         h('div.v', plata(Math.round(t.monto), 'ARS')))))) : null,
 
     h('section',
@@ -83,10 +85,16 @@ function resumenesDelMes(hoy) {
   const out = [];
   for (const t of state.accounts.filter(a => a.tipo === 'credito' && a.activo !== false)) {
     if (!F.tieneCiclo(t)) continue;      // sin cierre, la fecha seria inventada
-    const c = F.resumenAPagar(t, hoy) || F.proximoCiclo(t, hoy);
-    const monto = F.totalTarjetaEnPeriodo(state.transactions, t, F.periodo(c.vence), 'ARS');
+    const cerrado = F.resumenAPagar(t, hoy);
+    // Lo que falta, no lo que salió: un resumen ya pagado no es algo que se
+    // viene, y seguía sumando al "falta pagar" del mes.
+    const falta = cerrado ? F.faltaPagarDeResumen(state.transactions, t, cerrado, 'ARS') : 0;
+    const c = falta > 0 ? cerrado : F.proximoCiclo(t, hoy);
+    const monto = falta > 0 ? falta
+      : F.totalTarjetaEnPeriodo(state.transactions, t, F.periodo(c.vence), 'ARS');
     if (!monto) continue;
-    out.push({ id: t.id, nombre: t.nombre, monto, vence: c.vence, declarado: c.declarado });
+    out.push({ id: t.id, nombre: t.nombre, monto, vence: c.vence, declarado: c.declarado,
+               pagado: falta <= 0 && !!cerrado });
   }
   return out.sort((a, b) => a.vence - b.vence);
 }

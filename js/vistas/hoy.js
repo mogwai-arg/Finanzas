@@ -449,8 +449,12 @@ export function formPagoTarjeta(tarjeta, ciclo, sugerido, moneda = 'ARS') {
   const cuentas = state.accounts.filter(a =>
     a.activo !== false && a.tipo !== 'credito' && (a.moneda || 'ARS') === moneda);
 
+  // Con los centavos puestos: redondear la sugerencia dejaba un resto que
+  // mantenía el resumen sin saldar.
   const cMonto = h('input', { type: 'text', inputmode: 'decimal',
-                              value: String(Math.round(sugerido)) });
+                              value: Number(sugerido) % 1
+                                ? Number(sugerido).toFixed(2).replace('.', ',')
+                                : String(Math.round(sugerido)) });
   const cCuenta = select(cuentas.map(a => ({ value: a.id, label: etiquetaCuenta(a) })),
                          { value: cuentas[0]?.id || '' });
   const cFecha = h('input', { type: 'date', value: hoyISO() });

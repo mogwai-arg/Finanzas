@@ -355,6 +355,37 @@ t('una movida entre cuentas de la misma moneda se ve una sola vez', () => {
   assert.equal(F.resumenMes(txs, '2026-09', 'USD').movido, 0);
 });
 
+t('un resto de centavos cuenta como resumen pagado', () => {
+  const tj = { id: 'v', tipo: 'credito', nombre: 'Visa', moneda: 'ARS',
+               ciclos: [{ cierre: '2026-08-27', vence: '2026-09-04' }] };
+  const ciclo = { cierre: F.parseFecha('2026-08-27'), vence: F.parseFecha('2026-09-04') };
+  const txs = [
+    { id: 'g', tipo: 'gasto', moneda: 'ARS', monto: 939323.25, fecha: '2026-08-20',
+      account_id: 'v', cuotas: 1 },
+    { id: 'p', tipo: 'transferencia', moneda: 'ARS', monto: 939323, fecha: '2026-09-02',
+      account_id: 'gal', destino_account_id: 'v' }
+  ];
+  // Se pagó redondo un resumen con centavos: queda saldado, no "a pagar".
+  assert.equal(F.faltaPagarDeResumen(txs, tj, ciclo), 0);
+  // Pero una parte de verdad sigue figurando.
+  const parcial = [txs[0], { ...txs[1], monto: 400000 }];
+  assert.equal(F.faltaPagarDeResumen(parcial, tj, ciclo), 539323.25);
+  // Y sin ningún pago, el total entero.
+  assert.equal(F.faltaPagarDeResumen([txs[0]], tj, ciclo), 939323.25);
+});
+
+t('pagar el resumen libera el límite en el momento', () => {
+  const tj = { id: 'v', tipo: 'credito', moneda: 'ARS', limite: 1000000,
+               cierre_dia: 27, vencimiento_dia: 4 };
+  const txs = [{ id: 'g', tipo: 'gasto', moneda: 'ARS', monto: 300000,
+                 fecha: '2026-08-20', account_id: 'v', cuotas: 1 }];
+  const sinPagar = F.limiteDeTarjeta(tj, txs, d('2026-09-02'));
+  assert.equal(sinPagar.consumido, 300000);
+  const pagada = F.limiteDeTarjeta(tj, txs, d('2026-09-02'), 'ARS', 300000);
+  assert.equal(pagada.consumido, 0);
+  assert.equal(pagada.disponible, 1000000);
+});
+
 t('el reintegro respeta el tope', () => {
   assert.equal(F.reintegroEstimado(200000, promos[0]), 20000);
   assert.equal(F.reintegroEstimado(50000, promos[0]), 10000);

@@ -50,11 +50,34 @@ export function vistaTarjeta(root, { id }) {
     h('button.btn.sec', { onclick: () => formImportarResumen() }, icono('recibo', 17), 'Importar un resumen')));
 }
 
+/**
+ * En qué está la tarjeta ahora mismo: qué resumen mira y cuánto de él falta.
+ *
+ * Lo usan las tres partes de la pantalla —el plástico, el límite y la lista
+ * de consumos— y por eso vive en un solo lugar: cuando el resumen se paga,
+ * las tres tienen que pasar al ciclo en curso a la vez o la pantalla se
+ * contradice sola.
+ */
+function estadoTarjeta(t, hoy) {
+  const moneda = t.moneda || 'ARS';
+  const cerrado = F.resumenAPagar(t, hoy);
+  const falta = cerrado ? F.faltaPagarDeResumen(state.transactions, t, cerrado, moneda) : 0;
+  const pagado = cerrado ? F.pagadoDeResumen(state.transactions, t, cerrado, moneda) : 0;
+  const aPagar = falta > 0 ? cerrado : null;
+  return { moneda, cerrado, falta, pagado, aPagar,
+           ciclo: aPagar || F.proximoCiclo(t, hoy) };
+}
+
 // ---------------------------------------------------------------- cc
 function plastico(t, hoy, linkear) {
   // Lo primero es lo que hay que pagar. Un resumen ya cerrado que vence en
   // tres dias importa mucho mas que el que recien empezo a acumular.
-  const aPagar = F.resumenAPagar(t, hoy);
+  //
+  // Pero un resumen PAGADO deja de ser lo primero: ahi la tarjeta vuelve a
+  // cero y lo que importa es el ciclo en curso, que es lo que se esta
+  // gastando ahora. Antes seguia mostrando la deuda y el "a pagar en 2 d"
+  // aunque el pago estuviera anotado.
+  const { moneda, cerrado, falta, pagado, aPagar } = estadoTarjeta(t, hoy);
   const c = F.proximoCiclo(t, hoy);
   const foco = aPagar || c;
   // Sin cierre cargado no hay resumen que mostrar: en vez de un cero que
@@ -62,7 +85,8 @@ function plastico(t, hoy, linkear) {
   const sinCiclo = !F.tieneCiclo(t);
   const total = sinCiclo
     ? todoLoQueDebe(t)
-    : F.totalTarjetaEnPeriodo(state.transactions, t, F.periodo(foco.vence), t.moneda || 'ARS');
+    : aPagar ? falta
+             : F.totalTarjetaEnPeriodo(state.transactions, t, F.periodo(foco.vence), moneda);
   const { simbolo, numero } = plataPartida(
     (t.moneda || 'ARS') === 'USD' ? total : Math.round(total), t.moneda || 'ARS');
   const dv = diasHasta(isoDe(foco.vence), hoy);
@@ -80,6 +104,7 @@ function plastico(t, hoy, linkear) {
     h('div.amtl', { style: { marginTop: '14px' } },
       sinCiclo ? 'En consumos'
         : aPagar ? (dv <= 0 ? 'Venció' : dv <= 3 ? `A pagar en ${dv} d` : 'A pagar')
+        : pagado > 0 ? 'Resumen pagado · en curso'
         : 'Resumen en curso'),
     h('div', { class: 'amt' + (state.ocultarMontos ? ' oculto' : '') }, `${simbolo} ${numero}`),
     sinCiclo
@@ -90,19 +115,30 @@ function plastico(t, hoy, linkear) {
             h('b', aPagar ? `${fmt(foco.vence)} · en ${dv} d` : `${fmt(c.cierre)} · en ${dc} d`)),
           h('div', h('span', aPagar ? 'Próximo cierre' : 'Vence'),
             h('b', aPagar ? `${fmt(c.cierre)} · en ${dc} d` : `${fmt(c.vence)} · en ${dv} d`)),
-          !foco.declarado && h('div', h('span', 'estimado'))));
+          !foco.declarado && h('div', h('span', 'estimado'))),
+    // Que el pago figure: sin esto, la tarjeta en cero se lee como un error.
+    !sinCiclo && !aPagar && pagado > 0 && h('div.foot', { style: { marginTop: '2px' } },
+      h('div', h('span', 'Pagaste'),
+        h('b', `${plata(Math.round(pagado), moneda)} · resumen del ${fmt(cerrado.cierre)}`))));
   return cc;
 }
 
-/** Todo lo pendiente de una tarjeta, sin repartir por resumen. */
+/**
+ * Todo lo pendiente de una tarjeta, sin repartir por resumen.
+ *
+ * Los pagos tambien cuentan: son transferencias que entran a la tarjeta, y
+ * sin restarlas la deuda no baja nunca por mas que se pague.
+ */
 function todoLoQueDebe(t) {
+  const moneda = t.moneda || 'ARS';
   let total = 0;
   for (const tx of state.transactions) {
-    if (tx.account_id !== t.id || tx.tipo !== 'gasto') continue;
-    if ((tx.moneda || 'ARS') !== (t.moneda || 'ARS')) continue;
-    total += Number(tx.monto) || 0;
+    if ((tx.moneda || 'ARS') !== moneda) continue;
+    if (tx.tipo === 'gasto' && tx.account_id === t.id) total += Number(tx.monto) || 0;
+    else if (tx.tipo === 'transferencia' && tx.destino_account_id === t.id)
+      total -= Math.abs(Number(tx.monto) || 0);
   }
-  return total;
+  return Math.max(0, total);
 }
 
 /** Sin cierre no se puede armar el resumen: se pide la fecha que falta. */
@@ -121,7 +157,8 @@ function faltaElCierre(t) {
 // ------------------------------------------------------------ limite
 function limite(t, hoy) {
   if (!t.limite) return null;
-  const l = F.limiteDeTarjeta(t, state.transactions, hoy, t.moneda || 'ARS');
+  const { moneda, pagado } = estadoTarjeta(t, hoy);
+  const l = F.limiteDeTarjeta(t, state.transactions, hoy, moneda, pagado);
   return h('section',
     h('div.ghead', 'Límite'),
     h('div.grp.pad',
@@ -172,9 +209,8 @@ function cuotasVivas(t, hoy) {
  * la tarjeta. Viendo la lista, el error salta.
  */
 function consumosDelCiclo(t, hoy) {
-  const c = F.resumenAPagar(t, hoy) || F.proximoCiclo(t, hoy);
+  const { ciclo: c, aPagar, moneda } = estadoTarjeta(t, hoy);
   const per = F.periodo(c.vence);
-  const moneda = t.moneda || 'ARS';
   const sinCiclo = !F.tieneCiclo(t);
 
   const filas = [];
@@ -188,7 +224,7 @@ function consumosDelCiclo(t, hoy) {
   filas.sort((a, b) => (a.tx.fecha < b.tx.fecha ? 1 : -1));
 
   const titulo = sinCiclo ? 'Consumos'
-    : F.resumenAPagar(t, hoy) ? 'Lo que se paga' : 'Lo que va del resumen';
+    : aPagar ? 'Lo que se paga' : 'Lo que va del resumen';
   if (!filas.length) {
     return h('section',
       h('div.ghead', titulo),
