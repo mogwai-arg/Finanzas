@@ -5,6 +5,7 @@ import { h, icono, iconoDe, hoja, aviso } from '../ui.js';
 import { state, guardar } from '../db.js';
 import * as F from '../finance.js';
 import { plata, cuandoVence, nombreDe, fechaISO, hoyISO } from '../formato.js';
+import { formRecurrente, formPresupuesto } from './formularios.js';
 
 export function vistaMes(root) {
   const hoy = new Date();
@@ -23,18 +24,25 @@ export function vistaMes(root) {
         `${faltan.length} de ${rec.length} gastos fijos`)) : null,
 
     h('section',
-      h('div.ghead', 'Gastos fijos'),
+      h('div.ghead', 'Gastos fijos',
+        h('button', { onclick: () => formRecurrente() }, 'Agregar')),
       rec.length
         ? h('div.grp', rec.map(r => filaRecurrente(r, p, hoy)))
         : h('div.vacio', { style: { padding: '32px 24px' } },
             h('div.ic', icono('reloj', 24)),
             h('h3', 'Sin gastos fijos cargados'),
-            h('p', 'El colegio, la prepaga, la luz. Cargalos una vez y la app te avisa cada mes.'))),
+            h('p', 'El colegio, la prepaga, la luz. Cargalos una vez y la app te avisa cada mes.'),
+            h('button.btn.sec', { onclick: () => formRecurrente() }, 'Cargar el primero'))),
 
-    budgets.length ? h('section',
-      h('div.ghead', 'Presupuesto'),
-      h('div.grp', F.estadoPresupuesto(budgets, res, Number(state.settings?.alert_pct) || 80)
-        .map(b => filaPresupuesto(b)))) : null
+    h('section',
+      h('div.ghead', 'Presupuesto',
+        h('button', { onclick: () => formPresupuesto(p) }, budgets.length ? 'Ajustar' : 'Definir')),
+      budgets.length
+        ? h('div.grp', F.estadoPresupuesto(budgets, res, Number(state.settings?.alert_pct) || 80)
+            .map(b => filaPresupuesto(b)))
+        : h('div.grp.pad', h('div.small.mut', { style: { lineHeight: '1.5' } },
+            'Sin topes cargados no hay con qué comparar el gasto del mes. ',
+            'Empezá por tres categorías, no por diez.')))
   ));
 }
 
@@ -43,7 +51,8 @@ function filaRecurrente(r, periodo, hoy) {
   const iso = fechaISO(r.vence);
   return h('button.li', {
     class: `li ${r.pagado ? '' : vencido ? 'sev sev-neg' : r.diasRestantes <= 3 ? 'sev sev-amb' : ''}`,
-    onclick: () => togglePago(r, periodo)
+    onclick: () => togglePago(r, periodo),
+    oncontextmenu: e => { e.preventDefault(); formRecurrente(state.recurrings.find(x => x.id === r.id)); }
   },
     h('div', { class: 'av' + (r.pagado ? ' pos' : vencido ? ' neg' : '') },
       icono(r.pagado ? 'check' : iconoDe(r.nombre), 17)),

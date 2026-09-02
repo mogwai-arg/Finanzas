@@ -2,7 +2,8 @@
 // app.js — arranque, barra de pestañas y despacho de vistas.
 // =====================================================================
 import { h, icono, aviso } from './ui.js';
-import { state, sesion, sincronizar, cargarCache, onChange, DEMO, enviarMagicLink } from './db.js';
+import { state, sesion, sincronizar, cargarCache, onChange, DEMO,
+         enviarMagicLink, urlDeVuelta } from './db.js';
 import { rutaActual, irA, alCambiarRuta, calzar } from './ruteo.js';
 import { fechaLarga, hoyISO } from './formato.js';
 
@@ -148,18 +149,64 @@ function pintarTabs(activo) {
 }
 
 // --------------------------------------------------------------- login
+/**
+ * Un error de login sin explicacion es lo peor que puede pasar en la primera
+ * pantalla: no hay nada que probar y no se sabe si es la app, el correo o
+ * la conexion. Por eso el mensaje dice QUE paso y QUE hacer.
+ */
+function explicarError(error) {
+  const m = String(error?.message || error || '').toLowerCase();
+  if (/rate|too many|seconds|limit/.test(m))
+    return { txt: 'Supabase corta los envíos si pedís varios seguidos. Esperá unos minutos.',
+             detalle: error?.message };
+  if (/redirect|not allowed|invalid.*url/.test(m))
+    return { txt: `Falta permitir esta dirección en Supabase: ${urlDeVuelta()}`,
+             detalle: error?.message };
+  if (/signup|disabled|not allowed/.test(m))
+    return { txt: 'Supabase no está aceptando altas nuevas con este correo.',
+             detalle: error?.message };
+  if (/fetch|network|failed/.test(m))
+    return { txt: 'No pude hablar con el servidor. ¿Hay internet?', detalle: error?.message };
+  return { txt: error?.message || 'No salió, y el servidor no dijo por qué.',
+           detalle: error?.message };
+}
+
 function pantallaLogin() {
   tabs.hidden = true;
   let enviando = false;
   const email = h('input', { type: 'email', placeholder: 'tu@correo.com',
                              autocomplete: 'email', inputmode: 'email' });
+  const detalle = h('div.small', { style: { marginTop: '14px', lineHeight: '1.5',
+                                            textAlign: 'left' }, hidden: true });
   const boton = h('button.btn', { onclick: async () => {
     if (enviando || !email.value.includes('@')) { email.focus(); return; }
     enviando = true; boton.disabled = true; boton.textContent = 'Enviando…';
-    const { error } = await enviarMagicLink(email.value.trim());
+    detalle.hidden = true;
+    let error = null;
+    try { ({ error } = await enviarMagicLink(email.value.trim())); }
+    catch (e) { error = e; }
     enviando = false; boton.disabled = false; boton.textContent = 'Entrar';
-    aviso(error ? 'No salió. Revisá el correo e intentá de nuevo.'
-                : 'Listo. Te mandé un link para entrar.');
+
+    if (!error) {
+      aviso('Listo. Te mandé un link para entrar.');
+      detalle.hidden = false;
+      detalle.replaceChildren(
+        h('div.aviso', { style: { display: 'block' } },
+          h('div.tt', 'Revisá el correo'),
+          h('div.ds', 'Abrí el link desde este mismo aparato. Si lo abrís en la computadora, ',
+            'la sesión queda ahí y no acá.')));
+      return;
+    }
+    const e = explicarError(error);
+    aviso('No pude mandar el link');
+    detalle.hidden = false;
+    detalle.replaceChildren(
+      h('div.aviso.amb', { style: { display: 'block' } },
+        h('div.tt', 'No salió'),
+        h('div.ds', e.txt),
+        e.detalle && e.detalle !== e.txt
+          ? h('div.ds', { style: { marginTop: '8px', fontFamily: 'ui-monospace,monospace',
+                                   fontSize: '11.5px', opacity: '.8' } }, e.detalle) : null));
   } }, 'Entrar');
 
   app.replaceChildren(h('div', { style: { maxWidth: '340px', margin: '18vh auto 0', textAlign: 'center' } },
@@ -169,7 +216,7 @@ function pantallaLogin() {
     h('p.mut', { style: { fontSize: '14.5px', lineHeight: '1.45', marginBottom: '26px' } },
       'Poné tu correo y te mando un link para entrar. Sin contraseñas.'),
     h('div.f', h('label', 'Correo'), email),
-    boton));
+    boton, detalle));
 }
 
 iniciar();

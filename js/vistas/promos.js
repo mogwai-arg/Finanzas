@@ -7,6 +7,7 @@ import { h, icono, iconoDe, aviso } from '../ui.js';
 import { state } from '../db.js';
 import * as F from '../finance.js';
 import { plata, hoyISO } from '../formato.js';
+import { formPromo } from './formularios.js';
 import { posicion, sucursalesCerca, distanciaTexto, mapsUrl } from '../geo.js';
 
 const DIAS = ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb'];
@@ -36,7 +37,8 @@ export function vistaPromos(root) {
         h('div.ic', icono('pin', 24)),
         h('h3', cuando === 'hoy' ? 'Hoy no hay promos' : 'Todavía no cargaste promos'),
         h('p', cuando === 'hoy' ? 'Mirá "La semana" para ver qué se viene.'
-                                : 'Cargá las que uses y la app te avisa cuándo aplican.')));
+                                : 'Cargá las que uses y la app te avisa cuándo aplican.'),
+        h('button.btn.sec', { onclick: () => formPromo() }, 'Cargar una promo')));
       return;
     }
     for (const p of promos) lista.append(tarjeta(p, hoy));
@@ -53,7 +55,10 @@ export function vistaPromos(root) {
       ? DIAS[p.dias.slice().sort((a, b) => ((a - hoy.getDay() + 7) % 7) - ((b - hoy.getDay() + 7) % 7))[0]]
       : null;
 
-    return h('div.grp.pad', { style: aplicaHoy ? {} : { opacity: '.62' } },
+    return h('button.grp.pad', { style: { width: '100%', textAlign: 'left', border: '0',
+                                          display: 'block', cursor: 'pointer',
+                                          opacity: aplicaHoy ? '1' : '.62' },
+                                 onclick: () => formPromo(p) },
       h('div', { style: { display: 'flex', alignItems: 'flex-start', gap: '11px' } },
         h('div', { class: 'cifra' + (aplicaHoy ? ' pos' : ''), style: { fontSize: '22px' } },
           `${p.valor}%`),
@@ -116,5 +121,6 @@ export function vistaPromos(root) {
   pintar();
   root.append(h('div.flow', seg, cercania, lista,
     h('div.small.mut', { style: { padding: '0 4px', lineHeight: '1.45' } },
-      'El tope consumido es lo que hace honesta la promo: "25 % de reintegro" con el tope lleno es 0 %.')));
+      'El tope consumido es lo que hace honesta la promo: "25 % de reintegro" con el tope lleno es 0 %.'),
+    h('button.btn.sec', { onclick: () => formPromo() }, icono('mas', 17), 'Agregar promo')));
 }

@@ -132,8 +132,17 @@ export async function sesion() {
   state.user = data.session?.user || null;
   return state.user;
 }
+/**
+ * El link vuelve SIEMPRE a la raiz del sitio, no a la URL desde la que se
+ * pidio. Instalada en el celular la app arranca en `/index.html`, y si esa
+ * direccion exacta no esta en la lista blanca de Supabase, el envio falla
+ * sin decir por que. Con la raiz alcanza con permitir una sola URL.
+ */
+export const urlDeVuelta = () =>
+  location.origin + location.pathname.replace(/index\.html$/, '');
+
 export const enviarMagicLink = email => sb.auth.signInWithOtp({
-  email, options: { emailRedirectTo: location.origin + location.pathname } });
+  email, options: { emailRedirectTo: urlDeVuelta() } });
 export async function salir() {
   await sb.auth.signOut();
   localStorage.removeItem(CACHE_KEY);

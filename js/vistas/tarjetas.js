@@ -8,6 +8,7 @@ import { state } from '../db.js';
 import * as F from '../finance.js';
 import { plata, plataPartida, diasHasta, fechaISO, mesCorto, periodoLargo, buscar } from '../formato.js';
 import { irA } from '../ruteo.js';
+import { formCuenta } from './formularios.js';
 
 const isoDe = d => fechaISO(d);
 
@@ -18,12 +19,14 @@ export function vistaTarjetas(root) {
     root.append(h('div.vacio',
       h('div.ic', icono('tarjeta', 24)),
       h('h3', 'Todavía no hay tarjetas'),
-      h('p', 'Cargá una con su cierre y su vencimiento para ver el cronograma de cuotas.')));
+      h('p', 'Cargá una con su cierre y su vencimiento para ver el cronograma de cuotas.'),
+      h('button.btn.sec', { onclick: () => formCuenta() }, 'Cargar una tarjeta')));
     return;
   }
   root.append(h('div.flow',
     ...tarjetas.map(t => plastico(t, hoy, true)),
-    deudaTotal(tarjetas, hoy)));
+    deudaTotal(tarjetas, hoy),
+    h('button.btn.sec', { onclick: () => formCuenta() }, icono('mas', 17), 'Agregar tarjeta')));
 }
 
 export function vistaTarjeta(root, { id }) {
@@ -34,7 +37,8 @@ export function vistaTarjeta(root, { id }) {
     plastico(t, hoy, false),
     limite(t, hoy),
     cuotasVivas(t, hoy),
-    proximosResumenes(t, hoy)));
+    proximosResumenes(t, hoy),
+    h('button.btn.sec', { onclick: () => formCuenta(t) }, icono('ajustes', 17), 'Editar tarjeta')));
 }
 
 // ---------------------------------------------------------------- cc

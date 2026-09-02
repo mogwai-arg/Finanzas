@@ -5,6 +5,7 @@ import { h, icono, aviso, confirmar, hoja, campo } from '../ui.js';
 import { state, salir, sincronizar, exportarJSON, pendientes, fallidas, DEMO } from '../db.js';
 import { plata } from '../formato.js';
 import { irA } from '../ruteo.js';
+import { formCategorias, formCuenta } from './formularios.js';
 
 export function vistaAjustes(root) {
   const tema = document.documentElement.getAttribute('data-tema') || 'auto';
@@ -30,6 +31,20 @@ export function vistaAjustes(root) {
           h('div.av', icono('sync', 17)),
           h('div.m', h('div.t', 'Sincronizar ahora'),
             h('div.s', cola ? `${cola} cambios esperando` : 'Todo subido')),
+          h('span.chev', icono('chev', 15))))),
+
+    h('section',
+      h('div.ghead', 'Tu configuración'),
+      h('div.grp',
+        h('button.li', { onclick: () => formCuenta() },
+          h('div.av', icono('tarjeta', 17)),
+          h('div.m', h('div.t', 'Cuentas y tarjetas'),
+            h('div.s', `${(state.accounts || []).length} cargadas`)),
+          h('span.chev', icono('chev', 15))),
+        h('button.li', { onclick: () => formCategorias() },
+          h('div.av', icono('lista', 17)),
+          h('div.m', h('div.t', 'Categorías'),
+            h('div.s', `${(state.categories || []).length} cargadas`)),
           h('span.chev', icono('chev', 15))))),
 
     h('section',
