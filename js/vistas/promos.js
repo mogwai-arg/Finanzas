@@ -138,6 +138,11 @@ export function vistaPromos(root) {
 // sirve cueste poco, es mas honesto que fingir que la app las sabe.
 // =====================================================================
 const BUSCADORES = [
+  // Clash junta las de todos los bancos y billeteras en un solo lugar y las
+  // ordena por rubro, que es como uno las busca: "estoy en el súper, ¿con qué
+  // pago?". Va primero por eso.
+  { nombre: 'Clash', detalle: 'todas juntas, por rubro',
+    url: 'https://promos.clash.com.ar/' },
   { nombre: 'Galicia', detalle: 'buscador de promociones',
     url: 'https://www.galicia.ar/personas/buscador-de-promociones' },
   { nombre: 'MODO', detalle: 'promos de la semana',
