@@ -84,7 +84,7 @@ export function formImportarResumen() {
         r.total.usd ? dato('En dólares', plata(r.total.usd, 'USD')) : null,
         dato('Consumos nuevos', String(nuevos.length) + (enCuotas ? ` · ${enCuotas} en cuotas` : '')),
         repetidos ? dato('Ya cargados', `${repetidos}, no se repiten`) : null,
-        r.impuestos.length ? dato('Impuestos', `${r.impuestos.length} · ${plata(sumaImp(r))}`) : null),
+        r.impuestos.length ? dato('Impuestos', `${r.impuestos.length} · ${plata(sumaImp(r), 'ARS', { signo: true })}`) : null),
       h('div', { style: { marginTop: '14px' } }, campo('Cargar todo en', cual),
         pedirU4 ? h('div',
           campo('Últimos 4 de la tarjeta', u4),
@@ -128,9 +128,12 @@ export function formImportarResumen() {
     for (const i of r.impuestos) {
       const id = `${r.marca}:${r.ciclo?.cierre || ''}:imp:${i.fecha}:${i.concepto}:${i.monto}`;
       if (state.transactions.some(t => t.externo_id === id)) continue;
+      // Una devolución viene en negativo en el resumen, pero un movimiento
+      // guarda siempre importes positivos: lo que cambia es el tipo.
       filas.push({
         fecha: i.fecha, descripcion: i.concepto, comercio: i.concepto,
-        monto: i.monto, moneda: 'ARS', tipo: 'gasto', cuotas: 1,
+        monto: Math.abs(i.monto), moneda: 'ARS',
+        tipo: i.monto < 0 ? 'ingreso' : 'gasto', cuotas: 1,
         account_id: cuenta.id, fuente: 'resumen', revisado: true, externo_id: id
       });
     }

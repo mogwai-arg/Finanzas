@@ -3,6 +3,9 @@
 // supabase-js va empaquetado en vendor/ para que la PWA no dependa de
 // ningun CDN y funcione tambien sin conexion.
 // =====================================================================
+import { normalizar } from './filas.js';
+export { normalizar };
+
 const CFG = window.CONFIG || {};
 export const DEMO = !!CFG.DEMO;
 
@@ -102,8 +105,11 @@ export async function flushCola({ reintentarFallidas = false } = {}) {
 
   for (const op of cola) {
     try {
+      // Se normaliza tambien al reintentar: las filas que quedaron trabadas
+      // se guardaron antes de que existiera este filtro, y sin esto seguirian
+      // fallando por el mismo campo de mas para siempre.
       const { error } = op.accion === 'upsert'
-        ? await sb.from(op.tabla).upsert(op.fila)
+        ? await sb.from(op.tabla).upsert(normalizar(op.tabla, op.fila))
         : await sb.from(op.tabla).delete().eq('id', op.id);
       if (error) throw new Error(error.message);
     } catch (e) {
@@ -139,6 +145,21 @@ export async function conectar(proveedor) {
   if (!FUNCTIONS_URL) throw new Error('Falta FUNCTIONS_URL en la configuración.');
   const t = await token();
   if (!t) throw new Error('No hay sesión iniciada.');
+
+  // Preguntar antes de mandar el navegador. Si la función no está desplegada,
+  // Supabase contesta un JSON crudo en una pantalla en blanco y no hay vuelta
+  // atrás: mejor decirlo acá, donde se entiende.
+  try {
+    const r = await fetch(`${FUNCTIONS_URL}/oauth-start`, { method: 'OPTIONS' });
+    if (r.status === 404) throw new Error('falta');
+  } catch (e) {
+    if (e.message === 'falta') {
+      throw new Error('Todavía no está subida la función oauth-start. Mirá el paso 2 ' +
+                      'de la Fase 4 en el README.');
+    }
+    // Cualquier otro problema de red no deberia frenar el intento.
+  }
+
   location.href = `${FUNCTIONS_URL}/oauth-start?proveedor=${proveedor}&t=${encodeURIComponent(t)}`;
 }
 
@@ -261,7 +282,7 @@ const uuid = () => (crypto.randomUUID ? crypto.randomUUID()
 
 /** Guarda una fila (crea o actualiza) con escritura optimista. */
 export async function guardar(tabla, fila) {
-  const nueva = { ...fila };
+  const nueva = normalizar(tabla, fila);
   if (!nueva.id) nueva.id = uuid();
   nueva.user_id = state.user.id;
   nueva.updated_at = new Date().toISOString();
@@ -296,7 +317,8 @@ export async function guardar(tabla, fila) {
 export async function guardarVarios(tabla, filas) {
   if (!filas.length) return [];
   const ahora = new Date().toISOString();
-  const nuevas = filas.map(f => ({ ...f, id: f.id || uuid(), user_id: state.user.id, updated_at: ahora }));
+  const nuevas = filas.map(f => normalizar(tabla,
+    { ...f, id: f.id || uuid(), user_id: state.user.id, updated_at: ahora }));
 
   const lista = state[tabla] || (state[tabla] = []);
   const porId = new Map(lista.map((x, i) => [x.id, i]));
