@@ -459,10 +459,23 @@ export function formPagoTarjeta(tarjeta, ciclo, sugerido, moneda = 'ARS') {
                          { value: cuentas[0]?.id || '' });
   const cFecha = h('input', { type: 'date', value: hoyISO() });
 
+  // Sin consumos cargados el pago no puede contar como gasto: la app no sabe
+  // en qué se gastó. Decirlo acá evita el agujero de un resumen pagado que no
+  // aparece en ningún lado del mes.
+  const sinConsumos = !F.totalTarjetaEnPeriodo(state.transactions, tarjeta,
+                                               F.periodo(ciclo.vence), moneda);
+
   const cerrar = hoja(`Pagar ${tarjeta.nombre}`, h('div',
     h('div.small.mut', { style: { lineHeight: '1.5', marginBottom: '14px' } },
       `Del resumen que vence el ${ciclo.vence.getDate()}/${ciclo.vence.getMonth() + 1}. `,
-      'Si pagás una parte, el resto sigue figurando.'),
+      'Si pagás una parte, el resto sigue figurando. El pago no cuenta como gasto ',
+      'del mes: cada compra ya contó el día que la hiciste.'),
+    sinConsumos ? h('div.aviso.amb', { style: { marginBottom: '14px' } },
+      h('div.av.amb', icono('rayo', 17)),
+      h('div.txt',
+        h('div.tt', 'No tengo consumos de este resumen'),
+        h('div.ds', 'Si lo pagás así, esa plata no va a figurar como gasto en ningún ' +
+          'lado: la app no sabe en qué se gastó. Importá el resumen y después anotá el pago.'))) : null,
     campo('Cuánto', cMonto),
     campo('Desde', cCuenta),
     campo('Cuándo', cFecha),

@@ -76,6 +76,10 @@ export function vistaGastos(root) {
     const destino = buscar('accounts', t.destino_account_id);
     const esIngreso = t.tipo === 'ingreso';
     const esTransf = t.tipo === 'transferencia';
+    // Pagar la tarjeta no es gastar: lo que se compró ya contó el día que se
+    // compró. Decirlo en la fila evita la pregunta de por qué un pago de
+    // 939.000 no movió el total del mes.
+    const esPagoTarjeta = esTransf && destino && destino.tipo === 'credito';
     // La pata que entra de una compra de dólares se lee al revés: no salió de
     // esta cuenta, llegó a ella.
     const donde = entrante
@@ -87,13 +91,17 @@ export function vistaGastos(root) {
       h('div.m',
         h('div.t', tituloTx(t)),
         donde ? h('div.s', donde) :
+        esPagoTarjeta ? h('div.s', `a ${destino.nombre} · ya contó al comprar`) :
         h('div.s', esTransf && destino ? `a ${destino.nombre}` : [dondeTx(t), cat].filter(Boolean).join(' · '),
           cuenta ? ` · ${cuenta.nombre}${cuenta.ultimos4 ? ' ·' + cuenta.ultimos4 : ''}` : '',
           t.cuotas > 1 ? ` · ${t.cuotas} cuotas` : '')),
       // La pata que entra va en verde igual que un ingreso: lo que decide el
       // color es si la plata sube o baja en la moneda que se está mirando,
       // no de qué tipo es el movimiento.
-      h('div', { class: 'v' + (esIngreso || entrante ? ' pos' : '') },
+      // Una movida no suma ni resta del mes: en gris, para que no se lea como
+      // un gasto que quedó sin contar.
+      h('div', { class: 'v' + (esIngreso || entrante ? ' pos' : ''),
+                 style: esTransf && !entrante ? { color: 'var(--tx3)' } : {} },
         esTransf ? plata(monto, moneda, { signo: entrante })
                  : plata(esIngreso ? monto : -monto, moneda, { signo: esIngreso }),
         t.reintegro > 0 && h('small', { style: { color: 'var(--pos)' } },
