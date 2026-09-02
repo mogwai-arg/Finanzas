@@ -4,10 +4,47 @@ import { admin } from '../_shared/comun.ts';
 // Tiene que ser identica a la que mando oauth-start y a la registrada en la
 // consola de Google: sin parametros, sin barra al final.
 const REDIRECT = `${Deno.env.get('FUNCTIONS_URL')}/oauth-callback`;
-const APP = Deno.env.get('APP_URL') ?? '/';
+// Si APP_URL no esta configurada, redirigir a '/' explota en Deno: pide una
+// direccion absoluta. Mejor decirlo que fallar con un error de runtime.
+const APP = Deno.env.get('APP_URL') ?? '';
 
 Deno.serve(async (req) => {
   const url = new URL(req.url);
+
+  // Abrir esta direccion con ?salud=1 dice como quedo configurado todo, sin
+  // mostrar ningun secreto: solo si esta puesto o no. Es la forma mas rapida
+  // de comparar la direccion de vuelta con la registrada en Google, que es
+  // donde se rompe casi siempre.
+  if (url.searchParams.get('salud')) {
+    const hay = (k: string) => (Deno.env.get(k) ? 'puesto' : 'FALTA');
+    return new Response(
+      `BISHUSHA · oauth-callback
+
+` +
+      `Registrá en Google, letra por letra:
+  ${REDIRECT}
+
+` +
+      `FUNCTIONS_URL         ${Deno.env.get('FUNCTIONS_URL') ?? 'FALTA'}
+` +
+      `APP_URL               ${Deno.env.get('APP_URL') ?? 'FALTA'}
+` +
+      `GOOGLE_CLIENT_ID      ${hay('GOOGLE_CLIENT_ID')}
+` +
+      `GOOGLE_CLIENT_SECRET  ${hay('GOOGLE_CLIENT_SECRET')}
+` +
+      `MP_CLIENT_ID          ${hay('MP_CLIENT_ID')}
+` +
+      `MP_CLIENT_SECRET      ${hay('MP_CLIENT_SECRET')}
+`,
+      { headers: { 'content-type': 'text/plain; charset=utf-8' } });
+  }
+
+  if (!APP) {
+    return new Response('Falta el secreto APP_URL en Supabase → Edge Functions → Secrets.',
+      { status: 500, headers: { 'content-type': 'text/plain; charset=utf-8' } });
+  }
+
   const code = url.searchParams.get('code');
   // `state` viene como 'proveedor|jwt'. El ?proveedor= se sigue leyendo por si
   // quedo algun permiso a medias del formato anterior.
@@ -20,8 +57,14 @@ Deno.serve(async (req) => {
     // Cuando no hay code, el que sabe por que es Google: puede venir un
     // access_denied porque se toco "Volver a seguridad" en la pantalla de app
     // sin verificar. Decir 'sin_code' escondia justamente el motivo.
+    //
+    // Y si tampoco hay error, se listan los parametros que si llegaron: es la
+    // unica forma de distinguir "Google contesto raro" de "algo mas esta
+    // pegandole a esta direccion".
+    const llegaron = [...url.searchParams.keys()];
     const motivo = url.searchParams.get('error_description') ||
-                   url.searchParams.get('error') || 'no vino el código';
+                   url.searchParams.get('error') ||
+                   `no vino el código; llegó: ${llegaron.join(', ') || 'nada'}`;
     return Response.redirect(`${APP}#/ajustes?error=${encodeURIComponent(motivo)}`, 302);
   }
 

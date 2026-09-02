@@ -98,6 +98,29 @@ Google va a pedir una página de inicio y una de privacidad. Dos cosas:
 
 ---
 
+## Si algo falla
+
+Abrir en el navegador, con el project-ref propio:
+
+```
+https://<TU-PROJECT-REF>.supabase.co/functions/v1/oauth-callback?salud=1
+```
+
+Contesta en texto plano la dirección de vuelta exacta que hay que registrar en
+Google —para comparar letra por letra con la de la consola— y si cada secreto
+está puesto o falta. No muestra ningún valor.
+
+Errores frecuentes:
+
+| Dice | Es |
+|---|---|
+| `redirect_uri_mismatch` | la dirección de vuelta no coincide con la registrada |
+| `access_denied` | se tocó "Volver a seguridad" en la pantalla de app sin verificar |
+| `no vino el código; llegó: …` | Google mandó de vuelta sin código; los parámetros que sí llegaron dicen qué pasó |
+| `Requested function was not found` | la función está publicada con otro nombre: el nombre es la URL |
+
+---
+
 ## Lo que NO hay que hacer
 
 **No enviar la app a verificación.** Si la consola ofrece *"Preparar para

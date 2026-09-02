@@ -16,16 +16,41 @@ var CORS = {
 
 // supabase/functions/oauth-callback/index.ts
 var REDIRECT = `${Deno.env.get("FUNCTIONS_URL")}/oauth-callback`;
-var APP = Deno.env.get("APP_URL") ?? "/";
+var APP = Deno.env.get("APP_URL") ?? "";
 Deno.serve(async (req) => {
   const url = new URL(req.url);
+  if (url.searchParams.get("salud")) {
+    const hay = (k) => Deno.env.get(k) ? "puesto" : "FALTA";
+    return new Response(
+      `BISHUSHA \xB7 oauth-callback
+
+Registr\xE1 en Google, letra por letra:
+  ${REDIRECT}
+
+FUNCTIONS_URL         ${Deno.env.get("FUNCTIONS_URL") ?? "FALTA"}
+APP_URL               ${Deno.env.get("APP_URL") ?? "FALTA"}
+GOOGLE_CLIENT_ID      ${hay("GOOGLE_CLIENT_ID")}
+GOOGLE_CLIENT_SECRET  ${hay("GOOGLE_CLIENT_SECRET")}
+MP_CLIENT_ID          ${hay("MP_CLIENT_ID")}
+MP_CLIENT_SECRET      ${hay("MP_CLIENT_SECRET")}
+`,
+      { headers: { "content-type": "text/plain; charset=utf-8" } }
+    );
+  }
+  if (!APP) {
+    return new Response(
+      "Falta el secreto APP_URL en Supabase \u2192 Edge Functions \u2192 Secrets.",
+      { status: 500, headers: { "content-type": "text/plain; charset=utf-8" } }
+    );
+  }
   const code = url.searchParams.get("code");
   const state = url.searchParams.get("state") ?? "";
   const corte = state.indexOf("|");
   const prov = corte > 0 ? state.slice(0, corte) : url.searchParams.get("proveedor") ?? "gmail";
   const jwt = corte > 0 ? state.slice(corte + 1) : state;
   if (!code) {
-    const motivo = url.searchParams.get("error_description") || url.searchParams.get("error") || "no vino el c\xF3digo";
+    const llegaron = [...url.searchParams.keys()];
+    const motivo = url.searchParams.get("error_description") || url.searchParams.get("error") || `no vino el c\xF3digo; lleg\xF3: ${llegaron.join(", ") || "nada"}`;
     return Response.redirect(`${APP}#/ajustes?error=${encodeURIComponent(motivo)}`, 302);
   }
   const sb = admin();
