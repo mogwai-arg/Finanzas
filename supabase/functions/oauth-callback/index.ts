@@ -69,10 +69,22 @@ Deno.serve(async (req) => {
 
   // El numero de un solo uso dice de quien es la sesion y a que proveedor.
   const sb = admin();
-  const { data: pendiente } = await sb.from('oauth_pendientes')
+  const { data: pendiente, error: errPend } = await sb.from('oauth_pendientes')
     .select('user_id, proveedor').eq('nonce', nonce).maybeSingle();
-  if (!pendiente) return Response.redirect(
-    `${APP}#/ajustes?error=${encodeURIComponent('el permiso caducó o ya se usó; probá de nuevo')}`, 302);
+
+  if (!pendiente) {
+    // Tres motivos distintos que antes decian todos lo mismo, y solo uno de
+    // ellos se arregla probando de nuevo.
+    const motivo =
+      errPend?.message?.includes('oauth_pendientes')
+        ? 'falta correr el SQL 007 en Supabase: no existe la tabla oauth_pendientes'
+      : nonce.includes('|')
+        ? 'oauth-start quedó en la versión vieja: volvé a pegarla y desplegarla'
+      : errPend
+        ? `no pude leer el permiso pendiente: ${errPend.message}`
+        : 'el permiso caducó o ya se usó; probá de nuevo';
+    return Response.redirect(`${APP}#/ajustes?error=${encodeURIComponent(motivo)}`, 302);
+  }
   await sb.from('oauth_pendientes').delete().eq('nonce', nonce);
   const prov = pendiente.proveedor;
   const u = { user: { id: pendiente.user_id } };

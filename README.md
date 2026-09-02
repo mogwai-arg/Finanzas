@@ -106,6 +106,8 @@ Hay dos caminos. Los dos dejan lo mismo andando.
 
 Es el camino corto si no tenés Node instalado.
 
+En este orden, que importa: primero el SQL, después las funciones.
+
 1. **Los secretos.** Panel de Supabase → **Edge Functions → Secrets → Add new
    secret**. Uno por uno:
 
@@ -120,7 +122,11 @@ Es el camino corto si no tenés Node instalado.
 
    `SUPABASE_URL` y `SUPABASE_SERVICE_ROLE_KEY` ya están: los pone Supabase.
 
-2. **Las funciones.** Una por una: **Edge Functions → Deploy a new function →
+2. **El SQL.** En **SQL Editor → New query**, pegar `supabase/todo.sql` y
+   darle **Run**. Es idempotente: se puede correr las veces que haga falta.
+   Las funciones necesitan las tablas antes de poder guardar nada.
+
+3. **Las funciones.** Una por una: **Edge Functions → Deploy a new function →
    Via Editor**, borrar el ejemplo, y pegar el archivo de
    [`supabase/para-pegar/`](supabase/para-pegar/) que corresponde. Ese
    contenido ya trae adentro lo que la función importa de `_shared/`, que es
