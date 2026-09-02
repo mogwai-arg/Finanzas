@@ -139,7 +139,8 @@ Errores frecuentes:
 | `redirect_uri_mismatch` | la dirección de vuelta no coincide con la registrada |
 | `access_denied` | se tocó "Volver a seguridad" en la pantalla de app sin verificar |
 | `no vino el código; llegó: …` | Google mandó de vuelta sin código; los parámetros que sí llegaron dicen qué pasó |
-| Vuelve sin mostrar la pantalla de permisos | falta habilitar la **Gmail API** en Biblioteca (paso 2) |
+| Vuelve sin mostrar la pantalla de permisos | falta habilitar la **Gmail API** en Biblioteca (paso 2), o el `state` es demasiado largo |
+| `el permiso caducó o ya se usó` | pasaron más de 15 minutos entre empezar y terminar, o se volvió atrás y se reintentó el mismo enlace |
 | `Requested function was not found` | la función está publicada con otro nombre: el nombre es la URL |
 
 ---

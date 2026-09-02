@@ -44,12 +44,9 @@ MP_CLIENT_SECRET      ${hay("MP_CLIENT_SECRET")}
     );
   }
   const code = url.searchParams.get("code");
-  const state = url.searchParams.get("state") ?? "";
-  const corte = state.indexOf("|");
-  const prov = corte > 0 ? state.slice(0, corte) : url.searchParams.get("proveedor") ?? "gmail";
-  const jwt = corte > 0 ? state.slice(corte + 1) : state;
+  const nonce = url.searchParams.get("state") ?? "";
   if (!code) {
-    const partes = [...url.searchParams.entries()].map(([k, v]) => `${k} = ${k === "state" ? v.slice(0, 40) + "\u2026" : v}`);
+    const partes = [...url.searchParams.entries()].map(([k, v]) => `${k} = ${v}`);
     return new Response(
       `BISHUSHA \xB7 la vuelta de Google no trajo el c\xF3digo
 
@@ -66,11 +63,14 @@ Google. Si no lleg\xF3 nada, esta direcci\xF3n se abri\xF3 sin venir de Google.
     );
   }
   const sb = admin();
-  const { data: u } = await sb.auth.getUser(jwt);
-  if (!u.user) return Response.redirect(
-    `${APP}#/ajustes?error=${encodeURIComponent("la sesi\xF3n no lleg\xF3 hasta ac\xE1; volv\xE9 a entrar y prob\xE1 de nuevo")}`,
+  const { data: pendiente } = await sb.from("oauth_pendientes").select("user_id, proveedor").eq("nonce", nonce).maybeSingle();
+  if (!pendiente) return Response.redirect(
+    `${APP}#/ajustes?error=${encodeURIComponent("el permiso caduc\xF3 o ya se us\xF3; prob\xE1 de nuevo")}`,
     302
   );
+  await sb.from("oauth_pendientes").delete().eq("nonce", nonce);
+  const prov = pendiente.proveedor;
+  const u = { user: { id: pendiente.user_id } };
   try {
     let tok, cuenta = "";
     if (prov === "gmail") {

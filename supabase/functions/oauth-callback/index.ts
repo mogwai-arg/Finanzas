@@ -46,20 +46,14 @@ Deno.serve(async (req) => {
   }
 
   const code = url.searchParams.get('code');
-  // `state` viene como 'proveedor|jwt'. El ?proveedor= se sigue leyendo por si
-  // quedo algun permiso a medias del formato anterior.
-  const state = url.searchParams.get('state') ?? '';
-  const corte = state.indexOf('|');
-  const prov = corte > 0 ? state.slice(0, corte)
-                         : (url.searchParams.get('proveedor') ?? 'gmail');
-  const jwt = corte > 0 ? state.slice(corte + 1) : state;
+  const nonce = url.searchParams.get('state') ?? '';
   if (!code) {
     // Sin codigo no hay nada que hacer, asi que en vez de rebotar a la app
     // —donde el mensaje se recorta y se mezcla con el estado de la pantalla—
     // se muestra aca mismo todo lo que llego. Es un callejon sin salida a
     // proposito: el unico caso en que conviene ver los datos crudos.
     const partes = [...url.searchParams.entries()]
-      .map(([k, v]) => `${k} = ${k === 'state' ? v.slice(0, 40) + '…' : v}`);
+      .map(([k, v]) => `${k} = ${v}`);
     return new Response(
       `BISHUSHA · la vuelta de Google no trajo el código
 
@@ -81,10 +75,15 @@ Método: ${req.method}
       { status: 400, headers: { 'content-type': 'text/plain; charset=utf-8' } });
   }
 
+  // El numero de un solo uso dice de quien es la sesion y a que proveedor.
   const sb = admin();
-  const { data: u } = await sb.auth.getUser(jwt);
-  if (!u.user) return Response.redirect(
-    `${APP}#/ajustes?error=${encodeURIComponent('la sesión no llegó hasta acá; volvé a entrar y probá de nuevo')}`, 302);
+  const { data: pendiente } = await sb.from('oauth_pendientes')
+    .select('user_id, proveedor').eq('nonce', nonce).maybeSingle();
+  if (!pendiente) return Response.redirect(
+    `${APP}#/ajustes?error=${encodeURIComponent('el permiso caducó o ya se usó; probá de nuevo')}`, 302);
+  await sb.from('oauth_pendientes').delete().eq('nonce', nonce);
+  const prov = pendiente.proveedor;
+  const u = { user: { id: pendiente.user_id } };
 
   try {
     let tok: any, cuenta = '';
