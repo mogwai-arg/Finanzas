@@ -114,14 +114,14 @@ export function iconoDe(texto = '') {
   const mapa = [
     [/super|coto|carrefour|dia|jumbo|chango|vea/, 'carro'],
     [/nafta|combustible|ypf|shell|axion|puma/, 'nafta'],
-    [/resto|pedidosya|mcdonald|mostaza|pizz|kfc|burger|cafe|bar\b/, 'comida'],
+    [/resto|gastronom|pedidosya|mcdonald|mostaza|pizz|kfc|burger|cafe|bar\b|delivery/, 'comida'],
     [/farmac|pastilla|remedio/, 'pastilla'],
     [/salud|osde|swiss|medic|prepaga|hospital/, 'salud'],
     [/colegio|escuela|educa|matricula|universidad/, 'colegio'],
     [/hogar|mueble|sodimac|easy|expensas|alquiler/, 'casa2'],
-    [/netflix|spotify|disney|prime|hbo|entreten|cine|juguete/, 'play'],
+    [/netflix|spotify|disney|prime|hbo|entreten|cine|juguete|suscrip|streaming/, 'play'],
     [/openai|vercel|github|aws|cloud|adobe|microsoft|google|apple/, 'nube'],
-    [/uber|cabify|taxi|transporte|sube|peaje/, 'auto'],
+    [/uber|cabify|taxi|transporte|sube|peaje|nafta|estacionamiento/, 'auto'],
     [/sueldo|haberes|ingreso|cobro/, 'billete'],
     [/tarjeta|visa|master|amex/, 'tarjeta'],
     [/banco|galicia|nacion|caja/, 'banco'],
@@ -131,6 +131,44 @@ export function iconoDe(texto = '') {
   ];
   for (const [re, ic] of mapa) if (re.test(t)) return ic;
   return 'varios';
+}
+
+/**
+ * El icono de una categoria: el que eligió la persona, o el que se adivina.
+ *
+ * Adivinar del nombre anda para "Supermercado" y falla para "Mascotas": lo
+ * elegido gana siempre, y sin nada elegido no cambia lo que ya andaba.
+ */
+export const iconoDeCategoria = c =>
+  (c && c.icono) || iconoDe((c && c.nombre) || '');
+
+/** Los iconos entre los que se puede elegir, en orden de uso. */
+export const ICONOS = ['carro', 'comida', 'nafta', 'auto', 'casa2', 'casa', 'rayo',
+  'salud', 'pastilla', 'colegio', 'play', 'nube', 'celular', 'tarjeta', 'billete',
+  'monedas', 'banco', 'qr', 'sobre', 'recibo', 'pin', 'reloj', 'lista'];
+
+/**
+ * Una grilla para elegir icono, con "solo" como primera opcion.
+ *
+ * `alElegir` recibe el nombre, o null si se deja en automatico.
+ */
+export function selectorDeIcono(valor, { alElegir } = {}) {
+  let elegido = valor || null;
+  const grilla = h('div.iconos');
+
+  const pintar = () => {
+    grilla.replaceChildren(
+      h('button.ico-op', { type: 'button', 'aria-pressed': String(!elegido),
+        title: 'Según el nombre',
+        onclick: () => { elegido = null; pintar(); alElegir && alElegir(null); } },
+        icono('varios', 19), h('span.small', 'solo')),
+      ...ICONOS.map(n => h('button.ico-op', {
+        type: 'button', 'aria-pressed': String(elegido === n), 'aria-label': n,
+        onclick: () => { elegido = n; pintar(); alElegir && alElegir(n); }
+      }, icono(n, 19))));
+  };
+  pintar();
+  return grilla;
 }
 
 // -------------------------------------------------------------- hojas

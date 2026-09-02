@@ -138,19 +138,43 @@ function heroMes(res, hoy, p) {
 const topeDelMes = p => state.budgets.filter(b => b.periodo === p && b.moneda !== 'USD')
                                      .reduce((s, b) => s + Number(b.monto || 0), 0);
 
+/**
+ * En dolares interesan las dos cosas, y antes solo se veia una.
+ *
+ * El alquiler se paga en dolares: gastar en dolares es tan real como gastar
+ * en pesos, y la pantalla mostraba unicamente el saldo. Ahora arriba va lo
+ * mismo que en pesos —lo gastado en el mes— y abajo lo que queda, que en
+ * dolares importa mas que en pesos porque es ahorro y no circulante.
+ */
 function heroDolares() {
+  const res = F.resumenMes(state.transactions, per(), 'USD');
   const cuentas = state.accounts.filter(a => a.moneda === 'USD' && a.activo !== false);
   const total = cuentas.reduce((s, a) => s + F.saldoDeCuenta(a, state.transactions, new Date(),
                                                              a.saldo_inicial || 0, a.saldo_al), 0);
   const ref = Number(state.settings?.usd_ref) || 0;
-  const { simbolo, numero } = plataPartida(total, 'USD');
+  const { simbolo, numero } = plataPartida(res.gastos, 'USD');
+
   return h('div.grp.pad',
-    h('div.ghead', { style: { margin: '0 0 5px' } }, 'Tengo'),
     h('div.cifra', h('em', simbolo), numero),
-    ref > 0 && h('div.small.mut', { style: { marginTop: '5px' } },
-      `≈ ${plata(total * ref)} a ${plata(ref)} por dólar`),
-    h('div', { style: { display: 'flex', gap: '7px', marginTop: '14px', flexWrap: 'wrap' } },
-      cuentas.map(a => h('span.pill.mut', a.nombre)))
+    h('div.small.mut', { style: { marginTop: '5px' } },
+      res.ingresos > 0 ? `gastados este mes · entraron ${plata(res.ingresos, 'USD')}`
+                       : 'gastados este mes'),
+
+    h('div', { style: { marginTop: '13px', paddingTop: '13px',
+                        borderTop: '1px solid var(--line)' } },
+      h('div', { style: { display: 'flex', justifyContent: 'space-between',
+                          alignItems: 'baseline', gap: '10px' } },
+        h('span.small.mut', 'Tenés'),
+        h('span', { style: { fontWeight: '600', fontSize: '17px' }, class: 'tabnum' },
+          plata(total, 'USD'))),
+      ref > 0 && h('div.small.mut', { style: { marginTop: '3px', textAlign: 'right' } },
+        `≈ ${plata(total * ref)} a ${plata(ref)} por dólar`),
+      h('div', { style: { display: 'flex', gap: '7px', marginTop: '11px', flexWrap: 'wrap' } },
+        cuentas.map(a => h('span.pill.mut', a.nombre)))),
+
+    res.movido > 0 && h('div', {
+      style: { marginTop: '10px', fontSize: '12.5px', color: 'var(--tx3)' } },
+      `${plata(res.movido, 'USD')} movidos entre tus cuentas — no cuentan como gasto.`)
   );
 }
 

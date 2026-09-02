@@ -74,6 +74,10 @@ export const DEMO = {
     { id: id('t5'), fecha: '2026-09-01', descripcion: 'Compra de dólares', monto: 23100, moneda: 'ARS',
       tipo: 'transferencia', account_id: id('gal'), destino_account_id: id('usd'),
       monto_destino: 15.55, moneda_destino: 'USD', cuotas: 1, fuente: 'banco', revisado: true },
+    // El alquiler se paga en dólares: gastar en dólares también es gastar.
+    { id: id('t5b'), fecha: '2026-09-02', descripcion: 'Alquiler', comercio: 'Alquiler',
+      monto: 900, moneda: 'USD', tipo: 'gasto', account_id: id('usd'), category_id: id('c8'),
+      cuotas: 1, fuente: 'manual', revisado: true },
     { id: id('t6'), fecha: '2026-09-01', descripcion: 'Edesur', comercio: 'Edesur', monto: 20581.06,
       moneda: 'ARS', tipo: 'gasto', account_id: id('gal'), category_id: id('c4'),
       cuotas: 1, fuente: 'banco', revisado: true },

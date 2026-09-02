@@ -43,6 +43,7 @@ create table if not exists public.categories (
   nombre     text not null,
   tipo       text not null default 'gasto' check (tipo in ('gasto','ingreso')),
   color      text default '#8a8f98',
+  icono      text,                    -- vacio = se adivina del nombre
   presupuesto numeric(14,2),          -- tope mensual sugerido en ARS
   orden      int default 0,
   created_at timestamptz not null default now(),
@@ -678,3 +679,16 @@ begin
   end if;
 end $$;
 
+
+-- ---------------------------------------------------------------------
+-- 012 — que cada categoría pueda tener su ícono
+--
+-- POR QUE: hasta ahora el ícono se adivinaba del nombre. Anda para
+-- "Supermercado" o "Colegio", pero "Gastronomía" o "Suscripciones" no caen en
+-- ninguna regla y quedan con el genérico, y una categoría nueva —"Mascotas",
+-- "Regalos"— no tiene forma de elegir el suyo.
+--
+-- Vacío sigue significando "adiviná del nombre": las que ya estaban andando
+-- bien no cambian.
+-- ---------------------------------------------------------------------
+alter table public.categories add column if not exists icono text;

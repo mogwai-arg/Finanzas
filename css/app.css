@@ -172,6 +172,15 @@ input[type=checkbox]{width:auto;min-height:0}
 .dia:active{background:var(--line)}
 .dia[aria-pressed="true"]{background:var(--brand);color:#fff}
 
+/* --------------------------------------------------- elegir un icono */
+.iconos{display:grid;grid-template-columns:repeat(6,1fr);gap:7px}
+.ico-op{aspect-ratio:1;min-height:44px;border:0;border-radius:12px;background:var(--fill);
+        color:var(--tx2);display:flex;flex-direction:column;align-items:center;
+        justify-content:center;gap:2px;cursor:pointer;-webkit-tap-highlight-color:transparent}
+.ico-op:active{background:var(--line)}
+.ico-op[aria-pressed="true"]{background:var(--brand);color:#fff}
+.ico-op .small{font-size:10px;line-height:1}
+
 /* --------------------------------------------------------- barra tabs */
 .tabs{position:fixed;left:12px;right:12px;bottom:calc(12px + var(--safe-b));z-index:40;
       max-width:536px;margin:0 auto;

@@ -2,7 +2,8 @@
 // vistas/formularios.js — alta y edicion de todo lo que no es un movimiento:
 // cuentas y tarjetas, gastos fijos, presupuestos, promos y categorias.
 // =====================================================================
-import { h, icono, iconoDe, hoja, aviso, campo, select, confirmar, selectorDeDia } from '../ui.js';
+import { h, icono, iconoDe, iconoDeCategoria, selectorDeIcono, hoja, aviso, campo,
+         select, confirmar, selectorDeDia } from '../ui.js';
 import { state, guardar, borrar } from '../db.js';
 import * as F from '../finance.js';
 import { plata, periodoLargo, hoyISO, nombreDe, etiquetaCuenta, aNumero as num } from '../formato.js';
@@ -218,7 +219,7 @@ export function formPresupuesto(periodo = hoyISO().slice(0, 7)) {
       campos.set(cat.id, inp);
       return h('div.f', { style: { marginBottom: '13px' } },
         h('label', { style: { display: 'flex', alignItems: 'center', gap: '8px' } },
-          icono(iconoDe(cat.nombre), 15), cat.nombre), inp);
+          icono(iconoDeCategoria(cat), 15), cat.nombre), inp);
     }),
     h('button.btn', { style: { marginTop: '4px' }, onclick: async () => {
       let n = 0;
@@ -352,7 +353,7 @@ export function formCategorias() {
       .slice().sort((a, b) => (a.tipo === b.tipo ? (a.orden || 0) - (b.orden || 0)
                                                  : a.tipo === 'gasto' ? -1 : 1))
       .map(c => h('button.li', { onclick: () => editar(c) },
-        h('div.av', icono(iconoDe(c.nombre), 17)),
+        h('div.av', icono(iconoDeCategoria(c), 17)),
         h('div.m', h('div.t', c.nombre),
           h('div.s', c.tipo === 'ingreso' ? 'ingreso' : 'gasto')),
         h('span.chev', icono('chev', 15)))));
@@ -361,8 +362,17 @@ export function formCategorias() {
     const nom = h('input', { type: 'text', value: cat?.nombre || '', placeholder: 'Mascotas' });
     const tipo = select([{ value: 'gasto', label: 'Gasto' }, { value: 'ingreso', label: 'Ingreso' }],
                         { value: cat?.tipo || 'gasto' });
+    // Vacío = se adivina del nombre, que es lo que hacía siempre. Elegirlo es
+    // para las que el nombre no alcanza: "Mascotas", "Regalos", "Gastronomía".
+    let ic = cat?.icono || null;
+    const iconos = selectorDeIcono(ic, { alElegir: v => ic = v });
+
     const cerrar2 = hoja(cat ? 'Editar categoría' : 'Nueva categoría', h('div',
       campo('Nombre', nom), campo('Tipo', tipo),
+      h('div.f', h('label', 'Ícono'),
+        h('div.small.mut', { style: { marginTop: '-3px', marginBottom: '9px' } },
+          'El primero lo elige solo, según el nombre.'),
+        iconos),
       h('div.fila', { style: { marginTop: '4px' } },
         cat && h('button.btn.dg', { onclick: async () => {
           if (await confirmar(`¿Borrar "${cat.nombre}"? Los movimientos quedan sin categoría.`)) {
@@ -372,7 +382,8 @@ export function formCategorias() {
         h('button.btn', { onclick: async () => {
           if (!nom.value.trim()) { nom.focus(); return; }
           await guardar('categories', { ...(cat || {}), nombre: nom.value.trim(),
-            tipo: tipo.value, orden: cat?.orden ?? (state.categories.length + 1) });
+            tipo: tipo.value, icono: ic,
+            orden: cat?.orden ?? (state.categories.length + 1) });
           cerrar2(); pintar(); aviso('Guardada');
         } }, 'Guardar'))));
   };

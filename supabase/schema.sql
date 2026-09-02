@@ -35,6 +35,7 @@ create table if not exists public.categories (
   nombre     text not null,
   tipo       text not null default 'gasto' check (tipo in ('gasto','ingreso')),
   color      text default '#8a8f98',
+  icono      text,                    -- vacio = se adivina del nombre
   presupuesto numeric(14,2),          -- tope mensual sugerido en ARS
   orden      int default 0,
   created_at timestamptz not null default now(),

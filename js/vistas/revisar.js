@@ -8,7 +8,7 @@
 // Las CUOTAS se confirman aparte del resto. Es el unico dato que, si entra
 // mal, arrastra el error doce meses.
 // =====================================================================
-import { h, icono, iconoDe, aviso, hoja, confirmar } from '../ui.js';
+import { h, icono, iconoDeCategoria, iconoDe, aviso, hoja, confirmar } from '../ui.js';
 import { state, guardar, guardarVarios, borrar } from '../db.js';
 import * as F from '../finance.js';
 import { plata, plataPartida, fechaRelativa, nombreDe, buscar, aFecha, tituloTx, dondeTx } from '../formato.js';
@@ -179,7 +179,7 @@ function tarjeta(tx, i, total, siguiente) {
       h('button.li', { onclick: () => { categoria = c.id;
         if (!sugeridas.includes(c.id)) sugeridas.unshift(c.id);
         cerrar(); pintarCats(); } },
-        h('div.av', icono(iconoDe(c.nombre), 17)),
+        h('div.av', icono(iconoDeCategoria(c), 17)),
         h('div.m', h('div.t', c.nombre)),
         c.id === categoria && h('span', { style: { color: 'var(--brand)' } }, icono('check', 17))))));
   };

@@ -1,0 +1,12 @@
+-- ---------------------------------------------------------------------
+-- 012 — que cada categoría pueda tener su ícono
+--
+-- POR QUE: hasta ahora el ícono se adivinaba del nombre. Anda para
+-- "Supermercado" o "Colegio", pero "Gastronomía" o "Suscripciones" no caen en
+-- ninguna regla y quedan con el genérico, y una categoría nueva —"Mascotas",
+-- "Regalos"— no tiene forma de elegir el suyo.
+--
+-- Vacío sigue significando "adiviná del nombre": las que ya estaban andando
+-- bien no cambian.
+-- ---------------------------------------------------------------------
+alter table public.categories add column if not exists icono text;
