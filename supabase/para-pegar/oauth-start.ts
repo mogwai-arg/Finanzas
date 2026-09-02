@@ -39,5 +39,25 @@ Deno.serve((req) => {
     });
     destino = "https://auth.mercadopago.com.ar/authorization?" + p;
   }
+  if (url.searchParams.get("mostrar")) {
+    const g = new URL(destino);
+    const filas = [...g.searchParams.entries()].map(([k, v]) => `  ${k.padEnd(22)} ${k === "state" ? v.slice(0, 30) + "\u2026" : v}`);
+    return new Response(
+      `BISHUSHA \xB7 oauth-start
+
+Abr\xED esta direcci\xF3n a mano:
+
+${destino}
+
+Desglosada:
+  destino                ${g.origin}${g.pathname}
+${filas.join("\n")}
+
+El client_id empieza con el n\xFAmero del proyecto de Google: tiene que
+ser el mismo proyecto donde habilitaste la Gmail API.
+`,
+      { headers: { "content-type": "text/plain; charset=utf-8" } }
+    );
+  }
   return Response.redirect(destino, 302);
 });

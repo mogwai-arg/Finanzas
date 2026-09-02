@@ -110,15 +110,27 @@ Google va a pedir una página de inicio y una de privacidad. Dos cosas:
 
 ## Si algo falla
 
-Abrir en el navegador, con el project-ref propio:
+Dos direcciones que contestan en texto plano, sin mostrar ningún secreto:
 
 ```
 https://<TU-PROJECT-REF>.supabase.co/functions/v1/oauth-callback?salud=1
 ```
 
-Contesta en texto plano la dirección de vuelta exacta que hay que registrar en
-Google —para comparar letra por letra con la de la consola— y si cada secreto
-está puesto o falta. No muestra ningún valor.
+La dirección de vuelta exacta que hay que registrar en Google —para comparar
+letra por letra con la de la consola— y si cada secreto está puesto o falta.
+
+```
+https://<TU-PROJECT-REF>.supabase.co/functions/v1/oauth-start?mostrar=1
+```
+
+A dónde va a mandar, desglosado. Esa dirección se puede abrir a mano en una
+pestaña común, con la barra de direcciones a la vista: es la forma de ver qué
+contesta Google sin la app ni el service worker en el medio. Cuando algo
+falla, el error queda escrito en la barra.
+
+El `client_id` empieza con el número del proyecto de Google. Tiene que ser el
+mismo proyecto donde está habilitada la Gmail API: tener dos proyectos y
+mezclarlos es un clásico, y da un rechazo sin pantalla de permisos.
 
 Errores frecuentes:
 

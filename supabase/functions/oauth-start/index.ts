@@ -38,5 +38,21 @@ Deno.serve((req) => {
     });
     destino = 'https://auth.mercadopago.com.ar/authorization?' + p;
   }
+  // Con ?mostrar=1 no redirige: escribe a donde iba a mandar. Sirve para
+  // abrir esa direccion a mano en una pestaña con barra de direcciones a la
+  // vista, y ver que contesta Google sin la app ni el service worker en el
+  // medio. El client_id no es un secreto: viaja en la URL igual.
+  if (url.searchParams.get('mostrar')) {
+    const g = new URL(destino);
+    const filas = [...g.searchParams.entries()]
+      .map(([k, v]) => `  ${k.padEnd(22)} ${k === 'state' ? v.slice(0, 30) + '…' : v}`);
+    return new Response(
+      `BISHUSHA · oauth-start\n\nAbrí esta dirección a mano:\n\n${destino}\n\n` +
+      `Desglosada:\n  destino                ${g.origin}${g.pathname}\n${filas.join('\n')}\n\n` +
+      `El client_id empieza con el número del proyecto de Google: tiene que\n` +
+      `ser el mismo proyecto donde habilitaste la Gmail API.\n`,
+      { headers: { 'content-type': 'text/plain; charset=utf-8' } });
+  }
+
   return Response.redirect(destino, 302);
 });
