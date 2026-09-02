@@ -36,8 +36,9 @@ Cuando tengas Supabase listo, poné `DEMO: false` en `config.js`.
    dale **Run**. Crea las tablas, la seguridad por usuario (RLS) y las
    categorías iniciales.
 3. **Authentication → Sign In / Providers → Email**: dejá activado *Email* y
-   activá **Enable email confirmations**. La app entra con link mágico, sin
-   contraseña.
+   **desactivá "Confirm email"**. La app entra con correo y contraseña; si
+   dejás la confirmación prendida, cada alta pide abrir un mail y chocás con
+   el límite de correos del plan free.
 4. **Authentication → URL Configuration**: en *Site URL* y en *Redirect URLs*
    poné la URL donde va a vivir la app (la del paso 2 de acá abajo).
 
