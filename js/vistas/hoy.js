@@ -260,9 +260,11 @@ function loQueSeViene(hoy, moneda) {
   const p = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}`;
   for (const r of F.recurrentesDelMes(state.recurrings, state.recurring_payments, p, hoy)) {
     if (r.pagado || r.moneda !== moneda) continue;
-    // Un fijo que se debita en la tarjeta no se paga aparte: entra al resumen
+    // Un fijo que cae solo en la tarjeta no se paga aparte: entra al resumen
     // y sale cuando se paga el resumen. Listarlo acá lo cobraría dos veces.
-    if (F.enTarjeta(r, state.accounts)) continue;
+    // El que se paga a mano queda, aunque a veces lo pagues con la tarjeta:
+    // hay que acordarse igual, y con qué se paga se decide ese día.
+    if (F.debitoEnTarjeta(r, state.accounts)) continue;
     items.push({ id: r.id, nombre: r.nombre, monto: r.monto, vence: r.vence,
                  icono: iconoDe(r.nombre), recurrente: r, periodo: p, ir: `/mes` });
   }

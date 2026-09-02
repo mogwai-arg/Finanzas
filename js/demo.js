@@ -153,8 +153,11 @@ export const DEMO = {
       category_id: id('c4'), account_id: id('gal'), variable: true, activo: true, orden: 4 },
     { id: id('rc5'), nombre: 'Aysa', monto_estimado: 26088, moneda: 'ARS', dia_vencimiento: 1,
       category_id: id('c4'), account_id: id('gal'), variable: true, activo: true, orden: 5 },
+    // Spotify cae solo en la tarjeta; el colegio y OSDE se pagan a mano, y
+    // según el mes salen por transferencia o con la tarjeta.
     { id: id('rc6'), nombre: 'Spotify', monto_estimado: 8999, moneda: 'ARS', dia_vencimiento: 12,
-      category_id: id('c7'), account_id: id('mpc'), variable: false, activo: true, orden: 6 }
+      category_id: id('c7'), account_id: id('mpc'), variable: false, activo: true,
+      debito_automatico: true, orden: 6 }
   ],
 
   recurring_payments: [

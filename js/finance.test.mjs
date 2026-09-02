@@ -413,9 +413,12 @@ const CUENTAS_PL = [
 const FIJOS_PL = [
   { id: 'r1', nombre: 'Colegio', monto_estimado: 500000, moneda: 'ARS',
     dia_vencimiento: 10, activo: true, account_id: 'gal' },
-  { id: 'r2', nombre: 'Spotify', monto_estimado: 9000, moneda: 'ARS',
-    dia_vencimiento: 12, activo: true, account_id: 'visa' }   // se debita en la tarjeta
+  { id: 'r2', nombre: 'Spotify', monto_estimado: 9000, moneda: 'ARS', debito_automatico: true,
+    dia_vencimiento: 12, activo: true, account_id: 'visa' }   // cae solo en la tarjeta
 ];
+// El colegio se paga a mano y a veces sale con la tarjeta: no es lo mismo.
+const A_MANO_EN_VISA = { id: 'r3', nombre: 'OSDE', monto_estimado: 300000, moneda: 'ARS',
+                         dia_vencimiento: 15, activo: true, account_id: 'visa' };
 const TXS_PL = [
   // Consumo de agosto: entra al resumen que vence el 4/9.
   { id: 'a', tipo: 'gasto', moneda: 'ARS', monto: 900000, fecha: '2026-08-20',
@@ -440,12 +443,23 @@ t('lo consumido este ciclo se aparta para el mes que viene', () => {
   assert.equal(r.libreEstricta, 1191000);
 });
 
-t('un fijo que se debita en la tarjeta no se cuenta dos veces', () => {
+t('un fijo que se debita solo en la tarjeta no se cuenta dos veces', () => {
   const soloTarjeta = [FIJOS_PL[1]];
   const r = F.plataLibre(CUENTAS_PL, TXS_PL, soloTarjeta, [], d('2026-09-02'));
   assert.equal(r.fijos, 0);
-  assert.ok(F.enTarjeta(FIJOS_PL[1], CUENTAS_PL));
-  assert.ok(!F.enTarjeta(FIJOS_PL[0], CUENTAS_PL));
+  assert.ok(F.debitoEnTarjeta(FIJOS_PL[1], CUENTAS_PL));
+  assert.ok(!F.debitoEnTarjeta(FIJOS_PL[0], CUENTAS_PL));
+});
+
+t('el que se paga a mano sigue contando, aunque a veces salga con la tarjeta', () => {
+  // OSDE tiene la Visa como cuenta pero NO es débito automático: hay que
+  // acordarse de pagarlo, y con qué se paga se decide ese día.
+  assert.ok(!F.debitoEnTarjeta(A_MANO_EN_VISA, CUENTAS_PL));
+  const r = F.plataLibre(CUENTAS_PL, TXS_PL, [A_MANO_EN_VISA], [], d('2026-09-02'));
+  assert.equal(r.fijos, 300000);
+  // Y no se da por descontado en el resumen: no está pagado todavía.
+  const ciclo = F.proximoCiclo(CUENTAS_PL[1], d('2026-09-02'));
+  assert.equal(F.debitosPrevistos([A_MANO_EN_VISA], TXS_PL, CUENTAS_PL[1], ciclo).total, 0);
 });
 
 t('el débito del mes pasado no tapa el de este mes', () => {

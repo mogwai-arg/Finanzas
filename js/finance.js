@@ -565,14 +565,16 @@ export function duplicadoManual(tx, existentes, { dias = 4, centavos = 1 } = {})
 // ---------------------------------------------------------------------
 
 /**
- * Si un gasto fijo se debita en una tarjeta de credito.
+ * Si un gasto fijo cae SOLO en una tarjeta de credito.
  *
- * Cambia todo: uno que se debita en la cuenta saca la plata el dia que vence;
- * uno que se debita en la tarjeta entra al resumen y sale recien cuando se
- * paga el resumen. Contarlo como algo a pagar aparte, teniendolo adentro del
- * resumen, es contar la misma plata dos veces.
+ * Son dos condiciones y hacen falta las dos. Que la cuenta sea una tarjeta no
+ * alcanza: el colegio se paga a mano y segun el mes sale por transferencia o
+ * con la tarjeta, asi que hay que acordarse de pagarlo igual. Spotify, en
+ * cambio, se debita solo: no hay nada que hacer, el consumo va a caer en el
+ * resumen si o si, y listarlo aparte lo contaria dos veces.
  */
-export function enTarjeta(recurring, cuentas) {
+export function debitoEnTarjeta(recurring, cuentas) {
+  if (!recurring.debito_automatico) return false;
   const c = (cuentas || []).find(x => x.id === recurring.account_id);
   return !!c && c.tipo === 'credito';
 }
@@ -597,6 +599,9 @@ export function debitosPrevistos(recurrings, txs, tarjeta, ciclo, ref = hoy()) {
   const items = [];
   for (const r of recurrings || []) {
     if (r.activo === false || r.account_id !== tarjeta.id) continue;
+    // Solo los que caen solos. El que uno paga a mano puede terminar saliendo
+    // por transferencia, y darlo por descontado en el resumen es inventar.
+    if (!r.debito_automatico) continue;
     if ((r.moneda || 'ARS') !== moneda) continue;
     const nombre = String(r.nombre || '').toLowerCase();
     // ¿Ya cayo en este ciclo?
@@ -642,12 +647,14 @@ export function plataLibre(cuentas, txs, recurrings, pagos, ref = hoy(), moneda 
     debitos += debitosPrevistos(recurrings, txs, t, enCurso, ref).total;
   }
 
-  // Los fijos que se debitan en una tarjeta NO se cuentan aca: ya estan
-  // adentro del resumen, o previstos como debito del ciclo en curso.
+  // Los que caen solos en una tarjeta NO se cuentan aca: ya estan adentro del
+  // resumen, o previstos como debito del ciclo en curso. Los que uno paga a
+  // mano si, aunque los termine pagando con la tarjeta: hasta que no los
+  // pague, son plata que tiene que estar.
   let fijos = 0;
   for (const r of recurrentesDelMes(recurrings || [], pagos || [], periodo(ref), ref)) {
     if (r.pagado || (r.moneda || 'ARS') !== moneda) continue;
-    if (enTarjeta(r, cuentas)) continue;
+    if (debitoEnTarjeta(r, cuentas)) continue;
     fijos += Number(r.monto) || 0;
   }
 

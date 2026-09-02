@@ -82,6 +82,7 @@ create table if not exists public.recurrings (
   category_id   uuid references public.categories(id) on delete set null,
   account_id    uuid references public.accounts(id) on delete set null,
   variable      boolean not null default false,  -- true = el monto cambia todos los meses
+  debito_automatico boolean not null default false, -- true = cae solo en account_id
   activo        boolean not null default true,
   orden         int default 0,
   created_at    timestamptz not null default now()

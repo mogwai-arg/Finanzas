@@ -173,6 +173,22 @@ export function formRecurrente(r = null) {
   };
   conectarCategoria(c.cat, () => 'gasto');
   const cVar = h('input', { type: 'checkbox', checked: !!r?.variable });
+  // Débito automático o pago a mano: no es lo mismo y la app hace cosas
+  // distintas con cada uno.
+  const cAuto = h('input', { type: 'checkbox', checked: !!r?.debito_automatico,
+                             onchange: () => pintarNota() });
+  const notaAuto = h('div.small.mut', { style: { lineHeight: '1.5', marginTop: '9px' } });
+  const pintarNota = () => {
+    const cta = cuentas.find(x => x.id === c.cuenta.value);
+    const enTarjeta = cta && cta.tipo === 'credito';
+    notaAuto.textContent = !cAuto.checked
+      ? 'Lo pagás vos: aparece en "Lo que se viene" hasta que lo tildes, y con qué lo pagás lo elegís ese día.'
+      : enTarjeta
+        ? `Cae solo en ${cta.nombre}: no aparece como algo a pagar, se prevé en el resumen de esa tarjeta y sale cuando pagás el resumen.`
+        : 'Cae solo el día que vence: no hay nada que hacer, pero la plata tiene que estar.';
+  };
+  c.cuenta.addEventListener('change', pintarNota);
+  pintarNota();
 
   const cerrar = hoja(nuevo ? 'Nuevo gasto fijo' : 'Editar gasto fijo', h('div',
     campo('Nombre', c.nombre),
@@ -180,6 +196,9 @@ export function formRecurrente(r = null) {
     campo('Vence el día', c.dia),
     campo('Categoría', c.cat),
     campo('Se paga con', c.cuenta),
+    h('div.f', h('label', { style: { display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer' } },
+      cAuto, h('span', { style: { fontSize: '14.5px', color: 'var(--tx)' } }, 'Se debita solo')),
+      notaAuto),
     h('div.f', h('label', { style: { display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer' } },
       cVar, h('span', { style: { fontSize: '14.5px', color: 'var(--tx)' } }, 'El monto cambia cada mes')),
       h('div.small.mut', { style: { lineHeight: '1.45' } },
@@ -194,6 +213,7 @@ export function formRecurrente(r = null) {
           nombre: c.nombre.value.trim(), monto_estimado: num(c.monto.value),
           moneda: c.moneda.value, dia_vencimiento: Number(c.dia.value) || 10,
           category_id: c.cat.value || null, account_id: c.cuenta.value || null,
+          debito_automatico: cAuto.checked,
           variable: cVar.checked, activo: true, orden: r?.orden ?? (state.recurrings.length + 1) });
         cerrar(); aviso(nuevo ? 'Gasto fijo creado' : 'Actualizado');
       } }, nuevo ? 'Guardar' : 'Guardar cambios'))));
