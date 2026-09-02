@@ -16,27 +16,27 @@ Deno.serve(async (req) => {
   // de comparar la direccion de vuelta con la registrada en Google, que es
   // donde se rompe casi siempre.
   if (url.searchParams.get('salud')) {
-    const hay = (k: string) => (Deno.env.get(k) ? 'puesto' : 'FALTA');
-    return new Response(
-      `BISHUSHA · oauth-callback
-
-` +
-      `Registrá en Google, letra por letra:
-  ${REDIRECT}
-
-` +
-      `FUNCTIONS_URL         ${Deno.env.get('FUNCTIONS_URL') ?? 'FALTA'}
-` +
-      `APP_URL               ${Deno.env.get('APP_URL') ?? 'FALTA'}
-` +
-      `GOOGLE_CLIENT_ID      ${hay('GOOGLE_CLIENT_ID')}
-` +
-      `GOOGLE_CLIENT_SECRET  ${hay('GOOGLE_CLIENT_SECRET')}
-` +
-      `MP_CLIENT_ID          ${hay('MP_CLIENT_ID')}
-` +
-      `MP_CLIENT_SECRET      ${hay('MP_CLIENT_SECRET')}
-`,
+    // Del secreto se muestra el largo y si viene con espacios pegados, nunca
+    // el valor: alcanza para descartar el error de copiado mas comun.
+    const hay = (k: string) => {
+      const v = Deno.env.get(k);
+      if (!v) return 'FALTA';
+      const sucio = v !== v.trim() ? ' · ¡tiene espacios o saltos de línea!' : '';
+      return `puesto · ${v.trim().length} caracteres${sucio}`;
+    };
+    const L = [
+      'BISHUSHA · oauth-callback', '',
+      'Registrá en Google, letra por letra:', `  ${REDIRECT}`, '',
+      `FUNCTIONS_URL         ${Deno.env.get('FUNCTIONS_URL') ?? 'FALTA'}`,
+      `APP_URL               ${Deno.env.get('APP_URL') ?? 'FALTA'}`,
+      `GOOGLE_CLIENT_ID      ${hay('GOOGLE_CLIENT_ID')}`,
+      `GOOGLE_CLIENT_SECRET  ${hay('GOOGLE_CLIENT_SECRET')}`,
+      '  el client_id termina en .apps.googleusercontent.com y tiene ~72',
+      '  el client_secret empieza con GOCSPX- y tiene 35',
+      `MP_CLIENT_ID          ${hay('MP_CLIENT_ID')}`,
+      `MP_CLIENT_SECRET      ${hay('MP_CLIENT_SECRET')}`
+    ];
+    return new Response(L.join('\n') + '\n',
       { headers: { 'content-type': 'text/plain; charset=utf-8' } });
   }
 
@@ -54,24 +54,16 @@ Deno.serve(async (req) => {
     // proposito: el unico caso en que conviene ver los datos crudos.
     const partes = [...url.searchParams.entries()]
       .map(([k, v]) => `${k} = ${v}`);
-    return new Response(
-      `BISHUSHA · la vuelta de Google no trajo el código
-
-` +
-      `Lo que llegó a ${url.pathname}:
-` +
-      (partes.length ? partes.map(p => '  ' + p).join('\n') : '  nada, ni un parámetro') +
-      `
-
-Método: ${req.method}
-` +
-      `Referer: ${req.headers.get('referer') ?? '(ninguno)'}
-
-` +
-      `Si dice error = access_denied, se cortó el permiso en la pantalla de
-` +
-      `Google. Si no llegó nada, esta dirección se abrió sin venir de Google.
-`,
+    const L = [
+      'BISHUSHA · la vuelta de Google no trajo el código', '',
+      `Lo que llegó a ${url.pathname}:`,
+      ...(partes.length ? partes.map(p => '  ' + p) : ['  nada, ni un parámetro']), '',
+      `Método: ${req.method}`,
+      `Referer: ${req.headers.get('referer') ?? '(ninguno)'}`, '',
+      'Si dice error = access_denied, se cortó el permiso en la pantalla de',
+      'Google. Si no llegó nada, esta dirección se abrió sin venir de Google.'
+    ];
+    return new Response(L.join('\n') + '\n',
       { status: 400, headers: { 'content-type': 'text/plain; charset=utf-8' } });
   }
 
@@ -91,8 +83,11 @@ Método: ${req.method}
       tok = await (await fetch('https://oauth2.googleapis.com/token', {
         method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: new URLSearchParams({
-          code, client_id: Deno.env.get('GOOGLE_CLIENT_ID')!,
-          client_secret: Deno.env.get('GOOGLE_CLIENT_SECRET')!,
+          // .trim(): copiar y pegar un secreto se lleva un salto de linea o un
+          // espacio al final mas seguido de lo que uno cree, y Google contesta
+          // "The provided client secret is invalid" sin decir por que.
+          code, client_id: (Deno.env.get('GOOGLE_CLIENT_ID') ?? '').trim(),
+          client_secret: (Deno.env.get('GOOGLE_CLIENT_SECRET') ?? '').trim(),
           redirect_uri: REDIRECT, grant_type: 'authorization_code' })
       })).json();
       if (tok.error) throw new Error(`Google: ${tok.error_description || tok.error}`);
@@ -103,7 +98,8 @@ Método: ${req.method}
       tok = await (await fetch('https://api.mercadopago.com/oauth/token', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          client_id: Deno.env.get('MP_CLIENT_ID'), client_secret: Deno.env.get('MP_CLIENT_SECRET'),
+          client_id: (Deno.env.get('MP_CLIENT_ID') ?? '').trim(),
+          client_secret: (Deno.env.get('MP_CLIENT_SECRET') ?? '').trim(),
           grant_type: 'authorization_code', code, redirect_uri: REDIRECT })
       })).json();
       if (tok.error) throw new Error(tok.message || tok.error);

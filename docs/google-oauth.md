@@ -141,6 +141,7 @@ Errores frecuentes:
 | `no vino el código; llegó: …` | Google mandó de vuelta sin código; los parámetros que sí llegaron dicen qué pasó |
 | Vuelve sin mostrar la pantalla de permisos | falta habilitar la **Gmail API** en Biblioteca (paso 2), o el `state` es demasiado largo |
 | `el permiso caducó o ya se usó` | pasaron más de 15 minutos entre empezar y terminar, o se volvió atrás y se reintentó el mismo enlace |
+| `Google: The provided client secret is invalid` | el `GOOGLE_CLIENT_SECRET` de Supabase no es el del cliente: se copió de más, de menos, o quedó el viejo tras regenerarlo |
 | `Requested function was not found` | la función está publicada con otro nombre: el nombre es la URL |
 
 ---

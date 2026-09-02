@@ -20,20 +20,29 @@ var APP = Deno.env.get("APP_URL") ?? "";
 Deno.serve(async (req) => {
   const url = new URL(req.url);
   if (url.searchParams.get("salud")) {
-    const hay = (k) => Deno.env.get(k) ? "puesto" : "FALTA";
+    const hay = (k) => {
+      const v = Deno.env.get(k);
+      if (!v) return "FALTA";
+      const sucio = v !== v.trim() ? " \xB7 \xA1tiene espacios o saltos de l\xEDnea!" : "";
+      return `puesto \xB7 ${v.trim().length} caracteres${sucio}`;
+    };
+    const L = [
+      "BISHUSHA \xB7 oauth-callback",
+      "",
+      "Registr\xE1 en Google, letra por letra:",
+      `  ${REDIRECT}`,
+      "",
+      `FUNCTIONS_URL         ${Deno.env.get("FUNCTIONS_URL") ?? "FALTA"}`,
+      `APP_URL               ${Deno.env.get("APP_URL") ?? "FALTA"}`,
+      `GOOGLE_CLIENT_ID      ${hay("GOOGLE_CLIENT_ID")}`,
+      `GOOGLE_CLIENT_SECRET  ${hay("GOOGLE_CLIENT_SECRET")}`,
+      "  el client_id termina en .apps.googleusercontent.com y tiene ~72",
+      "  el client_secret empieza con GOCSPX- y tiene 35",
+      `MP_CLIENT_ID          ${hay("MP_CLIENT_ID")}`,
+      `MP_CLIENT_SECRET      ${hay("MP_CLIENT_SECRET")}`
+    ];
     return new Response(
-      `BISHUSHA \xB7 oauth-callback
-
-Registr\xE1 en Google, letra por letra:
-  ${REDIRECT}
-
-FUNCTIONS_URL         ${Deno.env.get("FUNCTIONS_URL") ?? "FALTA"}
-APP_URL               ${Deno.env.get("APP_URL") ?? "FALTA"}
-GOOGLE_CLIENT_ID      ${hay("GOOGLE_CLIENT_ID")}
-GOOGLE_CLIENT_SECRET  ${hay("GOOGLE_CLIENT_SECRET")}
-MP_CLIENT_ID          ${hay("MP_CLIENT_ID")}
-MP_CLIENT_SECRET      ${hay("MP_CLIENT_SECRET")}
-`,
+      L.join("\n") + "\n",
       { headers: { "content-type": "text/plain; charset=utf-8" } }
     );
   }
@@ -47,18 +56,20 @@ MP_CLIENT_SECRET      ${hay("MP_CLIENT_SECRET")}
   const nonce = url.searchParams.get("state") ?? "";
   if (!code) {
     const partes = [...url.searchParams.entries()].map(([k, v]) => `${k} = ${v}`);
+    const L = [
+      "BISHUSHA \xB7 la vuelta de Google no trajo el c\xF3digo",
+      "",
+      `Lo que lleg\xF3 a ${url.pathname}:`,
+      ...partes.length ? partes.map((p) => "  " + p) : ["  nada, ni un par\xE1metro"],
+      "",
+      `M\xE9todo: ${req.method}`,
+      `Referer: ${req.headers.get("referer") ?? "(ninguno)"}`,
+      "",
+      "Si dice error = access_denied, se cort\xF3 el permiso en la pantalla de",
+      "Google. Si no lleg\xF3 nada, esta direcci\xF3n se abri\xF3 sin venir de Google."
+    ];
     return new Response(
-      `BISHUSHA \xB7 la vuelta de Google no trajo el c\xF3digo
-
-Lo que lleg\xF3 a ${url.pathname}:
-` + (partes.length ? partes.map((p) => "  " + p).join("\n") : "  nada, ni un par\xE1metro") + `
-
-M\xE9todo: ${req.method}
-Referer: ${req.headers.get("referer") ?? "(ninguno)"}
-
-Si dice error = access_denied, se cort\xF3 el permiso en la pantalla de
-Google. Si no lleg\xF3 nada, esta direcci\xF3n se abri\xF3 sin venir de Google.
-`,
+      L.join("\n") + "\n",
       { status: 400, headers: { "content-type": "text/plain; charset=utf-8" } }
     );
   }
@@ -78,9 +89,12 @@ Google. Si no lleg\xF3 nada, esta direcci\xF3n se abri\xF3 sin venir de Google.
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
         body: new URLSearchParams({
+          // .trim(): copiar y pegar un secreto se lleva un salto de linea o un
+          // espacio al final mas seguido de lo que uno cree, y Google contesta
+          // "The provided client secret is invalid" sin decir por que.
           code,
-          client_id: Deno.env.get("GOOGLE_CLIENT_ID"),
-          client_secret: Deno.env.get("GOOGLE_CLIENT_SECRET"),
+          client_id: (Deno.env.get("GOOGLE_CLIENT_ID") ?? "").trim(),
+          client_secret: (Deno.env.get("GOOGLE_CLIENT_SECRET") ?? "").trim(),
           redirect_uri: REDIRECT,
           grant_type: "authorization_code"
         })
@@ -96,8 +110,8 @@ Google. Si no lleg\xF3 nada, esta direcci\xF3n se abri\xF3 sin venir de Google.
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          client_id: Deno.env.get("MP_CLIENT_ID"),
-          client_secret: Deno.env.get("MP_CLIENT_SECRET"),
+          client_id: (Deno.env.get("MP_CLIENT_ID") ?? "").trim(),
+          client_secret: (Deno.env.get("MP_CLIENT_SECRET") ?? "").trim(),
           grant_type: "authorization_code",
           code,
           redirect_uri: REDIRECT
