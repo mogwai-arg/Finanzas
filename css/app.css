@@ -172,6 +172,25 @@ input[type=checkbox]{width:auto;min-height:0}
 .dia:active{background:var(--line)}
 .dia[aria-pressed="true"]{background:var(--brand);color:#fff}
 
+/* ------------------------------------------------- dos héroes en carrusel */
+/* Los dos números importan y son distintos: lo consumido y lo que queda
+   libre. Uno al lado del otro compiten; uno debajo del otro esconde el
+   segundo. De a uno, con el dedo, cada uno tiene la pantalla entera. */
+.heroes{display:flex;gap:12px;overflow-x:auto;scroll-snap-type:x mandatory;
+        scrollbar-width:none;-ms-overflow-style:none;overscroll-behavior-x:contain}
+.heroes::-webkit-scrollbar{display:none}
+.heroes>*{flex:0 0 100%;scroll-snap-align:start;scroll-snap-stop:always}
+.puntos{display:flex;justify-content:center;gap:2px;margin-top:-14px}
+/* El punto se ve chico pero se toca grande: el área es de 28, el dibujo de 7.
+   Con el mínimo de 44 que llevan todos los botones, dos puntos ocupaban media
+   pantalla. */
+.punto{width:28px;height:22px;min-width:0;min-height:22px;padding:0;border:0;
+       background:none;display:grid;place-items:center;cursor:pointer;
+       -webkit-tap-highlight-color:transparent}
+.punto::before{content:'';width:7px;height:7px;border-radius:50%;background:var(--line);
+               transition:background .15s,transform .15s}
+.punto[aria-selected="true"]::before{background:var(--tx3);transform:scale(1.15)}
+
 /* ------------------------------------------- deslizar para editar/borrar */
 .desliz{position:relative;overflow:hidden}
 .desliz>.li{position:relative;z-index:1;background:var(--card);will-change:transform}

@@ -29,8 +29,7 @@ export function vistaHoy(root, { moneda = 'ARS' } = {}) {
       selectorMoneda(moneda),
       sinRevisar(),
       conexionCaida(),
-      moneda === 'ARS' ? plataLibre(hoy) : null,
-      moneda === 'ARS' ? heroMes(res, hoy, p) : heroDolares(),
+      moneda === 'ARS' ? carrusel(heroMes(res, hoy, p), plataLibre(hoy)) : heroDolares(),
       loQueSeViene(hoy, moneda),
       moneda === 'ARS' ? proximoSueldo() : null,
       presupuesto(res, p),
@@ -38,6 +37,40 @@ export function vistaHoy(root, { moneda = 'ARS' } = {}) {
       antesDeComprar()
     )
   );
+}
+
+/**
+ * Los dos números del mes, de a uno y con el dedo.
+ *
+ * Lo consumido y lo que queda libre contestan preguntas distintas y las dos
+ * hacen falta. Puestos uno debajo del otro, el segundo no se mira; puestos
+ * uno al lado del otro, ninguno se lee. Así cada uno tiene la pantalla
+ * entera y cambiar cuesta un gesto.
+ */
+function carrusel(...paneles) {
+  const vivos = paneles.filter(Boolean);
+  if (vivos.length < 2) return vivos[0] || null;
+
+  const via = h('div.heroes', ...vivos);
+  const puntos = h('div.puntos', ...vivos.map((_, i) =>
+    h('button.punto', { 'aria-label': `Ver ${i + 1} de ${vivos.length}`,
+                        'aria-selected': String(i === 0),
+                        onclick: () => via.scrollTo({ left: i * via.clientWidth,
+                                                      behavior: 'smooth' }) })));
+
+  // El punto sigue al dedo, no al revés: se marca el que quedó a la vista.
+  let pendiente = null;
+  via.addEventListener('scroll', () => {
+    cancelAnimationFrame(pendiente);
+    pendiente = requestAnimationFrame(() => {
+      const i = Math.round(via.scrollLeft / Math.max(1, via.clientWidth));
+      puntos.querySelectorAll('.punto').forEach((b, j) =>
+        b.setAttribute('aria-selected', String(j === i)));
+    });
+  }, { passive: true });
+
+  return h('div', { style: { display: 'flex', flexDirection: 'column', gap: '12px' } },
+    via, puntos);
 }
 
 /**
