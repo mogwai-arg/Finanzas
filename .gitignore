@@ -7,3 +7,5 @@ config.js
 *.pdf
 recibos/
 resumenes/
+
+dist/
