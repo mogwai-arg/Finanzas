@@ -222,8 +222,10 @@ function proximoSueldo() {
     diaCobro: Number(state.settings?.dia_cobro) || 1,
     sobre: ult.sobre || Number(state.settings?.sobre_estimado) || 0,
     sobreDesde: ult.periodo,
-    acuerdo: state.settings?.acuerdo || S.ACUERDO_COMERCIO_JUL_SEP_2026,
-    sumas: state.settings?.sumas || S.SUMAS_COMERCIO_2026
+    // El acuerdo sale de los que estan cargados en Sueldo. Sin ninguno que
+    // cubra el periodo, se proyecta con el ritmo aprendido y se avisa.
+    acuerdo: S.acuerdoVigente(state.paritarias, S.sumarMeses(ult.periodo, 1)),
+    sumas: S.sumasDeclaradas(state.sumas_nr)
   });
   if (!cobro) return null;
 
@@ -234,7 +236,9 @@ function proximoSueldo() {
     h('div.ghead', 'El mes que viene',
       h('span.pill.mut', { style: { textTransform: 'none', letterSpacing: '0' } },
         cobro.conAcuerdo ? 'con paritaria firmada' : 'estimado')),
-    h('div.grp.pad',
+    h('button.grp.pad', { style: { width: '100%', textAlign: 'left', border: '0',
+                                   cursor: 'pointer', display: 'block' },
+                          onclick: () => irA('/sueldo') },
       h('div', { style: { display: 'flex', justifyContent: 'space-between',
                           alignItems: 'flex-start', gap: '10px' } },
         h('div',
@@ -266,10 +270,12 @@ function proximoSueldo() {
         razones.map((r, i) => frag(i > 0 ? ', y ' : '',
           r.conMonto ? `${r.texto} (${plata(Math.round(r.monto))})` : r.texto)), '.') : null,
 
-      h('div.small', { style: { color: 'var(--tx3)', marginTop: '9px' } },
-        cobro.conAcuerdo
+      h('div', { style: { display: 'flex', alignItems: 'center', gap: '5px', marginTop: '9px',
+                          fontSize: '12.5px', color: cobro.conAcuerdo ? 'var(--tx3)' : 'var(--amb)' } },
+        h('span', cobro.conAcuerdo
           ? 'Cálculo estimativo, con el aumento ya acordado.'
-          : 'Cálculo estimativo: todavía no hay paritaria firmada para ese mes.'))
+          : 'Sin paritaria cargada para ese mes: cargala para afinar el número.'),
+        icono('chev', 13)))
   );
 }
 

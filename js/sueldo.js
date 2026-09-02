@@ -170,6 +170,34 @@ export const SUMAS_COMERCIO_2026 = [
   { concepto: 'Bono extraordinario',       monto:  25000, desde: '2026-07', hasta: '2026-08' }
 ];
 
+
+/**
+ * El acuerdo que corresponde a un periodo, de los que haya cargados.
+ *
+ * Se prefiere el que efectivamente cubre el periodo con alguno de sus tramos.
+ * Si ninguno lo cubre, se devuelve el mas reciente que ya empezo: sirve para
+ * saber cuando fue la ultima revision y avisar que lo proyectado es
+ * suposicion. Devuelve null solo si no hay nada cargado.
+ */
+export function acuerdoVigente(paritarias, periodo) {
+  const activos = (paritarias || [])
+    .filter(a => a && a.activo !== false && Array.isArray(a.tramos) && a.tramos.length)
+    .map(a => ({ ...a, tramos: [...a.tramos].sort((x, y) => x.periodo < y.periodo ? -1 : 1) }))
+    .sort((a, b) => a.base < b.base ? 1 : -1);          // el mas nuevo primero
+  if (!activos.length) return null;
+  return activos.find(a => a.base <= periodo && !fueraDeAcuerdo(a, periodo))
+      || activos.find(a => a.base <= periodo)
+      || null;
+}
+
+/** Sumas cargadas normalizadas: acepta `no_remunerativo` o el nombre corto. */
+export function sumasDeclaradas(filas) {
+  return (filas || [])
+    .filter(x => x && x.activo !== false)
+    .map(x => ({ concepto: x.concepto, monto: Number(x.monto) || 0,
+                 desde: x.desde || null, hasta: x.hasta || null }));
+}
+
 /** Porcentaje total acumulado sobre la base, al periodo dado. */
 export function pctAcumulado(acuerdo, periodo) {
   if (!acuerdo || !acuerdo.tramos) return null;

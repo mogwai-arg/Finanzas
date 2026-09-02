@@ -4,6 +4,7 @@
 import { h, icono, aviso, confirmar, hoja, campo } from '../ui.js';
 import { state, salir, sincronizar, exportarJSON, pendientes, fallidas, DEMO } from '../db.js';
 import { plata } from '../formato.js';
+import { irA } from '../ruteo.js';
 
 export function vistaAjustes(root) {
   const tema = document.documentElement.getAttribute('data-tema') || 'auto';
@@ -29,6 +30,15 @@ export function vistaAjustes(root) {
           h('div.av', icono('sync', 17)),
           h('div.m', h('div.t', 'Sincronizar ahora'),
             h('div.s', cola ? `${cola} cambios esperando` : 'Todo subido')),
+          h('span.chev', icono('chev', 15))))),
+
+    h('section',
+      h('div.ghead', 'Sueldo'),
+      h('div.grp',
+        h('button.li', { onclick: () => irA('/sueldo') },
+          h('div.av', icono('recibo', 17)),
+          h('div.m', h('div.t', 'Recibos y paritarias'),
+            h('div.s', `${(state.paritarias || []).length} acuerdos · ${(state.recibos || []).length} recibos`)),
           h('span.chev', icono('chev', 15))))),
 
     h('section',

@@ -9,7 +9,7 @@ import {
   factorRemunerativo, componerNoRemunerativo, proyectarSueldo, aguinaldo,
   calendarioDeIngresos, sumarMeses,
   pctAcumulado, basicoSegunAcuerdo, fueraDeAcuerdo, sumasVigentes,
-  brutoDeRecibo, netoDeclarado, proximoCobro
+  brutoDeRecibo, netoDeclarado, proximoCobro, acuerdoVigente, sumasDeclaradas
 } from './sueldo.js';
 
 let ok = 0, fallo = 0;
@@ -458,6 +458,57 @@ t('un mes normal seguido de otro normal no inventa razones', () => {
   igual(p.porque.some(x => /vacaciones|aguinaldo/i.test(x.texto)), false);
 });
 t('sin recibos devuelve null en vez de romper', () => igual(proximoCobro([], OPC), null));
+
+console.log('\nACUERDOS CARGADOS');
+const JUL = { nombre: 'julio 2026', base: '2026-06', acumulativo: false, revision_en: '2026-10',
+              tramos: [{ periodo: '2026-07', pct: 1.9 }, { periodo: '2026-08', pct: 1.9 },
+                       { periodo: '2026-09', pct: 1.9 }] };
+const OCT = { nombre: 'octubre 2026', base: '2026-09', acumulativo: false, revision_en: '2027-01',
+              tramos: [{ periodo: '2026-10', pct: 2.2 }, { periodo: '2026-11', pct: 2.2 }] };
+
+t('elige el acuerdo que cubre el período', () => {
+  igual(acuerdoVigente([JUL, OCT], '2026-08').nombre, 'julio 2026');
+  igual(acuerdoVigente([JUL, OCT], '2026-10').nombre, 'octubre 2026');
+});
+t('el orden en que se cargan no importa', () => {
+  igual(acuerdoVigente([OCT, JUL], '2026-08').nombre, 'julio 2026');
+});
+t('si ninguno cubre el período, devuelve el último que ya empezó', () => {
+  const a = acuerdoVigente([JUL], '2026-12');
+  igual(a.nombre, 'julio 2026');
+  igual(fueraDeAcuerdo(a, '2026-12'), true, 'y queda marcado como fuera de acuerdo');
+});
+t('un acuerdo que todavía no empezó no se elige', () =>
+  igual(acuerdoVigente([OCT], '2026-07'), null));
+t('los desactivados quedan afuera', () =>
+  igual(acuerdoVigente([{ ...JUL, activo: false }], '2026-08'), null));
+t('sin acuerdos cargados devuelve null en vez de romper', () => {
+  igual(acuerdoVigente([], '2026-08'), null);
+  igual(acuerdoVigente(null, '2026-08'), null);
+});
+t('un acuerdo sin tramos no cuenta', () =>
+  igual(acuerdoVigente([{ ...JUL, tramos: [] }], '2026-08'), null));
+t('cargar la paritaria nueva cambia la proyección', () => {
+  const conJulio = proyectarSueldo(HISTORIA, { meses: 2, acuerdo: JUL, sumas: SUMAS });
+  const conOctubre = proyectarSueldo(HISTORIA, { meses: 2,
+    acuerdo: acuerdoVigente([JUL, OCT], '2026-10'), sumas: SUMAS });
+  igual(conJulio[1].conAcuerdo, false, 'octubre queda fuera del acuerdo viejo');
+  if (!(conOctubre[1].basico > conJulio[1].basico))
+    throw new Error('con el acuerdo nuevo octubre tiene que dar más');
+});
+
+console.log('\nSUMAS CARGADAS');
+t('normaliza lo que viene de la base', () => {
+  const s = sumasDeclaradas([{ concepto: 'Bono', monto: '25000', desde: '2026-07', hasta: '2026-08' }]);
+  igual(s.length, 1); cerca(s[0].monto, 25000); igual(s[0].desde, '2026-07');
+});
+t('las desactivadas no se usan', () =>
+  igual(sumasDeclaradas([{ concepto: 'x', monto: 1, activo: false }]).length, 0));
+t('sin vigencia declarada valen siempre', () => {
+  const s = sumasDeclaradas([{ concepto: 'Fija', monto: 100000 }]);
+  cerca(sumasVigentes(s, '2030-01'), 100000);
+});
+t('una lista vacía no rompe', () => igual(sumasDeclaradas(null).length, 0));
 
 console.log(`\n${ok} pruebas OK${fallo ? `, ${fallo} FALLAN` : ''}\n`);
 process.exit(fallo ? 1 : 0);

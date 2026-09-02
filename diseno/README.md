@@ -16,7 +16,7 @@ Construida sobre los cuatro módulos de lógica. Se prueba sin backend:
 
 ```bash
 npm run serve      # y abrir http://localhost:8080
-npm test           # 221 pruebas
+npm test           # 233 pruebas
 npm run demo       # arma dist/bishusha-demo.html: la app entera en un archivo
 ```
 
@@ -257,6 +257,24 @@ lo proyectado se marca `conAcuerdo: false`: es una suposición, no un dato.
 Es el **44 % de lo que entra**. Un modelo que solo mire el neto bancario ve
 menos de la mitad de la plata. Sube con el mismo aumento que el banco, así que
 se escala con el básico en vez de quedar congelado.
+
+### Las paritarias se cargan, no se programan
+
+En Argentina se firma un acuerdo cada tres o cuatro meses. Si eso vive en el
+código, la proyección queda vieja y hay que tocar la app cada vez.
+
+`paritarias` guarda el acuerdo con la forma en que realmente se firma —base,
+tramos por mes, y si los tramos **se acumulan o no**, que es lo que más cambia
+el resultado— más la próxima revisión y el link de dónde salió, para poder
+verificarlo. `sumas_nr` guarda las sumas fijas con `desde` y `hasta`.
+
+La pantalla **Sueldo** (desde la tarjeta de la Home o desde Ajustes) las carga,
+las edita y muestra cuál está vigente. `acuerdoVigente()` elige la que cubre el
+período; si ninguna lo cubre, proyecta con el ritmo aprendido de los recibos y
+lo dice: *"sin paritaria cargada para ese mes"*.
+
+Ahí mismo se cargan los recibos, con una marca para los meses con vacaciones o
+aguinaldo — que se pagan a un valor diario más alto e inflan el promedio.
 
 ### El mes que viene, en la Home
 

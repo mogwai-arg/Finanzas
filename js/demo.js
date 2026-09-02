@@ -204,6 +204,22 @@ export const DEMO = {
       pagado_el: '2026-09-01', sobre: 1532000, conceptos: ['SUELDO MENSUAL', 'VACACIONES'] }
   ],
 
+  paritarias: [
+    { id: id('par1'), nombre: 'Acuerdo julio 2026', convenio: 'CCT 130/75',
+      base: '2026-06', acumulativo: false, revision_en: '2026-10',
+      tramos: [{ periodo: '2026-07', pct: 1.9 },
+               { periodo: '2026-08', pct: 1.9 },
+               { periodo: '2026-09', pct: 1.9 }],
+      url: 'https://www.faecys.org.ar/circular-acuerdo-julio-2026/', activo: true }
+  ],
+
+  sumas_nr: [
+    { id: id('sn1'), concepto: 'Suma fija no remunerativa', monto: 100000, desde: '2026-01', activo: true },
+    { id: id('sn2'), concepto: 'Recomposición', monto: 20000, desde: '2026-01', activo: true },
+    { id: id('sn3'), concepto: 'Bono extraordinario', monto: 25000,
+      desde: '2026-07', hasta: '2026-08', paritaria_id: id('par1'), activo: true }
+  ],
+
   reglas: [
     { id: id('g1'), patron: 'coto', category_id: id('c1'), prioridad: 10, veces_usada: 14 },
     { id: id('g2'), patron: 'ypf|shell|axion', category_id: id('c3'), prioridad: 10, veces_usada: 9 },

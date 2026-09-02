@@ -15,6 +15,7 @@ import { vistaTarjetas, vistaTarjeta } from './vistas/tarjetas.js';
 import { vistaPromos } from './vistas/promos.js';
 import { vistaMes } from './vistas/mes.js';
 import { vistaAjustes } from './vistas/ajustes.js';
+import { vistaSueldo } from './vistas/sueldo.js';
 import { formMovimiento } from './vistas/form-movimiento.js';
 
 const app = document.getElementById('app');
@@ -28,6 +29,7 @@ const RUTAS = [
   ['/pago',           { tab: 'hoy',      titulo: '¿Con qué pago?', vista: vistaPago, atras: true }],
   ['/donde',          { tab: 'hoy',      titulo: 'Dónde está', vista: vistaDonde, atras: true, acciones: ['ojo'] }],
   ['/mes',            { tab: 'hoy',      titulo: 'El mes',     vista: vistaMes, atras: true }],
+  ['/sueldo',         { tab: 'hoy',      titulo: 'Sueldo',     sub: 'Recibos, paritarias y proyección', vista: vistaSueldo, atras: true }],
   ['/gastos',         { tab: 'gastos',   titulo: 'Gastos',     vista: vistaGastos, acciones: ['buscar'] }],
   ['/tarjetas',       { tab: 'tarjetas', titulo: 'Tarjetas',   vista: vistaTarjetas }],
   ['/tarjetas/:id',   { tab: 'tarjetas', titulo: 'Tarjeta',    vista: vistaTarjeta, atras: true }],
