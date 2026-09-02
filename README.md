@@ -208,14 +208,28 @@ navegador y la privada firma cada aviso. Se generan una sola vez y **no se
 cambian nunca más**: si cambian, los teléfonos ya suscriptos dejan de recibir
 y hay que volver a prenderlos de a uno.
 
-1. Con `cron-avisos` ya desplegada, abrí en el navegador
-   `https://<TU-PROJECT-REF>.supabase.co/functions/v1/cron-avisos?claves=1`.
-   Devuelve un par nuevo. No se guarda en ningún lado: es de ese momento.
+1. Con `cron-avisos` ya desplegada, en la app: **Ajustes → Avisos → Generar
+   las claves**. Muestra el par una sola vez, con un botón para copiar cada
+   una. No se guardan en ningún lado.
+
+   Abrir a mano
+   `https://<TU-PROJECT-REF>.supabase.co/functions/v1/cron-avisos?claves=1`
+   en el navegador **no** funciona: Supabase rechaza con
+   `UNAUTHORIZED_NO_AUTH_HEADER` cualquier pedido sin `Authorization` antes de
+   que la función corra. Con terminal sí, agregando la cabecera:
+
+   ```bash
+   curl -H "Authorization: Bearer <TU-ANON-KEY>" \
+     "https://<TU-PROJECT-REF>.supabase.co/functions/v1/cron-avisos?claves=1"
+   ```
+
+   Apagarle el *Verify JWT* a `cron-avisos` para evitar esto sería peor: deja
+   el cron abierto a que cualquiera lo dispare.
 2. `VAPID_PRIVATE` y `VAPID_SUBJECT` van a **Supabase → Edge Functions →
    Secrets**.
 3. `VAPID_PUBLIC` va a **Cloudflare Pages → Settings → Environment
    variables**, y hay que volver a publicar para que entre en `config.js`.
-4. En la app: **Ajustes → Avisos → Prender los avisos**, y después
+4. Volver a la app: **Ajustes → Avisos → Prender los avisos**, y después
    **Mandarme uno de prueba**. Si llega, está.
 
 En iPhone hay un paso más: los avisos solo funcionan si la app está agregada a

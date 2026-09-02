@@ -215,6 +215,27 @@ export async function mirarBandeja() {
   return d;
 }
 
+/**
+ * Genera un par de claves para los avisos.
+ *
+ * Va por la función y no por el navegador porque el par tiene que salir del
+ * mismo lugar que despues firma: asi no hay dos formatos posibles ni una
+ * clave que parece bien y no verifica. No se guarda: se copia y se pega.
+ */
+export async function generarClavesAviso() {
+  if (!FUNCTIONS_URL) throw new Error('Falta FUNCTIONS_URL en la configuración.');
+  const t = await token();
+  const r = await fetch(`${FUNCTIONS_URL}/cron-avisos`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${t}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ claves: true })
+  });
+  if (r.status === 404) throw new Error('Falta subir cron-avisos, o quedó con otro nombre.');
+  const d = await r.json().catch(() => null);
+  if (!r.ok || !d || !d.VAPID_PUBLIC) throw new Error(d?.error || 'No pude generarlas.');
+  return d;
+}
+
 /** Manda un aviso de prueba a este teléfono, para ver que llegue de verdad. */
 export async function probarAviso() {
   if (!FUNCTIONS_URL) throw new Error('Falta FUNCTIONS_URL en la configuración.');

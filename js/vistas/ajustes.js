@@ -4,7 +4,7 @@
 import { h, icono, aviso, confirmar, hoja, campo } from '../ui.js';
 import { state, salir, sincronizar, exportarJSON, pendientes, fallidas, DEMO,
          FUNCTIONS_URL, conectar, desconectar, leerAhora, mirarBandeja,
-         guardar, probarAviso } from '../db.js';
+         guardar, probarAviso, generarClavesAviso } from '../db.js';
 import { plata, fechaRelativa, aNumero } from '../formato.js';
 import { bishu } from '../bishu.js';
 import { estadoPush, prenderPush, apagarPush } from '../push.js';
@@ -158,6 +158,8 @@ function seccionAvisos() {
       ? h('button.btn.sec', { onclick: async () => {
           await apagarPush(); aviso('Apagados en este teléfono'); pintar();
         } }, 'Apagarlos en este teléfono')
+      : estado === 'sin-clave'
+        ? h('button.btn.sec', { onclick: () => hojaClaves() }, 'Generar las claves')
       : estado === 'apagado'
         ? h('button.btn', { onclick: async () => {
             try { await prenderPush(); aviso('Listo, te aviso por acá'); }
@@ -202,12 +204,55 @@ function seccionAvisos() {
         h('div.s', 'Debajo de esto, Bishu avisa')), inp);
   }
 
+  /**
+   * El par de claves, para copiar y pegar donde va cada una.
+   *
+   * Se muestra entero y una sola vez: la privada no queda guardada en ningún
+   * lado, ni acá ni en el servidor. Si se pierde, se generan otras.
+   */
+  function hojaClaves() {
+    const caja = h('div.small.mut', { style: { lineHeight: '1.5' } }, 'Generando…');
+    const cerrar = hoja('Claves para los avisos', h('div', caja));
+
+    generarClavesAviso().then(d => {
+      caja.replaceChildren(h('div.flow',
+        h('div.small.mut', { style: { lineHeight: '1.55' } },
+          'Son de esta app y se generan una sola vez. Si las cambiás más ',
+          'adelante, los teléfonos que ya tenían avisos dejan de recibirlos.'),
+        clave('VAPID_PUBLIC', d.VAPID_PUBLIC,
+              'Cloudflare Pages → Settings → Environment variables. Después hay que volver a publicar.'),
+        clave('VAPID_PRIVATE', d.VAPID_PRIVATE,
+              'Supabase → Edge Functions → Secrets. No la compartas.'),
+        clave('VAPID_SUBJECT', `mailto:${state.user?.email || 'vos@ejemplo.com'}`,
+              'También en los secretos de Supabase.')));
+    }).catch(e => caja.replaceChildren(String(e.message || e)));
+
+    return cerrar;
+  }
+
+  function clave(nombre, valor, donde) {
+    const txt = h('div', { style: { fontFamily: 'ui-monospace, monospace', fontSize: '12px',
+                                    wordBreak: 'break-all', lineHeight: '1.5',
+                                    background: 'var(--bg2)', padding: '10px 11px',
+                                    borderRadius: '10px', userSelect: 'all',
+                                    color: 'var(--tx)' } }, valor);
+    const btn = h('button.btn.sec', { onclick: async () => {
+      try { await navigator.clipboard.writeText(valor); aviso('Copiado'); }
+      catch { aviso('Tocá el texto y copiá a mano'); }
+    } }, 'Copiar');
+    return h('div', { style: { marginTop: '4px' } },
+      h('div', { style: { fontWeight: '600', fontSize: '13px', marginBottom: '6px' } }, nombre),
+      txt,
+      h('div.small.mut', { style: { margin: '7px 0 9px', lineHeight: '1.45' } }, donde),
+      btn);
+  }
+
   const explicacion = e => ({
     'listo':       'Te llegan aunque la app esté cerrada.',
     'apagado':     'Ahora los avisos aparecen solo dentro de la app.',
     'bloqueado':   'El teléfono los tiene bloqueados para esta app. Se prenden desde los ajustes del sistema, en notificaciones.',
     'sin-soporte': 'Este navegador no maneja avisos. En iPhone hay que agregar la app a la pantalla de inicio primero.',
-    'sin-clave':   'Faltan las claves de aviso en la configuración. Mientras tanto, los avisos aparecen dentro de la app.'
+    'sin-clave':   'Faltan las claves. Generalas acá y pegalas donde va cada una; hasta entonces los avisos aparecen solo dentro de la app.'
   })[e] || '';
 
   pintar();

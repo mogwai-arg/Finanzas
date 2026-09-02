@@ -8,7 +8,8 @@
 // Tres formas de entrar:
 //   POST (cron)            recorre a todos y avisa
 //   POST {probar:true}     con la sesión de la app: manda uno de prueba
-//   GET  ?claves=1         genera un par de claves VAPID nuevas
+//   POST {claves:true}     con la sesión de la app: genera claves VAPID
+//   GET  ?claves=1         lo mismo, para quien tenga terminal
 // =====================================================================
 import { admin, json, CORS, usuarioDe } from '../_shared/comun.ts';
 import { avisosDelDia } from '../_shared/avisos.ts';
@@ -21,11 +22,21 @@ Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS });
   const url = new URL(req.url);
 
+  const sb = admin();
+  const claves = clavesDelEntorno();
+  const cuerpo = req.method === 'POST' ? await req.json().catch(() => ({})) : {};
+
   // ------------------------------------------------- claves nuevas
   // Se generan acá y no en una computadora porque no hace falta ninguna: la
   // pública va a Cloudflare (VAPID_PUBLIC) y la privada a los secretos de
-  // Supabase (VAPID_PRIVATE). La privada no se guarda en ningún lado más.
-  if (url.searchParams.get('claves')) {
+  // Supabase (VAPID_PRIVATE). No se guardan en ningún lado: si se pierden,
+  // se generan otras y los teléfonos se vuelven a prender.
+  //
+  // Desde el navegador entra por POST y con sesión: el panel de Supabase
+  // rechaza un GET sin Authorization antes de que la función llegue a correr,
+  // y apagarle el Verify JWT dejaría el cron abierto a cualquiera.
+  if (cuerpo.claves || url.searchParams.get('claves')) {
+    if (cuerpo.claves && !(await usuarioDe(req))) return json({ error: 'sin sesión' }, 401);
     const par = await crypto.subtle.generateKey({ name: 'ECDSA', namedCurve: 'P-256' },
                                                 true, ['sign', 'verify']);
     const jwk = await crypto.subtle.exportKey('jwk', par.privateKey);
@@ -39,10 +50,6 @@ Deno.serve(async (req) => {
              'Guardalas: si las cambiás, los teléfonos ya suscriptos dejan de recibir.']
     });
   }
-
-  const sb = admin();
-  const claves = clavesDelEntorno();
-  const cuerpo = req.method === 'POST' ? await req.json().catch(() => ({})) : {};
 
   // ------------------------------------------------- aviso de prueba
   if (cuerpo.probar) {

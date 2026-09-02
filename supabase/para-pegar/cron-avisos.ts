@@ -267,7 +267,11 @@ var MAX_POR_VEZ = 2;
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
   const url = new URL(req.url);
-  if (url.searchParams.get("claves")) {
+  const sb = admin();
+  const claves = clavesDelEntorno();
+  const cuerpo = req.method === "POST" ? await req.json().catch(() => ({})) : {};
+  if (cuerpo.claves || url.searchParams.get("claves")) {
+    if (cuerpo.claves && !await usuarioDe(req)) return json({ error: "sin sesi\xF3n" }, 401);
     const par = await crypto.subtle.generateKey(
       { name: "ECDSA", namedCurve: "P-256" },
       true,
@@ -286,9 +290,6 @@ Deno.serve(async (req) => {
       ]
     });
   }
-  const sb = admin();
-  const claves = clavesDelEntorno();
-  const cuerpo = req.method === "POST" ? await req.json().catch(() => ({})) : {};
   if (cuerpo.probar) {
     const u = await usuarioDe(req);
     if (!u) return json({ error: "sin sesi\xF3n" }, 401);
