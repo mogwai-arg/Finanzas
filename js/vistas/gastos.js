@@ -83,8 +83,11 @@ export function vistaGastos(root) {
         h('div.s', esTransf && destino ? `a ${destino.nombre}` : [dondeTx(t), cat].filter(Boolean).join(' · '),
           cuenta ? ` · ${cuenta.nombre}${cuenta.ultimos4 ? ' ·' + cuenta.ultimos4 : ''}` : '',
           t.cuotas > 1 ? ` · ${t.cuotas} cuotas` : '')),
-      h('div', { class: 'v' + (esIngreso ? ' pos' : '') },
-        esTransf ? plata(monto, moneda, { signo: entrante }) 
+      // La pata que entra va en verde igual que un ingreso: lo que decide el
+      // color es si la plata sube o baja en la moneda que se está mirando,
+      // no de qué tipo es el movimiento.
+      h('div', { class: 'v' + (esIngreso || entrante ? ' pos' : '') },
+        esTransf ? plata(monto, moneda, { signo: entrante })
                  : plata(esIngreso ? monto : -monto, moneda, { signo: esIngreso }),
         t.reintegro > 0 && h('small', { style: { color: 'var(--pos)' } },
           `−${plata(t.reintegro, moneda)} reintegro`),
