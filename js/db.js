@@ -187,6 +187,13 @@ export async function leerAhora(proveedor) {
     body: JSON.stringify({ user_id: state.user.id })
   });
   const texto = await r.text();
+  if (r.status === 404) {
+    // El JSON crudo de Supabase no dice que hacer. Es siempre lo mismo: la
+    // funcion no esta publicada, o quedo con otro nombre —el panel les pone
+    // uno al azar y ese nombre es la URL—.
+    const cual = proveedor === 'gmail' ? 'gmail-sync' : 'mp-sync';
+    throw new Error(`Falta subir la función ${cual}, o quedó publicada con otro nombre.`);
+  }
   if (!r.ok) throw new Error(texto.slice(0, 200) || `Error ${r.status}`);
   await sincronizar();
   return texto;

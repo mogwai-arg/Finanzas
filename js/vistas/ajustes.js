@@ -177,7 +177,7 @@ function filaProveedor(p) {
       h('button.iconbtn', { 'aria-label': `Leer ${p.nombre} ahora`, onclick: async e => {
         const b = e.currentTarget; b.disabled = true;
         try { await leerAhora(p.id); aviso('Listo, fijate en Revisar'); }
-        catch (err) { aviso(String(err.message || err).slice(0, 120)); }
+        catch (err) { aviso(String(err.message || err).slice(0, 160), 5000); }
         finally { b.disabled = false; }
       } }, icono('sync', 17)),
       h('button.iconbtn', { 'aria-label': `Desconectar ${p.nombre}`, onclick: async () => {
