@@ -31,6 +31,14 @@ t('espacios de sobra no molestan', () => cerca(parseMonto('   61081,68  '), 6108
 t('texto que no es numero da null', () => igual(parseMonto('OSDE'), null));
 
 console.log('\nFECHAS: los dos formatos que usa el mismo banco');
+t('lee el nombre comercial de la tarjeta', () => {
+  igual(parseResumen(leer('resumen-visa.txt')).producto, 'VISA');
+  igual(parseResumen(leer('resumen-mastercard.txt')).producto, 'MASTERCARD BLACK');
+});
+
+t('el resumen de Mastercard no trae los últimos cuatro', () =>
+  igual(parseResumen(leer('resumen-mastercard.txt')).ultimos4, null));
+
 t('el comercio no se queda con la referencia larga', () => {
   const r = parseResumen(leer('resumen-visa.txt'));
   const c = r.consumos.find(x => /CUOTA SOCIAL/.test(x.comercio));

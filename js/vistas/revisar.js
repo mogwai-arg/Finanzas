@@ -8,7 +8,7 @@
 // Las CUOTAS se confirman aparte del resto. Es el unico dato que, si entra
 // mal, arrastra el error doce meses.
 // =====================================================================
-import { h, icono, iconoDe, aviso, hoja } from '../ui.js';
+import { h, icono, iconoDe, aviso, hoja, confirmar } from '../ui.js';
 import { state, guardar, borrar } from '../db.js';
 import * as F from '../finance.js';
 import { plata, plataPartida, fechaRelativa, nombreDe, buscar, aFecha } from '../formato.js';
@@ -32,6 +32,23 @@ export function vistaRevisar(root) {
   pintar(cont, pend, 0);
 }
 
+/**
+ * Salida de emergencia para un mazo largo. Revisar de a uno esta bien para lo
+ * que entra por mail durante la semana; para un resumen entero importado de
+ * golpe es una tarea de veinte minutos que nadie hace, y el mazo queda ahi
+ * pesando para siempre.
+ */
+function confirmarTodo(pend, alTerminar) {
+  return h('button.btn.sec', { onclick: async () => {
+    if (!await confirmar(`¿Dar por buenos los ${pend.length} que quedan? ` +
+      'Quedan cargados tal como están; siempre los podés editar después.',
+      'Confirmar todos', { peligro: false })) return;
+    for (const t of pend) await guardar('transactions', { ...t, revisado: true });
+    aviso(`${pend.length} confirmados`);
+    alTerminar();
+  } }, `Confirmar los ${pend.length} de una vez`);
+}
+
 function pintar(cont, pend, i) {
   cont.replaceChildren();
   if (i >= pend.length) {
@@ -43,6 +60,9 @@ function pintar(cont, pend, i) {
     return;
   }
   cont.append(tarjeta(pend[i], i, pend.length, () => pintar(cont, pend, i + 1)));
+  // Solo cuando quedan varios: con dos o tres, revisarlos es mas rapido.
+  const quedan = pend.slice(i);
+  if (quedan.length >= 6) cont.append(confirmarTodo(quedan, () => irA('/hoy')));
 }
 
 function tarjeta(tx, i, total, siguiente) {

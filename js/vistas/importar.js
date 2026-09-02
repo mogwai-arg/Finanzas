@@ -16,7 +16,10 @@ const MARCAS = { visa: 'Visa', mastercard: 'Mastercard', amex: 'Amex' };
 export function formImportarResumen() {
   const texto = h('textarea', {
     rows: '7', placeholder: 'Pegá acá el texto del resumen…',
-    style: { width: '100%', font: '13px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace',
+    // 16px o mas: por debajo de eso iOS hace zoom al tocar el campo y hay que
+    // volver a achicar con los dedos.
+    style: { width: '100%', fontSize: '16px', lineHeight: '1.45',
+             fontFamily: 'ui-monospace,SFMono-Regular,Menlo,monospace',
              padding: '11px 12px', resize: 'vertical' }
   });
   const salida = h('div');
@@ -55,10 +58,17 @@ export function formImportarResumen() {
       (!r.ultimos4 || !a.ultimos4 || a.ultimos4 === r.ultimos4)) ||
       tarjetas.find(a => a.marca === r.marca);
 
+    const nombreNuevo = r.producto || MARCAS[r.marca] || r.marca;
     const cual = select([
       ...tarjetas.map(a => ({ value: a.id, label: a.nombre })),
-      { value: 'nueva', label: `Crear una nueva (${MARCAS[r.marca] || r.marca}${r.ultimos4 ? ' · ' + r.ultimos4 : ''})` }
+      { value: 'nueva', label: `Crear una nueva (${nombreNuevo}${r.ultimos4 ? ' · ' + r.ultimos4 : ''})` }
     ], { value: propuesta?.id || 'nueva' });
+
+    // Los resúmenes de Mastercard no imprimen los últimos cuatro en ningún
+    // lado. En vez de dejar la tarjeta sin número, se piden acá.
+    const u4 = h('input', { type: 'text', inputmode: 'numeric', maxlength: '4',
+                            placeholder: '9817', value: propuesta?.ultimos4 || '' });
+    const pedirU4 = !r.ultimos4;
 
     const movs = aMovimientos(r, null);
     const yaEstan = new Set(state.transactions.map(t => t.externo_id).filter(Boolean));
@@ -68,38 +78,53 @@ export function formImportarResumen() {
 
     salida.append(
       h('div.grp', { style: { marginTop: '14px' } },
-        dato('Tarjeta', `${MARCAS[r.marca] || r.marca}${r.ultimos4 ? ' · ' + r.ultimos4 : ''}`),
+        dato('Tarjeta', `${r.producto || MARCAS[r.marca] || r.marca}${r.ultimos4 ? ' · ' + r.ultimos4 : ''}`),
         r.ciclo ? dato('Cierre', `${dia(r.ciclo.cierre)} · vence ${dia(r.ciclo.vencimiento)}`) : null,
         r.total.ars != null ? dato('Total a pagar', plata(r.total.ars)) : null,
         r.total.usd ? dato('En dólares', plata(r.total.usd, 'USD')) : null,
         dato('Consumos nuevos', String(nuevos.length) + (enCuotas ? ` · ${enCuotas} en cuotas` : '')),
         repetidos ? dato('Ya cargados', `${repetidos}, no se repiten`) : null,
         r.impuestos.length ? dato('Impuestos', `${r.impuestos.length} · ${plata(sumaImp(r))}`) : null),
-      h('div', { style: { marginTop: '14px' } }, campo('Cargar todo en', cual)),
-      r.ciclo ? h('div.small.mut', { style: { lineHeight: '1.5' } },
-        'También se guardan las seis fechas del ciclo en la tarjeta: son las que mandan ',
-        'sobre el día fijo de cierre.') : null);
+      h('div', { style: { marginTop: '14px' } }, campo('Cargar todo en', cual),
+        pedirU4 ? h('div',
+          campo('Últimos 4 de la tarjeta', u4),
+          h('div.small.mut', { style: { marginTop: '-12px', marginBottom: '16px', lineHeight: '1.45' } },
+            'Este resumen no los trae. Sirven para reconocer la tarjeta después.')) : null),
+      h('div.small.mut', { style: { lineHeight: '1.5' } },
+        r.ciclo ? 'También se guardan las seis fechas del ciclo en la tarjeta: son las que mandan sobre el día fijo de cierre. ' : '',
+        enCuotas
+          ? `Los consumos entran confirmados —el banco ya los cobró—; ${enCuotas === 1 ? 'la compra en cuotas queda' : 'las ' + enCuotas + ' compras en cuotas quedan'} para revisar.`
+          : 'Los consumos entran confirmados: el banco ya los cobró.'));
 
-    pie.append(h('button.btn', { onclick: () => importar(r, cual.value, nuevos) },
+    pie.append(h('button.btn', { onclick: () => importar(r, cual.value, nuevos, u4.value.trim()) },
       nuevos.length ? `Importar ${nuevos.length} movimientos` : 'Guardar las fechas del ciclo'));
   }
 
-  async function importar(r, destino, nuevos) {
+  async function importar(r, destino, nuevos, ultimos4) {
+    const u4 = r.ultimos4 || ultimos4 || null;
     let cuenta = state.accounts.find(a => a.id === destino);
     if (!cuenta) {
       cuenta = await guardar('accounts', {
-        nombre: `${MARCAS[r.marca] || r.marca}${r.ultimos4 ? ' ' + r.ultimos4 : ''}`,
+        nombre: `${r.producto || MARCAS[r.marca] || r.marca}${u4 ? ' ' + u4 : ''}`,
         tipo: 'credito', moneda: 'ARS', banco: 'Galicia', marca: r.marca,
-        ultimos4: r.ultimos4 || null, limite: null,
+        ultimos4: u4, limite: null,
         cierre_dia: null, vencimiento_dia: null, ciclos: [],
         saldo_inicial: 0, saldo_al: null,
         activo: true, orden: state.accounts.length + 1
       });
     }
 
-    if (r.ciclo) await guardar('accounts', { ...cuenta, ciclos: mezclarCiclos(cuenta.ciclos, r.ciclo) });
+    const cambios = {};
+    if (r.ciclo) cambios.ciclos = mezclarCiclos(cuenta.ciclos, r.ciclo);
+    if (u4 && cuenta.ultimos4 !== u4) cambios.ultimos4 = u4;
+    if (Object.keys(cambios).length) cuenta = await guardar('accounts', { ...cuenta, ...cambios });
 
-    for (const m of nuevos) await guardar('transactions', { ...m, account_id: cuenta.id });
+    // Un consumo del resumen no es una adivinanza: el banco ya lo cobró, con
+    // fecha e importe. Entra confirmado. La excepción son las cuotas, que si
+    // entran mal arrastran el error doce meses: esas sí van al mazo.
+    for (const m of nuevos) {
+      await guardar('transactions', { ...m, account_id: cuenta.id, revisado: m.cuotas <= 1 });
+    }
 
     // Los impuestos y percepciones también se pagan: entran como un gasto más.
     for (const i of r.impuestos) {
@@ -108,12 +133,15 @@ export function formImportarResumen() {
       await guardar('transactions', {
         fecha: i.fecha, descripcion: i.concepto, comercio: i.concepto,
         monto: i.monto, moneda: 'ARS', tipo: 'gasto', cuotas: 1,
-        account_id: cuenta.id, fuente: 'resumen', revisado: false, externo_id: id
+        account_id: cuenta.id, fuente: 'resumen', revisado: true, externo_id: id
       });
     }
 
     cerrar();
-    aviso(nuevos.length ? `${nuevos.length} movimientos importados` : 'Fechas del ciclo guardadas');
+    const aRevisar = nuevos.filter(m => m.cuotas > 1).length;
+    aviso(!nuevos.length ? 'Fechas del ciclo guardadas'
+      : aRevisar ? `${nuevos.length} importados · ${aRevisar} en cuotas para revisar`
+      : `${nuevos.length} movimientos importados`);
   }
 }
 

@@ -153,7 +153,8 @@ input:focus,select:focus,textarea:focus{border-color:var(--brand)}
 input[type=checkbox]{width:auto;min-height:0}
 .search{display:flex;align-items:center;gap:8px;background:var(--fill);border-radius:11px;
         padding:11px 13px;color:var(--tx3);font-size:15.5px}
-.search input{background:none;border:0;padding:0;min-height:0;font-size:15.5px}
+/* 16px justos: por debajo de eso iOS hace zoom al tocar el campo. */
+.search input{background:none;border:0;padding:0;min-height:0;font-size:16px}
 
 /* --------------------------------------------------------- barra tabs */
 .tabs{position:fixed;left:12px;right:12px;bottom:calc(12px + var(--safe-b));z-index:40;

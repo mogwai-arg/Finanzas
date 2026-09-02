@@ -46,9 +46,20 @@ export function parsePeriodo(s) {
 export function detectarEmisor(texto) {
   if (!/Banco Galicia|CUIT Banco: 30-50000173-5|galicia/i.test(texto) &&
       !/Resumen de tarjeta de credito/i.test(texto)) return null;
-  if (/MASTERCARD/i.test(texto)) return { emisor: 'galicia', marca: 'mastercard' };
-  if (/\bVISA\b/i.test(texto))   return { emisor: 'galicia', marca: 'visa' };
+  if (/MASTERCARD/i.test(texto)) return { emisor: 'galicia', marca: 'mastercard', producto: producto(texto) };
+  if (/\bVISA\b/i.test(texto))   return { emisor: 'galicia', marca: 'visa', producto: producto(texto) };
   return null;
+}
+
+/**
+ * El nombre comercial: 'MASTERCARD BLACK', 'VISA SIGNATURE'. Sirve de nombre
+ * de la tarjeta cuando el resumen no imprime los ultimos cuatro digitos, que
+ * es lo que pasa con los de Mastercard.
+ */
+function producto(texto) {
+  // Solo dentro de la misma linea: abajo viene el titular y se lo comeria.
+  const m = texto.match(/Tarjeta[ \t]+Cr[eé]dito[ \t]+((?:MASTERCARD|VISA)(?:[ \t][A-ZÁÉÍÓÚÑ]+)*)/i);
+  return m ? m[1].replace(/[ \t]+/g, ' ').trim() : null;
 }
 
 // ---------------------------------------------------------------------

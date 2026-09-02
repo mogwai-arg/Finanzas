@@ -225,13 +225,14 @@ export function aviso(msg, ms = 2800) {
   setTimeout(() => t.remove(), ms);
 }
 
-export function confirmar(msg, textoOk = 'Borrar') {
+export function confirmar(msg, textoOk = 'Borrar', { peligro = true } = {}) {
   return new Promise(ok => {
     const cerrar = hoja('¿Seguro?', h('div',
       h('p.mut', { style: { margin: '-6px 0 20px', fontSize: '14.5px', lineHeight: '1.45' } }, msg),
       h('div.fila',
         h('button.btn.sec', { onclick: () => { cerrar(); ok(false); } }, 'Cancelar'),
-        h('button.btn.dg', { onclick: () => { cerrar(); ok(true); } }, textoOk))
+        h(peligro ? 'button.btn.dg' : 'button.btn',
+          { onclick: () => { cerrar(); ok(true); } }, textoOk))
     ), { onClose: () => ok(false) });
   });
 }
