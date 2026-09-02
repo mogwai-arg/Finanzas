@@ -327,6 +327,49 @@ export function resumenMes(txs, per, moneda = 'ARS') {
 }
 
 /**
+ * Lo gastado en un mes hasta el dia N, para poder comparar meses en curso.
+ *
+ * Comparar el mes que va por la mitad contra el mes pasado entero no dice
+ * nada. Contra el mes pasado al mismo dia, si: es la unica comparacion que
+ * responde "¿voy gastando mas o menos que la vez pasada?".
+ */
+export function gastadoAlDia(txs, per, dia, moneda = 'ARS') {
+  let total = 0;
+  for (const tx of txs) {
+    if (tx.moneda !== moneda || tx.tipo !== 'gasto') continue;
+    const f = parseFecha(tx.fecha);
+    if (periodo(f) !== per || f.getDate() > dia) continue;
+    total += Number(tx.monto);
+  }
+  return round2(total);
+}
+
+/** El mes anterior a 'YYYY-MM'. */
+export function mesAnterior(per) {
+  const [y, m] = per.split('-').map(Number);
+  const d = new Date(y, m - 2, 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+
+/**
+ * Hace cuantos dias que no se carga nada a mano.
+ *
+ * La app vive de que le cuenten los gastos: tres dias sin cargar es la
+ * diferencia entre un mes que cierra y uno que no. Solo cuenta lo cargado a
+ * mano, porque lo que entra solo no dice nada del habito.
+ */
+export function diasSinCargar(txs, ref = hoy()) {
+  let ultima = null;
+  for (const tx of txs) {
+    if (tx.fuente && tx.fuente !== 'manual') continue;
+    const f = parseFecha(tx.created_at ? tx.created_at.slice(0, 10) : tx.fecha);
+    if (f > ref) continue;
+    if (!ultima || f > ultima) ultima = f;
+  }
+  return ultima ? dias(ref, ultima) * -1 : null;
+}
+
+/**
  * Saldo de una cuenta a una fecha.
  *
  * Una transferencia resta en la cuenta de origen y suma en la de destino. Si

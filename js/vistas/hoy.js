@@ -14,6 +14,7 @@ import * as S from '../sueldo.js';
 import { plataPartida, plata, cuandoVence, diasHasta, hoyISO, aFecha, nombreDe,
          aNumero, etiquetaCuenta } from '../formato.js';
 import { irA } from '../ruteo.js';
+import { bishu, queDiceBishu } from '../bishu.js';
 
 const per = () => hoyISO().slice(0, 7);
 
@@ -32,6 +33,7 @@ export function vistaHoy(root, { moneda = 'ARS' } = {}) {
       moneda === 'ARS' ? promosMarcadas(hoy) : null,
       moneda === 'ARS' ? proximoSueldo() : null,
       presupuesto(res, p),
+      moneda === 'ARS' ? tiraBishu(hoy) : null,
       antesDeComprar()
     )
   );
@@ -219,6 +221,36 @@ function loQueSeViene(hoy, moneda) {
   );
 }
 
+
+// -------------------------------------------------------------- bishu
+/**
+ * Bishu dice una cosa: la que no está en ninguna otra parte de la pantalla.
+ *
+ * Arriba ya se ve cuánto va gastado y qué se viene. Lo que falta es lo que no
+ * se ve mirando un solo mes: si venís gastando más o menos que la vez pasada,
+ * y si hace días que no le contás nada a la app —que es de lo que vive.
+ */
+function tiraBishu(hoy) {
+  const p = per();
+  const datos = {
+    diasSinCargar: F.diasSinCargar(state.transactions, hoy),
+    gastadoEsteMesAlDia: F.gastadoAlDia(state.transactions, p, hoy.getDate()),
+    gastadoMesPasadoAlDia: F.gastadoAlDia(state.transactions, F.mesAnterior(p), hoy.getDate()),
+    cargoHoy: state.transactions.some(t =>
+      (!t.fuente || t.fuente === 'manual') && String(t.fecha).slice(0, 10) === hoyISO())
+  };
+  const { animo, texto } = queDiceBishu(datos, hoy);
+  const color = animo === 'festejo' ? 'var(--pos)' : animo === 'alerta' ? 'var(--amb)' : 'var(--bra)';
+
+  return h('section',
+    h('div.grp.pad', { style: { display: 'flex', alignItems: 'center', gap: '13px' } },
+      h('div', { style: { color, flex: 'none' } }, bishu(animo, 46)),
+      h('div', { style: { flex: '1', minWidth: '0' } },
+        h('div', { style: { fontSize: '14.5px', lineHeight: '1.45' } }, texto),
+        h('button', { style: { background: 'none', border: '0', padding: '6px 0 0',
+                               color: 'var(--tx3)', fontSize: '12.5px', cursor: 'pointer' },
+                      onclick: () => irA('/ajustes') }, 'Elegí de qué te aviso'))));
+}
 
 // ------------------------------------------------------------- promos
 /**

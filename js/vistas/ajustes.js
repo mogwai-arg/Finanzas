@@ -3,8 +3,11 @@
 // =====================================================================
 import { h, icono, aviso, confirmar, hoja, campo } from '../ui.js';
 import { state, salir, sincronizar, exportarJSON, pendientes, fallidas, DEMO,
-         FUNCTIONS_URL, conectar, desconectar, leerAhora, mirarBandeja } from '../db.js';
-import { plata, fechaRelativa } from '../formato.js';
+         FUNCTIONS_URL, conectar, desconectar, leerAhora, mirarBandeja,
+         guardar, probarAviso } from '../db.js';
+import { plata, fechaRelativa, aNumero } from '../formato.js';
+import { bishu } from '../bishu.js';
+import { estadoPush, prenderPush, apagarPush } from '../push.js';
 import { irA } from '../ruteo.js';
 import { formCategorias } from './formularios.js';
 import { formImportarResumen } from './importar.js';
@@ -64,6 +67,8 @@ export function vistaAjustes(root) {
 
     seccionLectura(),
 
+    seccionAvisos(),
+
     h('section',
       h('div.ghead', 'Sueldo'),
       h('div.grp',
@@ -103,6 +108,110 @@ export function vistaAjustes(root) {
           h('div.av.neg', icono('cerrar', 17)),
           h('div.m', h('div.t', { style: { color: 'var(--neg)' } }, 'Cerrar sesión')))))
   ));
+}
+
+// =====================================================================
+// AVISOS
+// =====================================================================
+/**
+ * Los avisos que manda Bishu al teléfono, de a uno.
+ *
+ * Se prenden por separado porque el primer aviso que no interesa es el que
+ * hace apagar todos. Y el permiso se pide con un toque, no al abrir la app:
+ * pedirlo de entrada es la forma más rápida de que lo nieguen para siempre.
+ */
+const TIPOS = [
+  ['pagos',    'Vencimientos',       'Tarjetas y gastos fijos, dos días antes'],
+  ['promos',   'Promos marcadas',    'El día que cae la que pediste que te recuerde'],
+  ['resumen',  'Cierre de tarjeta',  'La víspera del cierre, para llegar con la compra'],
+  ['saldo',    'Saldo bajo',         'Cuando una cuenta queda por debajo del mínimo'],
+  ['aumentos', 'Aumentos',           'Cuando un correo dice que subió un gasto fijo'],
+  ['bishu',    'Cómo venís',         'Bishu compara con el mes pasado, una vez por semana']
+];
+
+function seccionAvisos() {
+  const grp = h('div.grp');
+  const sec = h('section', h('div.ghead', 'Avisos'), grp);
+
+  const prefs = () => (state.settings?.avisos) || {};
+  // Falta una clave = está prendida: un tipo nuevo no queda mudo para quien
+  // ya tenía sus preferencias guardadas.
+  const prendido = k => prefs()[k] !== false;
+
+  async function guardarPref(k, v) {
+    await guardar('settings', { ...(state.settings || {}), avisos: { ...prefs(), [k]: v } });
+  }
+
+  async function pintar() {
+    const estado = await estadoPush();
+    const listo = estado === 'listo';
+
+    const cabecera = h('div.li', { style: { alignItems: 'flex-start' } },
+      h('div', { style: { color: listo ? 'var(--bra)' : 'var(--tx3)', flex: 'none',
+                          marginTop: '2px' } },
+        bishu(listo ? 'contento' : 'dormido', 40)),
+      h('div.m',
+        h('div.t', 'Avisos en el teléfono'),
+        h('div.s', { style: { lineHeight: '1.45' } }, explicacion(estado))));
+
+    const boton = estado === 'listo'
+      ? h('button.btn.sec', { onclick: async () => {
+          await apagarPush(); aviso('Apagados en este teléfono'); pintar();
+        } }, 'Apagarlos en este teléfono')
+      : estado === 'apagado'
+        ? h('button.btn', { onclick: async () => {
+            try { await prenderPush(); aviso('Listo, te aviso por acá'); }
+            catch (e) { aviso(e.message); }
+            pintar();
+          } }, icono('campana', 17), 'Prender los avisos')
+        : null;
+
+    // replaceChildren es DOM crudo y no filtra: un null se dibuja como la
+    // palabra "null" en la pantalla.
+    grp.replaceChildren(...[
+      cabecera,
+      boton ? h('div', { style: { padding: '0 14px 14px' } }, boton) : null,
+      listo ? h('div', { style: { padding: '0 14px 14px' } },
+        h('button.btn.sec', { onclick: async () => {
+          try { const r = await probarAviso();
+                aviso(r.enviados ? 'Te lo mandé, mirá el teléfono' : 'No salió: ' + (r.motivo || 'revisá las claves')); }
+          catch (e) { aviso(e.message); }
+        } }, 'Mandarme uno de prueba')) : null,
+      ...TIPOS.map(([k, titulo, detalle]) => {
+        const chk = h('input', { type: 'checkbox', checked: prendido(k),
+                                 disabled: !listo,
+                                 onchange: e => guardarPref(k, e.target.checked) });
+        return h('label.li', { style: { opacity: listo ? '1' : '.5' } },
+          h('div.m', h('div.t', titulo), h('div.s', detalle)), chk);
+      }),
+      listo && prendido('saldo') ? filaSaldoMinimo() : null
+    ].filter(Boolean));
+  }
+
+  function filaSaldoMinimo() {
+    const inp = h('input', { type: 'text', inputmode: 'decimal',
+                             value: String(state.settings?.saldo_minimo || ''),
+                             placeholder: '50000', style: { width: '130px' },
+                             onchange: async e => {
+                               await guardar('settings', { ...(state.settings || {}),
+                                 saldo_minimo: aNumero(e.target.value) || 0 });
+                               aviso('Guardado');
+                             } });
+    return h('div.li',
+      h('div.m', h('div.t', 'Mínimo en la cuenta'),
+        h('div.s', 'Debajo de esto, Bishu avisa')), inp);
+  }
+
+  const explicacion = e => ({
+    'listo':       'Te llegan aunque la app esté cerrada.',
+    'apagado':     'Ahora los avisos aparecen solo dentro de la app.',
+    'bloqueado':   'El teléfono los tiene bloqueados para esta app. Se prenden desde los ajustes del sistema, en notificaciones.',
+    'sin-soporte': 'Este navegador no maneja avisos. En iPhone hay que agregar la app a la pantalla de inicio primero.',
+    'sin-clave':   'Faltan las claves de aviso en la configuración. Mientras tanto, los avisos aparecen dentro de la app.'
+  })[e] || '';
+
+  pintar();
+  return sec;
 }
 
 function exportar() {

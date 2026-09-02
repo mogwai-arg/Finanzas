@@ -14,40 +14,357 @@ var CORS = {
   "Access-Control-Allow-Methods": "GET, POST, OPTIONS"
 };
 var json = (b, status = 200) => new Response(JSON.stringify(b), { status, headers: { ...CORS, "Content-Type": "application/json" } });
+async function usuarioDe(req) {
+  const jwt = req.headers.get("Authorization")?.replace("Bearer ", "");
+  if (!jwt) return null;
+  const { data } = await admin().auth.getUser(jwt);
+  return data.user ?? null;
+}
+
+// supabase/functions/_shared/avisos.ts
+var plata = (n, moneda = "ARS") => `${moneda === "USD" ? "US$" : "$"} ${new Intl.NumberFormat("es-AR", { maximumFractionDigits: 0 }).format(Math.abs(Math.round(Number(n) || 0)))}`;
+var aFecha = (s) => {
+  const [y, m, d] = String(s).slice(0, 10).split("-").map(Number);
+  return new Date(y, m - 1, d);
+};
+var dias = (a, b) => Math.round((b.getTime() - a.getTime()) / 864e5);
+var ultimoDia = (y, m) => new Date(y, m + 1, 0).getDate();
+var diaSeguro = (y, m, d) => new Date(y, m, Math.min(d, ultimoDia(y, m)));
+function saldoDeCuenta(cuenta, txs, ref) {
+  let saldo = Number(cuenta.saldo_inicial) || 0;
+  const corte = cuenta.saldo_al ? aFecha(cuenta.saldo_al) : null;
+  for (const tx of txs) {
+    const f = aFecha(tx.fecha);
+    if (f > ref) continue;
+    if (corte && f < corte) continue;
+    const propio = tx.account_id === cuenta.id;
+    const destino = tx.destino_account_id === cuenta.id;
+    if (!propio && !destino) continue;
+    if (tx.tipo === "transferencia") {
+      if (propio) saldo -= Number(tx.monto);
+      if (destino) saldo += Number(tx.monto_destino != null ? tx.monto_destino : tx.monto);
+      continue;
+    }
+    if (!propio) continue;
+    if (cuenta.tipo === "credito") continue;
+    saldo += tx.tipo === "ingreso" ? Number(tx.monto) : -Number(tx.monto);
+  }
+  return Math.round(saldo * 100) / 100;
+}
+function promoAplica(p, ref) {
+  if (p.activa === false) return false;
+  const iso = `${ref.getFullYear()}-${String(ref.getMonth() + 1).padStart(2, "0")}-${String(ref.getDate()).padStart(2, "0")}`;
+  if (p.vigencia_desde && p.vigencia_desde > iso) return false;
+  if (p.vigencia_hasta && p.vigencia_hasta < iso) return false;
+  const d = p.dias || [];
+  return d.length === 0 || d.includes(ref.getDay());
+}
+function avisosDelDia(d, ref = /* @__PURE__ */ new Date()) {
+  const on = (k) => d.prefs?.[k] !== false;
+  const out = [];
+  const hoy = new Date(ref.getFullYear(), ref.getMonth(), ref.getDate());
+  const dia = hoy.getDate();
+  const per = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, "0")}`;
+  if (on("pagos")) {
+    for (const r of d.recurrings ?? []) {
+      if (r.activo === false) continue;
+      const pago = (d.pagos ?? []).find((p) => p.recurring_id === r.id && p.periodo === per && p.pagado_at);
+      if (pago) continue;
+      const vence = diaSeguro(hoy.getFullYear(), hoy.getMonth(), r.dia_vencimiento || 1);
+      const n = dias(hoy, vence);
+      const monto = plata(r.monto_estimado, r.moneda);
+      if (n === 0) out.push(msg("pagos", `Hoy vence ${r.nombre}`, `${monto}. Cuando lo pagues, tildalo y yo hago la cuenta.`, `fijo-${r.id}`));
+      else if (n === 2) out.push(msg("pagos", `${r.nombre} vence en 2 d\xEDas`, `${monto}.`, `fijo-${r.id}`));
+      else if (n === -1) out.push(msg("pagos", `${r.nombre} venci\xF3 ayer`, `${monto} y sigue impago.`, `fijo-${r.id}`));
+    }
+    for (const t of d.cuentas ?? []) {
+      if (t.tipo !== "credito" || t.activo === false || !t.vencimiento_dia) continue;
+      const n = dias(hoy, diaSeguro(hoy.getFullYear(), hoy.getMonth(), t.vencimiento_dia));
+      if (n === 0) out.push(msg("pagos", `Hoy vence ${t.nombre}`, "Mir\xE1 en Hoy cu\xE1nto qued\xF3 por pagar.", `tj-${t.id}`));
+      else if (n === 2) out.push(msg("pagos", `${t.nombre} vence en 2 d\xEDas`, "Mir\xE1 en Hoy cu\xE1nto qued\xF3 por pagar.", `tj-${t.id}`));
+    }
+  }
+  if (on("saldo")) {
+    const minimo = Number(d.saldoMinimo) || 0;
+    for (const c of d.cuentas ?? []) {
+      if (c.tipo === "credito" || c.activo === false) continue;
+      const saldo = saldoDeCuenta(c, d.txs ?? [], hoy);
+      if (saldo < 0)
+        out.push(msg("saldo", `${c.nombre} qued\xF3 en rojo`, `${plata(saldo, c.moneda)} en contra.`, `saldo-${c.id}`));
+      else if (minimo > 0 && saldo < minimo && (c.moneda || "ARS") === "ARS")
+        out.push(msg("saldo", `Queda poco en ${c.nombre}`, `${plata(saldo)}, por debajo del m\xEDnimo que pusiste.`, `saldo-${c.id}`));
+    }
+  }
+  if (on("promos")) {
+    for (const p of d.promos ?? []) {
+      if (!p.recordar || !promoAplica(p, hoy)) continue;
+      const detalle = [
+        `${Number(p.valor) || 0}% de ${p.tipo || "descuento"}`,
+        p.medio_pago,
+        p.tope ? `tope ${plata(p.tope)}` : null
+      ].filter(Boolean).join(" \xB7 ");
+      out.push(msg("promos", `Hoy: ${p.titulo || p.comercio}`, detalle, `promo-${p.id}`, "./#/promos"));
+    }
+  }
+  if (on("resumen")) {
+    for (const t of d.cuentas ?? []) {
+      if (t.tipo !== "credito" || t.activo === false || !t.cierre_dia) continue;
+      if (dias(hoy, diaSeguro(hoy.getFullYear(), hoy.getMonth(), t.cierre_dia)) !== 1) continue;
+      out.push(msg(
+        "resumen",
+        `${t.nombre} cierra ma\xF1ana`,
+        "Lo que compres despu\xE9s entra en el resumen siguiente.",
+        `cierre-${t.id}`,
+        "./#/tarjetas"
+      ));
+    }
+  }
+  if (on("aumentos")) {
+    for (const a of d.aumentos ?? []) {
+      out.push(msg(
+        "aumentos",
+        a.titulo || "Subi\xF3 un gasto fijo",
+        a.cuerpo || "Miralo en El mes y confirm\xE1 si lo actualizo.",
+        `aum-${a.id}`,
+        "./#/mes"
+      ));
+    }
+  }
+  if (on("bishu") && hoy.getDay() === 1 && dia > 7) {
+    const antes = Number(d.gastadoMesPasado) || 0;
+    const ahora = Number(d.gastadoEsteMes) || 0;
+    if (antes > 0 && ahora > 0) {
+      const dif = ahora - antes;
+      if (Math.abs(dif) / antes >= 0.08 && Math.abs(dif) >= 1e3) {
+        out.push(dif < 0 ? msg("bishu", `Vas ${plata(dif)} menos que el mes pasado`, "A esta altura del mes. Bien ah\xED.", "bishu") : msg("bishu", `Vas ${plata(dif)} m\xE1s que el mes pasado`, "A esta altura del mes. Por si quer\xE9s mirarlo.", "bishu"));
+      }
+    }
+  }
+  return out;
+}
+var msg = (tipo, titulo, cuerpo, tag, url = "./#/hoy") => ({ tipo, titulo, cuerpo, tag, url });
+
+// supabase/functions/_shared/push.ts
+var b64uABytes = (s) => {
+  const b = atob(s.replace(/-/g, "+").replace(/_/g, "/").padEnd(Math.ceil(s.length / 4) * 4, "="));
+  return Uint8Array.from(b, (c) => c.charCodeAt(0));
+};
+var bytesAB64u = (b) => btoa(String.fromCharCode(...b)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+var unir = (...partes) => {
+  const out = new Uint8Array(partes.reduce((n, p) => n + p.length, 0));
+  let i = 0;
+  for (const p of partes) {
+    out.set(p, i);
+    i += p.length;
+  }
+  return out;
+};
+var texto = (s) => new TextEncoder().encode(s);
+async function firmaVapid(endpoint, claves) {
+  const { origin } = new URL(endpoint);
+  const cabecera = { typ: "JWT", alg: "ES256" };
+  const cuerpo = {
+    aud: origin,
+    exp: Math.floor(Date.now() / 1e3) + 12 * 3600,
+    sub: claves.contacto
+  };
+  const sinFirma = `${bytesAB64u(texto(JSON.stringify(cabecera)))}.${bytesAB64u(texto(JSON.stringify(cuerpo)))}`;
+  const pub = b64uABytes(claves.publica);
+  const jwk = {
+    kty: "EC",
+    crv: "P-256",
+    ext: true,
+    x: bytesAB64u(pub.slice(1, 33)),
+    y: bytesAB64u(pub.slice(33, 65)),
+    d: claves.privada
+  };
+  const key = await crypto.subtle.importKey(
+    "jwk",
+    jwk,
+    { name: "ECDSA", namedCurve: "P-256" },
+    false,
+    ["sign"]
+  );
+  const firma = new Uint8Array(await crypto.subtle.sign(
+    { name: "ECDSA", hash: "SHA-256" },
+    key,
+    texto(sinFirma)
+  ));
+  return `${sinFirma}.${bytesAB64u(firma)}`;
+}
+var hkdf = async (salt, ikm, info, largo) => {
+  const key = await crypto.subtle.importKey("raw", ikm, "HKDF", false, ["deriveBits"]);
+  return new Uint8Array(await crypto.subtle.deriveBits(
+    { name: "HKDF", hash: "SHA-256", salt, info },
+    key,
+    largo * 8
+  ));
+};
+async function cifrar(mensaje, sub) {
+  const uaPublic = b64uABytes(sub.p256dh);
+  const authSecret = b64uABytes(sub.auth);
+  const par = await crypto.subtle.generateKey(
+    { name: "ECDH", namedCurve: "P-256" },
+    true,
+    ["deriveBits"]
+  );
+  const asPublic = new Uint8Array(await crypto.subtle.exportKey("raw", par.publicKey));
+  const uaKey = await crypto.subtle.importKey(
+    "raw",
+    uaPublic,
+    { name: "ECDH", namedCurve: "P-256" },
+    false,
+    []
+  );
+  const compartido = new Uint8Array(await crypto.subtle.deriveBits(
+    { name: "ECDH", public: uaKey },
+    par.privateKey,
+    256
+  ));
+  const prk = await hkdf(
+    authSecret,
+    compartido,
+    unir(texto("WebPush: info\0"), uaPublic, asPublic),
+    32
+  );
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const cek = await hkdf(salt, prk, texto("Content-Encoding: aes128gcm\0"), 16);
+  const nonce = await hkdf(salt, prk, texto("Content-Encoding: nonce\0"), 12);
+  const aes = await crypto.subtle.importKey("raw", cek, "AES-GCM", false, ["encrypt"]);
+  const claro = unir(texto(mensaje), new Uint8Array([2]));
+  const cifrado = new Uint8Array(await crypto.subtle.encrypt(
+    { name: "AES-GCM", iv: nonce },
+    aes,
+    claro
+  ));
+  const rs = new Uint8Array(4);
+  new DataView(rs.buffer).setUint32(0, 4096);
+  return unir(salt, rs, new Uint8Array([asPublic.length]), asPublic, cifrado);
+}
+async function enviarPush(sub, aviso, claves) {
+  const cuerpo = await cifrar(JSON.stringify(aviso), sub);
+  const r = await fetch(sub.endpoint, {
+    method: "POST",
+    headers: {
+      "Authorization": `vapid t=${await firmaVapid(sub.endpoint, claves)}, k=${claves.publica}`,
+      "Content-Encoding": "aes128gcm",
+      "Content-Type": "application/octet-stream",
+      "TTL": "86400"
+    },
+    body: cuerpo
+  });
+  return { ok: r.ok, status: r.status, muerta: r.status === 404 || r.status === 410 };
+}
+function clavesDelEntorno() {
+  const publica = Deno.env.get("VAPID_PUBLIC")?.trim();
+  const privada = Deno.env.get("VAPID_PRIVATE")?.trim();
+  if (!publica || !privada) return null;
+  return { publica, privada, contacto: Deno.env.get("VAPID_SUBJECT")?.trim() || "mailto:avisos@bishusha.app" };
+}
 
 // supabase/functions/cron-avisos/index.ts
+var MAX_POR_VEZ = 2;
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
+  const url = new URL(req.url);
+  if (url.searchParams.get("claves")) {
+    const par = await crypto.subtle.generateKey(
+      { name: "ECDSA", namedCurve: "P-256" },
+      true,
+      ["sign", "verify"]
+    );
+    const jwk = await crypto.subtle.exportKey("jwk", par.privateKey);
+    const pub = new Uint8Array(await crypto.subtle.exportKey("raw", par.publicKey));
+    return json({
+      VAPID_PUBLIC: bytesAB64u(pub),
+      VAPID_PRIVATE: jwk.d,
+      como: [
+        "VAPID_PUBLIC va en Cloudflare Pages, como variable de entorno.",
+        "VAPID_PRIVATE va en Supabase, en los secretos de las funciones.",
+        "VAPID_SUBJECT tambi\xE9n, con tu mail: mailto:vos@ejemplo.com",
+        "Guardalas: si las cambi\xE1s, los tel\xE9fonos ya suscriptos dejan de recibir."
+      ]
+    });
+  }
   const sb = admin();
+  const claves = clavesDelEntorno();
+  const cuerpo = req.method === "POST" ? await req.json().catch(() => ({})) : {};
+  if (cuerpo.probar) {
+    const u = await usuarioDe(req);
+    if (!u) return json({ error: "sin sesi\xF3n" }, 401);
+    if (!claves) return json({ enviados: 0, motivo: "faltan las claves VAPID" });
+    const n = await mandar(sb, claves, u.id, [{
+      tipo: "prueba",
+      titulo: "Soy Bishu",
+      tag: "prueba",
+      url: "./#/hoy",
+      cuerpo: "Si ves esto, los avisos te llegan aunque la app est\xE9 cerrada."
+    }]);
+    return json({ enviados: n, motivo: n ? null : "este tel\xE9fono no est\xE1 suscripto" });
+  }
   const hoy = /* @__PURE__ */ new Date();
   const per = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, "0")}`;
-  const dia = hoy.getDate();
-  const { data: users } = await sb.from("settings").select("user_id, alert_pct");
-  const avisos = [];
+  const mesPasado = (() => {
+    const d = new Date(hoy.getFullYear(), hoy.getMonth() - 1, 1);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+  })();
+  const hastaHoy = (p) => `${p}-${String(hoy.getDate()).padStart(2, "0")}`;
+  const { data: users } = await sb.from("settings").select("user_id, avisos, saldo_minimo");
+  const salida = [];
   for (const u of users ?? []) {
-    const msgs = [];
-    const { data: recs } = await sb.from("recurrings").select("*").eq("user_id", u.user_id).eq("activo", true);
-    const { data: pagos } = await sb.from("recurring_payments").select("*").eq("user_id", u.user_id).eq("periodo", per);
-    for (const r of recs ?? []) {
-      const pago = (pagos ?? []).find((p) => p.recurring_id === r.id && p.pagado_at);
-      if (pago) continue;
-      const d = r.dia_vencimiento - dia;
-      if (d === 2 || d === 0) msgs.push(`${r.nombre} vence ${d === 0 ? "hoy" : "en 2 d\xEDas"}`);
-      if (d === -1) msgs.push(`${r.nombre} venci\xF3 ayer y sigue impago`);
-    }
-    const { data: tjs } = await sb.from("accounts").select("*").eq("user_id", u.user_id).eq("tipo", "credito").eq("activo", true);
-    for (const t of tjs ?? []) {
-      if (t.cierre_dia - dia === 1) msgs.push(`${t.nombre} cierra ma\xF1ana`);
-      if (t.vencimiento_dia - dia === 2) msgs.push(`${t.nombre} vence en 2 d\xEDas`);
-    }
-    if (!msgs.length) continue;
+    const de = (t) => sb.from(t).select("*").eq("user_id", u.user_id);
+    const [cuentas, recurrings, pagos, promos, aumentos] = await Promise.all([
+      de("accounts"),
+      de("recurrings"),
+      sb.from("recurring_payments").select("*").eq("user_id", u.user_id).eq("periodo", per),
+      de("promos"),
+      sb.from("notificaciones").select("*").eq("user_id", u.user_id).eq("tipo", "aumento").eq("leida", false)
+    ]);
+    const { data: txs } = await sb.from("transactions").select("*").eq("user_id", u.user_id).gte("fecha", `${mesPasado}-01`);
+    const gastado = (p) => (txs ?? []).filter((t) => t.tipo === "gasto" && t.moneda === "ARS" && t.fecha >= `${p}-01` && t.fecha <= hastaHoy(p)).reduce((s, t) => s + Number(t.monto), 0);
+    const mensajes = avisosDelDia({
+      prefs: u.avisos ?? {},
+      saldoMinimo: Number(u.saldo_minimo) || 0,
+      cuentas: cuentas.data ?? [],
+      txs: txs ?? [],
+      recurrings: recurrings.data ?? [],
+      pagos: pagos.data ?? [],
+      promos: promos.data ?? [],
+      aumentos: aumentos.data ?? [],
+      gastadoEsteMes: gastado(per),
+      gastadoMesPasado: gastado(mesPasado)
+    }, hoy);
+    if (!mensajes.length) continue;
     await sb.from("notificaciones").insert({
       user_id: u.user_id,
-      tipo: "vencimiento",
-      titulo: msgs.length === 1 ? msgs[0] : `${msgs.length} vencimientos`,
-      cuerpo: msgs.join(" \xB7 ")
+      tipo: "aviso",
+      titulo: mensajes[0].titulo,
+      cuerpo: mensajes.map((m) => `${m.titulo}: ${m.cuerpo}`).join(" \xB7 ")
     });
-    avisos.push({ user: u.user_id, msgs });
+    const n = claves ? await mandar(sb, claves, u.user_id, mensajes.slice(0, MAX_POR_VEZ)) : 0;
+    salida.push({ user: u.user_id, avisos: mensajes.map((m) => m.titulo), enviados: n });
   }
-  return json({ ok: true, avisos });
+  return json({ ok: true, push: !!claves, salida });
 });
+async function mandar(sb, claves, userId, mensajes) {
+  const { data: subs } = await sb.from("push_subscriptions").select("*").eq("user_id", userId);
+  let enviados = 0;
+  for (const s of subs ?? []) {
+    for (const m of mensajes) {
+      try {
+        const r = await enviarPush(
+          { endpoint: s.endpoint, p256dh: s.p256dh, auth: s.auth },
+          { title: m.titulo, body: m.cuerpo, url: m.url, tag: m.tag },
+          claves
+        );
+        if (r.ok) enviados++;
+        else if (r.muerta) {
+          await sb.from("push_subscriptions").delete().eq("id", s.id);
+          break;
+        }
+      } catch {
+      }
+    }
+  }
+  return enviados;
+}

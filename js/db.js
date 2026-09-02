@@ -26,7 +26,8 @@ export const sb = DEMO ? stub
 
 export const TABLAS = ['accounts', 'categories', 'transactions', 'recurrings',
   'recurring_payments', 'budgets', 'promos', 'promo_usos', 'promo_sucursales', 'reglas',
-  'integrations', 'notificaciones', 'recibos', 'paritarias', 'sumas_nr', 'settings'];
+  'integrations', 'notificaciones', 'recibos', 'paritarias', 'sumas_nr',
+  'push_subscriptions', 'settings'];
 
 const CACHE_KEY = 'bishusha.cache.v1';
 const COLA_KEY  = 'bishusha.cola.v1';
@@ -38,7 +39,7 @@ export const state = {
   accounts: [], categories: [], transactions: [], recurrings: [],
   recurring_payments: [], budgets: [], promos: [], promo_usos: [], promo_sucursales: [],
   reglas: [], integrations: [], notificaciones: [], recibos: [],
-  paritarias: [], sumas_nr: [], settings: {},
+  paritarias: [], sumas_nr: [], push_subscriptions: [], settings: {},
   online: navigator.onLine, sincronizando: false, ultimaSync: null,
   ocultarMontos: false
 };
@@ -214,6 +215,21 @@ export async function mirarBandeja() {
   return d;
 }
 
+/** Manda un aviso de prueba a este teléfono, para ver que llegue de verdad. */
+export async function probarAviso() {
+  if (!FUNCTIONS_URL) throw new Error('Falta FUNCTIONS_URL en la configuración.');
+  const t = await token();
+  const r = await fetch(`${FUNCTIONS_URL}/cron-avisos`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${t}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ probar: true })
+  });
+  if (r.status === 404) throw new Error('Falta subir cron-avisos, o quedó con otro nombre.');
+  const d = await r.json().catch(() => null);
+  if (!r.ok || !d) throw new Error('No pude mandarlo.');
+  return d;
+}
+
 /**
  * Las promos vigentes de un rubro: { promos, revision }.
  *
@@ -340,7 +356,10 @@ const uuid = () => (crypto.randomUUID ? crypto.randomUUID()
 /** Guarda una fila (crea o actualiza) con escritura optimista. */
 export async function guardar(tabla, fila) {
   const nueva = normalizar(tabla, fila);
-  if (!nueva.id) nueva.id = uuid();
+  // settings tiene una fila por persona y su clave es user_id: agregarle un
+  // id la manda contra una columna que no existe y el cambio queda trabado en
+  // el cajon de fallidas sin que nada lo diga.
+  if (!nueva.id && tabla !== 'settings') nueva.id = uuid();
   nueva.user_id = state.user.id;
   nueva.updated_at = new Date().toISOString();
 

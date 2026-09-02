@@ -148,6 +148,8 @@ create table if not exists public.settings (
   usd_ref      numeric(14,2) default 0,
   sueldo_dia   int default 1,
   alert_pct    int default 80,                  -- % de presupuesto que dispara alerta
+  avisos       jsonb not null default '{}'::jsonb, -- que avisos llegan al telefono
+  saldo_minimo numeric(14,2) not null default 0,
   updated_at   timestamptz not null default now()
 );
 
@@ -285,6 +287,7 @@ create table if not exists public.push_subscriptions (
   auth       text not null,
   user_agent text,
   created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
   unique (endpoint)
 );
 

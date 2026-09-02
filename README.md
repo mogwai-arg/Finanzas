@@ -136,6 +136,8 @@ En este orden, que importa: primero el SQL, después las funciones.
    | `MP_CLIENT_SECRET` | el de Mercado Pago (o vacío por ahora) |
    | `FUNCTIONS_URL` | `https://<TU-PROJECT-REF>.supabase.co/functions/v1` |
    | `APP_URL` | `https://<TU-APP>.pages.dev` |
+   | `VAPID_PRIVATE` | para los avisos al teléfono (ver abajo) |
+   | `VAPID_SUBJECT` | `mailto:tu@correo.com` |
 
    `SUPABASE_URL` y `SUPABASE_SERVICE_ROLE_KEY` ya están: los pone Supabase.
 
@@ -195,9 +197,32 @@ Después, en **SQL Editor**, corré `supabase/cron.sql` reemplazando
 |---|---|---|
 | `gmail-sync` | 30 min | lee los avisos nuevos y carga los gastos |
 | `mp-sync` | 2 h | baja los movimientos de Mercado Pago |
-| `avisos` | 9:00 | te avisa vencimientos y gastos fijos impagos |
+| `avisos` | 9:00 | vencimientos, promos del día, saldo bajo y cómo venís |
 
 Por último, en la app: **Ajustes → Carga automática → Conectar**.
+
+### Los avisos en el teléfono
+
+Un aviso push necesita un par de claves propio de la app: la pública viaja al
+navegador y la privada firma cada aviso. Se generan una sola vez y **no se
+cambian nunca más**: si cambian, los teléfonos ya suscriptos dejan de recibir
+y hay que volver a prenderlos de a uno.
+
+1. Con `cron-avisos` ya desplegada, abrí en el navegador
+   `https://<TU-PROJECT-REF>.supabase.co/functions/v1/cron-avisos?claves=1`.
+   Devuelve un par nuevo. No se guarda en ningún lado: es de ese momento.
+2. `VAPID_PRIVATE` y `VAPID_SUBJECT` van a **Supabase → Edge Functions →
+   Secrets**.
+3. `VAPID_PUBLIC` va a **Cloudflare Pages → Settings → Environment
+   variables**, y hay que volver a publicar para que entre en `config.js`.
+4. En la app: **Ajustes → Avisos → Prender los avisos**, y después
+   **Mandarme uno de prueba**. Si llega, está.
+
+En iPhone hay un paso más: los avisos solo funcionan si la app está agregada a
+la pantalla de inicio (Compartir → Agregar a inicio). Desde Safari, no.
+
+Sin las claves no se rompe nada: los avisos siguen apareciendo dentro de la
+app, y Ajustes lo dice en vez de fallar en silencio.
 
 ### Qué lee exactamente de tu mail
 
@@ -264,11 +289,12 @@ generar un movimiento y cuáles no.
 
 ## Lo que todavía no hace
 
-- **Importar el resumen del banco en PDF.** Es la fase 3: con la carga
-  automática andando, el resumen sirve más para conciliar que para cargar.
-- **Push al celular fuera de la app.** Los avisos ya se generan; falta
-  generar las claves VAPID y una función que los mande. Mientras tanto los
-  ves al abrir la app.
+- **Objetivos de ahorro.** "Quiero gastar 200.000 menos este mes": Bishu ya
+  compara contra el mes pasado, falta poder ponerle un número y que la app
+  lleve la cuenta.
+- **Leer el resumen que llega por mail, solo.** Hoy el PDF se elige a mano en
+  Importar; falta que `gmail-sync` lo baje del adjunto y lo cruce con lo ya
+  cargado.
 - **Promos de Galicia scrapeadas solas.** El sitio de Galicia arma todo con
-  JavaScript y muestra promos distintas según tu segmento, así que la lista
-  se mantiene a mano (o con la tarea semanal).
+  JavaScript y muestra promos distintas según tu segmento. Se leen de Clash,
+  que las junta todas, y las que interesan se marcan a mano.
