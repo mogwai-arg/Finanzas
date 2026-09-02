@@ -108,9 +108,10 @@ create table if not exists public.budgets (
   user_id     uuid not null references auth.users(id) on delete cascade,
   periodo     text not null,                    -- 'YYYY-MM'
   category_id uuid references public.categories(id) on delete cascade,
+  account_id  uuid references public.accounts(id) on delete cascade,
+  clase       text not null default 'categoria',  -- categoria / cuenta / ahorro
   monto       numeric(14,2) not null default 0,
-  moneda      text not null default 'ARS' check (moneda in ('ARS','USD')),
-  unique (user_id, periodo, category_id)
+  moneda      text not null default 'ARS' check (moneda in ('ARS','USD'))
 );
 
 -- ---------------------------------------------------------------------
@@ -189,7 +190,9 @@ begin
     (new.id,'Hogar','gasto','#9a6b4f',7),
     (new.id,'Entretenimiento','gasto','#d13b8a',8),
     (new.id,'Indumentaria','gasto','#5f7a8a',9),
-    (new.id,'Otros','gasto','#8a8f98',10),
+    (new.id,'Salidas','gasto','#c0563b',10),
+    (new.id,'Regalos','gasto','#b04f9a',11),
+    (new.id,'Otros','gasto','#8a8f98',12),
     (new.id,'Sueldo','ingreso','#2fa96b',1),
     (new.id,'Extras','ingreso','#3bb6e0',2)
   on conflict do nothing;

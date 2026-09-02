@@ -47,6 +47,8 @@ const TRAZOS = {
   ojoNo:   'M9.6 5.9A9.8 9.8 0 0 1 12 5.6c6.4 0 10 6.4 10 6.4a17.6 17.6 0 0 1-3.3 4.1M6 7.1A17.4 17.4 0 0 0 2 12s3.6 6.4 10 6.4a9.9 9.9 0 0 0 3.4-.6M10 10a2.9 2.9 0 0 0 4 4M3 3l18 18',
   ajustes: 'M12 15.1a3.1 3.1 0 1 0 0-6.2 3.1 3.1 0 0 0 0 6.2zM12 2.6v2.2M12 19.2v2.2M2.6 12h2.2M19.2 12h2.2M5.4 5.4 7 7M17 17l1.6 1.6M18.6 5.4 17 7M7 17l-1.6 1.6',
   chev:    'm9 18 6-6-6-6',
+  lapiz:   'M4 20.2h4.2L18.8 9.6a2.9 2.9 0 0 0-4.1-4.1L4 16.1v4.1zM13.6 6.6l3.9 3.9',
+  tacho:   'M4 6.6h16M9.4 6.6V4.8a1.2 1.2 0 0 1 1.2-1.2h2.8a1.2 1.2 0 0 1 1.2 1.2v1.8M6.4 6.6l.9 13.1a1.2 1.2 0 0 0 1.2 1.1h7a1.2 1.2 0 0 0 1.2-1.1l.9-13.1M10 10.4v6.4M14 10.4v6.4',
   cerrar:  'M6 6l12 12M18 6 6 18',
   check:   'M20 6.4 9.2 17.2 4 12',
   buscar:  'M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14zm9 2-3.5-3.5',
@@ -336,6 +338,81 @@ export function select(opciones, props = {}) {
     s.append(op);
   }
   return s;
+}
+
+/**
+ * Deslizar una fila para editarla o borrarla.
+ *
+ * En el telefono el gesto es el atajo: abrir la ficha para cambiar un monto,
+ * o para borrar algo que se cargo dos veces, cuesta tres toques. Deslizar
+ * cuesta uno.
+ *
+ * Reglas del gesto, que son las que lo hacen no molestar:
+ *   · Solo toma el control si el dedo va mas horizontal que vertical. Si no,
+ *     es scroll de la lista y hay que devolverselo.
+ *   · Se suelta antes del umbral y vuelve solo, sin hacer nada.
+ *   · Borrar pregunta. Deslizar sin querer y perder un movimiento seria peor
+ *     que no tener el gesto.
+ */
+export function deslizable(fila, { alEditar, alBorrar } = {}) {
+  const fondo = h('div.desliz-fondo',
+    h('span.desliz-acc.edit', icono('lapiz', 17), 'Editar'),
+    h('span.desliz-acc.borrar', 'Borrar', icono('tacho', 17)));
+  const caja = h('div.desliz', fondo, fila);
+
+  const UMBRAL = 78;
+  let x0 = null, y0 = null, dx = 0, mando = false;
+
+  const soltar = () => {
+    fila.style.transition = 'transform .18s ease';
+    fila.style.transform = '';
+    fondo.classList.remove('vis', 'a-borrar', 'a-editar');
+  };
+
+  caja.addEventListener('touchstart', e => {
+    if (e.touches.length !== 1) { x0 = null; return; }
+    x0 = e.touches[0].clientX; y0 = e.touches[0].clientY; dx = 0; mando = false;
+    fila.style.transition = 'none';
+  }, { passive: true });
+
+  caja.addEventListener('touchmove', e => {
+    if (x0 == null) return;
+    const t = e.touches[0];
+    const ax = t.clientX - x0, ay = t.clientY - y0;
+    // Hasta que no se sabe hacia donde va el dedo, no se le roba el scroll.
+    if (!mando) {
+      if (Math.abs(ax) < 10 || Math.abs(ax) < Math.abs(ay)) return;
+      mando = true;
+      fondo.classList.add('vis');
+    }
+    dx = Math.max(-140, Math.min(140, ax));
+    if (!alEditar && dx > 0) dx = 0;
+    if (!alBorrar && dx < 0) dx = 0;
+    if (e.cancelable) e.preventDefault();
+    fila.style.transform = `translateX(${dx}px)`;
+    fondo.classList.toggle('a-editar', dx > UMBRAL);
+    fondo.classList.toggle('a-borrar', dx < -UMBRAL);
+  }, { passive: false });
+
+  const fin = async () => {
+    if (x0 == null) return;
+    const paso = dx;
+    x0 = null;
+    soltar();
+    if (!mando) return;
+    // Despues de un gesto horizontal el navegador manda igual el click de la
+    // fila: sin taparlo, deslizar para editar abria la ficha dos veces.
+    caja.addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); },
+                          { capture: true, once: true });
+    setTimeout(() => {
+      if (paso > UMBRAL && alEditar) alEditar();
+      else if (paso < -UMBRAL && alBorrar) alBorrar();
+    }, 0);
+  };
+  caja.addEventListener('touchend', fin);
+  caja.addEventListener('touchcancel', () => { x0 = null; soltar(); });
+
+  return caja;
 }
 
 export const esqueleto = (ancho = '60%', alto = 12) =>

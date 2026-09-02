@@ -172,6 +172,18 @@ input[type=checkbox]{width:auto;min-height:0}
 .dia:active{background:var(--line)}
 .dia[aria-pressed="true"]{background:var(--brand);color:#fff}
 
+/* ------------------------------------------- deslizar para editar/borrar */
+.desliz{position:relative;overflow:hidden}
+.desliz>.li{position:relative;z-index:1;background:var(--card);will-change:transform}
+.desliz-fondo{position:absolute;inset:0;display:none;align-items:center;
+              justify-content:space-between;padding:0 18px;
+              font-size:13px;font-weight:600;color:#fff;background:var(--brand)}
+.desliz-fondo.vis{display:flex}
+.desliz-fondo.a-borrar{background:var(--neg)}
+.desliz-acc{display:flex;align-items:center;gap:7px;opacity:.55}
+.desliz-fondo.a-editar .desliz-acc.edit,
+.desliz-fondo.a-borrar .desliz-acc.borrar{opacity:1}
+
 /* --------------------------------------------------- elegir un icono */
 .iconos{display:grid;grid-template-columns:repeat(6,1fr);gap:7px}
 .ico-op{aspect-ratio:1;min-height:44px;border:0;border-radius:12px;background:var(--fill);

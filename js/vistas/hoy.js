@@ -14,6 +14,7 @@ import * as S from '../sueldo.js';
 import { plataPartida, plata, cuandoVence, diasHasta, hoyISO, aFecha, nombreDe,
          aNumero, etiquetaCuenta } from '../formato.js';
 import { irA } from '../ruteo.js';
+import { formPago } from './mes.js';
 import { bishu, queDiceBishu } from '../bishu.js';
 
 const per = () => hoyISO().slice(0, 7);
@@ -208,7 +209,7 @@ function loQueSeViene(hoy, moneda) {
   for (const r of F.recurrentesDelMes(state.recurrings, state.recurring_payments, p, hoy)) {
     if (r.pagado || r.moneda !== moneda) continue;
     items.push({ id: r.id, nombre: r.nombre, monto: r.monto, vence: r.vence,
-                 icono: iconoDe(r.nombre), ir: `/mes` });
+                 icono: iconoDe(r.nombre), recurrente: r, periodo: p, ir: `/mes` });
   }
 
   if (!items.length) return null;
@@ -235,10 +236,12 @@ function loQueSeViene(hoy, moneda) {
             h('div.s', cuandoVence(iso, hoy) + (it.nota ? ` · ${it.nota}` : ''))),
           h('div.v', plata(moneda === 'USD' ? it.monto : Math.round(it.monto), moneda))),
         // Anotar el pago desde acá: es donde uno lo mira, y si hay que ir a
-        // buscarlo a otra pantalla se anota después, o nunca.
-        it.tarjeta ? h('button.iconbtn', { 'aria-label': `Pagar ${it.nombre}`,
-          style: { flex: 'none' },
-          onclick: () => formPagoTarjeta(it.tarjeta, it.ciclo, it.monto, moneda) },
+        // buscarlo a otra pantalla se anota después, o nunca. Vale para las
+        // dos cosas que se pagan: el resumen y el gasto fijo.
+        (it.tarjeta || it.recurrente) ? h('button.iconbtn', {
+          'aria-label': `Pagar ${it.nombre}`, style: { flex: 'none' },
+          onclick: () => it.tarjeta ? formPagoTarjeta(it.tarjeta, it.ciclo, it.monto, moneda)
+                                    : formPago(it.recurrente, it.periodo) },
           icono('check', 18)) : null);
     }))
   );

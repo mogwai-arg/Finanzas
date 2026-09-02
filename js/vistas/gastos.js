@@ -3,8 +3,8 @@
 // El reintegro se muestra DEBAJO del monto, no restado: se quiere ver lo
 // que se pago y lo que van a devolver, separados.
 // =====================================================================
-import { h, icono, iconoDe } from '../ui.js';
-import { state } from '../db.js';
+import { h, icono, iconoDe, deslizable, confirmar, aviso } from '../ui.js';
+import { state, borrar } from '../db.js';
 import * as F from '../finance.js';
 import { plata, fechaRelativa, nombreDe, buscar, tituloTx, dondeTx } from '../formato.js';
 import { formMovimiento } from './form-movimiento.js';
@@ -59,7 +59,14 @@ export function vistaGastos(root) {
                                                       textTransform: 'none',
                                                       color: neto > 0 ? 'var(--pos)' : 'var(--tx3)' } },
             plata(neto, moneda, { signo: neto > 0 }))),
-        h('div.grp', items.map(it => fila(it, moneda)))));
+        h('div.grp', items.map(it => deslizable(fila(it, moneda), {
+          alEditar: () => formMovimiento(it.tx),
+          alBorrar: async () => {
+            if (!await confirmar(`¿Borrar "${tituloTx(it.tx)}"?`)) return;
+            await borrar('transactions', it.tx.id);
+            aviso('Borrado'); pintar();
+          }
+        })))));
     }
   }
 

@@ -15,6 +15,10 @@ export function vistaMes(root) {
   const rec = F.recurrentesDelMes(state.recurrings, state.recurring_payments, p, hoy);
   const res = F.resumenMes(state.transactions, p, 'ARS');
   const budgets = state.budgets.filter(b => b.periodo === p);
+  const alertPct = Number(state.settings?.alert_pct) || 80;
+  const porCuenta = F.estadoPorCuenta(budgets, state.transactions, p, alertPct);
+  const ahorro = ['ARS', 'USD']
+    .map(m => F.estadoAhorro(budgets, state.transactions, p, m)).filter(Boolean);
   const faltan = rec.filter(r => !r.pagado);
   const tarjetas = resumenesDelMes(hoy);
   const esteMes = tarjetas.filter(t => F.periodo(t.vence) === p);
@@ -47,7 +51,9 @@ export function vistaMes(root) {
       h('div.ghead', 'Gastos fijos',
         h('button', { onclick: () => formRecurrente() }, 'Agregar')),
       rec.length
-        ? h('div.grp', rec.map(r => filaRecurrente(r, p, hoy)))
+        ? h('div',
+            h('div.grp', rec.map(r => filaRecurrente(r, p, hoy))),
+            totalFijos(rec))
         : h('div.vacio', { style: { padding: '32px 24px' } },
             h('div.ic', icono('reloj', 24)),
             h('h3', 'Sin gastos fijos cargados'),
@@ -58,8 +64,14 @@ export function vistaMes(root) {
       h('div.ghead', 'Presupuesto',
         h('button', { onclick: () => formPresupuesto(p) }, budgets.length ? 'Ajustar' : 'Definir')),
       budgets.length
-        ? h('div.grp', F.estadoPresupuesto(budgets, res, Number(state.settings?.alert_pct) || 80)
-            .map(b => filaPresupuesto(b)))
+        ? h('div',
+            h('div.grp', F.estadoPresupuesto(budgets, res, alertPct).map(b => filaPresupuesto(b))),
+            porCuenta.length ? h('div', { style: { marginTop: '16px' } },
+              h('div.ghead', 'Tope por tarjeta'),
+              h('div.grp', porCuenta.map(b => filaPresupuesto(b, nombreDe('accounts', b.account_id))))) : null,
+            ahorro.length ? h('div', { style: { marginTop: '16px' } },
+              h('div.ghead', 'Ideal de ahorro'),
+              h('div.grp', ahorro.map(filaAhorro))) : null)
         : h('div.grp.pad', h('div.small.mut', { style: { lineHeight: '1.5' } },
             'Sin topes cargados no hay con qué comparar el gasto del mes. ',
             'Empezá por tres categorías, no por diez.')))
@@ -123,6 +135,10 @@ async function togglePago(r, periodo) {
 /**
  * Marcar pagado diciendo cuanto se pago de verdad, y de donde salio.
  *
+ * Se exporta porque tambien se paga desde Hoy: el gasto fijo que vence se ve
+ * ahi, y mandar a otra pantalla para tildarlo es la diferencia entre anotarlo
+ * y no anotarlo.
+ *
  * El alquiler vale 850 dolares pero se pagan 900 para no romper billetes: lo
  * que vale no cambia, los 50 quedan a favor del mes que viene. Por eso el
  * monto siempre se puede editar, no solo en los gastos marcados como
@@ -133,7 +149,7 @@ async function togglePago(r, periodo) {
  * en Gastos ni bajaba el saldo de ninguna cuenta. Ahora crea el gasto y lo
  * deja atado al pago, para poder deshacerlo entero.
  */
-function formPago(r, periodo) {
+export function formPago(r, periodo) {
   const cuentas = state.accounts.filter(a => a.activo !== false);
   const campo = h('input', { type: 'text', inputmode: 'decimal',
                              value: String(r.sugerido || r.valor || ''), 'aria-label': 'Monto pagado' });
@@ -200,24 +216,69 @@ function cuentaPorDefecto(cuentas, moneda = 'ARS') {
 }
 
 
-function filaPresupuesto(b) {
-  const nom = nombreDe('categories', b.category_id, 'Sin categoría');
+/**
+ * Cuánto suman los gastos fijos del mes, y cuánto de eso ya está pagado.
+ *
+ * Es el número que uno quiere antes de repartir el resto: la parte del mes
+ * que ya está comprometida antes de decidir nada. Los dólares van aparte
+ * porque sumarlos a los pesos daría un número que no existe.
+ */
+function totalFijos(rec) {
+  const suma = (m, filtro) => rec.filter(r => (r.moneda || 'ARS') === m).filter(filtro)
+    .reduce((s, r) => s + Number(r.monto || 0), 0);
+  const filas = ['ARS', 'USD'].map(m => {
+    const total = suma(m, () => true);
+    if (!total) return null;
+    const pagado = suma(m, r => r.pagado);
+    return h('div', { style: { display: 'flex', justifyContent: 'space-between',
+                               alignItems: 'baseline', gap: '10px', marginTop: '3px' } },
+      h('span.small.mut', `Por mes${m === 'USD' ? ' en dólares' : ''}`),
+      h('span', h('b', { class: 'tabnum', style: { fontSize: '15px' } },
+        plata(Math.round(total), m)),
+        pagado > 0 ? h('span.small.mut', ` · pagaste ${plata(Math.round(pagado), m)}`) : null));
+  }).filter(Boolean);
+  if (!filas.length) return null;
+  return h('div', { style: { padding: '12px 14px 2px' } }, filas);
+}
+
+/** El ahorro no es un tope que no hay que pasar: es un piso al que llegar. */
+function filaAhorro(a) {
+  const pct = Math.min(100, Math.max(0, a.pct));
+  return h('div', { style: { padding: '13px 14px' } },
+    h('div', { style: { display: 'flex', justifyContent: 'space-between',
+                        alignItems: 'baseline', gap: '10px' } },
+      h('span', { style: { fontSize: '14.5px', fontWeight: '500' } },
+        a.moneda === 'USD' ? 'En dólares' : 'En pesos'),
+      h('span.small.mut', h('b', { style: { color: a.ahorrado >= a.tope ? 'var(--pos)' : 'var(--tx)' } },
+        plata(Math.round(a.ahorrado), a.moneda)), ` de ${plata(a.tope, a.moneda)}`)),
+    h('div.mini', h('b', { class: a.ahorrado >= a.tope ? '' : 'al',
+                           style: { flex: String(Math.max(1, pct)) } }),
+      h('span', { style: { flex: String(Math.max(1, 100 - pct)) } })),
+    h('div.small.mut', { style: { marginTop: '7px' } },
+      a.ahorrado >= a.tope ? '¡Llegaste!'
+        : a.ahorrado < 0 ? `Vas ${plata(Math.abs(a.ahorrado), a.moneda)} en contra este mes.`
+        : `Te faltan ${plata(Math.round(a.falta), a.moneda)}.`));
+}
+
+function filaPresupuesto(b, nombre) {
+  const nom = nombre || nombreDe('categories', b.category_id, 'Sin categoría');
   const dentro = Math.min(b.gastado, b.tope);
   const exceso = Math.max(0, b.gastado - b.tope);
   return h('div', { style: { padding: '13px 14px', position: 'relative' } },
     h('div', { style: { display: 'flex', justifyContent: 'space-between',
                         alignItems: 'baseline', gap: '10px' } },
       h('span', { style: { fontSize: '14.5px', fontWeight: '500' } }, nom),
-      h('span.small.mut', h('b', { style: { color: 'var(--tx)' } }, plata(Math.round(b.gastado))),
-        ` de ${plata(b.tope)}`)),
+      h('span.small.mut', h('b', { style: { color: 'var(--tx)' } },
+        plata(Math.round(b.gastado), b.moneda || 'ARS')),
+        ` de ${plata(b.tope, b.moneda || 'ARS')}`)),
     h('div.mini',
       h('b', { class: b.pct >= 80 ? 'al' : '', style: { flex: String(Math.max(1, dentro)) } }),
       exceso > 0 && h('s', { style: { flex: String(exceso) } })),
     exceso > 0 && h('div', {
       style: { fontSize: '12.5px', color: 'var(--amb)', fontWeight: '600', marginTop: '7px' } },
-      `${plata(Math.round(exceso))} de más`),
+      `${plata(Math.round(exceso), b.moneda || 'ARS')} de más`),
     exceso === 0 && b.restante > 0 && h('div.small.mut', { style: { marginTop: '7px' } },
-      `quedan ${plata(Math.round(b.restante))}`));
+      `quedan ${plata(Math.round(b.restante), b.moneda || 'ARS')}`));
 }
 
 /**

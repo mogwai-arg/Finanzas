@@ -531,7 +531,7 @@ export function duplicadoManual(tx, existentes, { dias = 4, centavos = 1 } = {})
 
 /** Presupuesto vs gastado por categoria. */
 export function estadoPresupuesto(budgets, resumen, alertPct = 80) {
-  return budgets.map(b => {
+  return budgets.filter(b => b.category_id).map(b => {
     const gastado = round2(resumen.porCategoria[b.category_id] || 0);
     const tope = Number(b.monto) || 0;
     const pct = tope > 0 ? Math.round((gastado / tope) * 100) : 0;
@@ -541,6 +541,48 @@ export function estadoPresupuesto(budgets, resumen, alertPct = 80) {
       restante: round2(tope - gastado)
     };
   });
+}
+
+/**
+ * Topes por cuenta: "que la Visa no me pase de 800.000 este mes".
+ *
+ * Es la otra forma de ponerse un limite, y la que uno usa con las tarjetas:
+ * no importa en que se gasto, importa cuanto va a venir el resumen. Cuenta
+ * todo lo cargado a esa cuenta en el mes, en su moneda.
+ */
+export function estadoPorCuenta(budgets, txs, per, alertPct = 80) {
+  return budgets.filter(b => b.account_id).map(b => {
+    let gastado = 0;
+    for (const tx of txs) {
+      if (tx.account_id !== b.account_id || tx.tipo !== 'gasto') continue;
+      if ((tx.moneda || 'ARS') !== (b.moneda || 'ARS')) continue;
+      if (periodo(parseFecha(tx.fecha)) !== per) continue;
+      gastado += Number(tx.monto) || 0;
+    }
+    const tope = Number(b.monto) || 0;
+    const pct = tope > 0 ? Math.round((gastado / tope) * 100) : 0;
+    return { ...b, gastado: round2(gastado), tope, pct,
+             estado: pct >= 100 ? 'excedido' : pct >= alertPct ? 'alerta' : 'ok',
+             restante: round2(tope - gastado) };
+  });
+}
+
+/**
+ * Lo ahorrado en el mes contra lo que uno se propuso.
+ *
+ * Ahorrado es lo que entro menos lo que salio: no hace falta que la plata
+ * este en una cuenta aparte para que cuente. Las movidas entre cuentas
+ * propias no son ni una cosa ni la otra, y por eso no entran.
+ */
+export function estadoAhorro(budgets, txs, per, moneda = 'ARS') {
+  const meta = budgets.find(b => b.clase === 'ahorro' && (b.moneda || 'ARS') === moneda);
+  if (!meta || !(Number(meta.monto) > 0)) return null;
+  const r = resumenMes(txs, per, moneda);
+  const ahorrado = round2(r.ingresos - r.gastos);
+  const tope = Number(meta.monto);
+  return { ...meta, ahorrado, tope, moneda,
+           pct: Math.max(0, Math.round((ahorrado / tope) * 100)),
+           falta: round2(Math.max(0, tope - ahorrado)) };
 }
 
 // ---------------------------------------------------------------------

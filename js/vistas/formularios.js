@@ -262,30 +262,79 @@ export function formPresupuesto(periodo = hoyISO().slice(0, 7)) {
       `Ojo que tus gastos fijos de este mes suman ${plata(Math.round(fijos))}. `,
       'Los que tengan categoría entran acá adentro, no aparte.'));
 
+  // Un tope por cuenta contesta otra pregunta: no "cuánto puedo gastar en
+  // comida" sino "cuánto quiero que me venga la Visa". Con las tarjetas es la
+  // forma en que uno se pone el límite de verdad.
+  const cuentas = state.accounts.filter(a => a.activo !== false && a.tipo === 'credito');
+  const porCuenta = new Map(state.budgets.filter(b => b.periodo === periodo && b.account_id)
+                                         .map(b => [b.account_id, b]));
+  const camposCuenta = new Map();
+  const ahorros = new Map(state.budgets.filter(b => b.periodo === periodo && b.clase === 'ahorro')
+                                       .map(b => [b.moneda || 'ARS', b]));
+  const camposAhorro = new Map();
+
+  const campo1 = (etiqueta, ic, inp) => h('div.f', { style: { marginBottom: '13px' } },
+    h('label', { style: { display: 'flex', alignItems: 'center', gap: '8px' } },
+      ic ? icono(ic, 15) : null, etiqueta), inp);
+
   const cuerpo = h('div',
     cabecera,
     h('div.small.mut', { style: { marginBottom: '18px', lineHeight: '1.5' } },
-      `Topes de ${periodoLargo(periodo)}. Dejá en blanco las categorías que no querés seguir: `,
+      `Topes de ${periodoLargo(periodo)}. Dejá en blanco lo que no quieras seguir: `,
       'un presupuesto con diez renglones que no mirás es peor que uno con tres.'),
+
+    h('div.ghead', { style: { margin: '0 0 11px' } }, 'Por categoría'),
     ...cats.map(cat => {
       const b = actuales.get(cat.id);
       const inp = h('input', { type: 'text', inputmode: 'decimal',
                                value: b ? String(b.monto) : '', placeholder: '0',
                                oninput: recalcular });
       campos.set(cat.id, inp);
-      return h('div.f', { style: { marginBottom: '13px' } },
-        h('label', { style: { display: 'flex', alignItems: 'center', gap: '8px' } },
-          icono(iconoDeCategoria(cat), 15), cat.nombre), inp);
+      return campo1(cat.nombre, iconoDeCategoria(cat), inp);
     }),
+
+    cuentas.length ? h('div', h('div.ghead', { style: { margin: '18px 0 4px' } }, 'Tope por tarjeta'),
+      h('div.small.mut', { style: { marginBottom: '11px', lineHeight: '1.5' } },
+        'Cuánto querés que venga cada resumen. No se suma a lo de arriba: es la ',
+        'misma plata mirada por otro lado.'),
+      ...cuentas.map(a => {
+        const b = porCuenta.get(a.id);
+        const inp = h('input', { type: 'text', inputmode: 'decimal',
+                                 value: b ? String(b.monto) : '', placeholder: '0' });
+        camposCuenta.set(a.id, inp);
+        return campo1(etiquetaCuenta(a), 'tarjeta', inp);
+      })) : null,
+
+    h('div', h('div.ghead', { style: { margin: '18px 0 4px' } }, 'Ideal de ahorro'),
+      h('div.small.mut', { style: { marginBottom: '11px', lineHeight: '1.5' } },
+        'Lo que te gustaría que sobre a fin de mes. Ahorrado es lo que entró ',
+        'menos lo que salió: no hace falta moverlo a otra cuenta para que cuente.'),
+      ...['ARS', 'USD'].map(m => {
+        const b = ahorros.get(m);
+        const inp = h('input', { type: 'text', inputmode: 'decimal',
+                                 value: b ? String(b.monto) : '', placeholder: '0' });
+        camposAhorro.set(m, inp);
+        return campo1(m === 'ARS' ? 'En pesos' : 'En dólares',
+                      m === 'ARS' ? 'billete' : 'monedas', inp);
+      })),
+
     h('button.btn', { style: { marginTop: '4px' }, onclick: async () => {
       let n = 0;
-      for (const [catId, inp] of campos) {
-        const monto = num(inp.value);
-        const b = actuales.get(catId);
-        if (monto > 0) { await guardar('budgets', { ...(b || {}), periodo, category_id: catId,
-                                                    monto, moneda: 'ARS' }); n++; }
-        else if (b) await borrar('budgets', b.id);
+      const poner = async (viejo, fila) => {
+        if (fila.monto > 0) { await guardar('budgets', { ...(viejo || {}), periodo, ...fila }); n++; }
+        else if (viejo) await borrar('budgets', viejo.id);
+      };
+      for (const [catId, inp] of campos)
+        await poner(actuales.get(catId), { category_id: catId, account_id: null,
+                                           clase: 'categoria', monto: num(inp.value), moneda: 'ARS' });
+      for (const [cuentaId, inp] of camposCuenta) {
+        const cta = cuentas.find(a => a.id === cuentaId);
+        await poner(porCuenta.get(cuentaId), { account_id: cuentaId, category_id: null,
+          clase: 'cuenta', monto: num(inp.value), moneda: cta?.moneda || 'ARS' });
       }
+      for (const [moneda, inp] of camposAhorro)
+        await poner(ahorros.get(moneda), { category_id: null, account_id: null,
+                                           clase: 'ahorro', monto: num(inp.value), moneda });
       cerrar(); aviso(n ? `${n} topes guardados` : 'Presupuesto vacío');
     } }, 'Guardar'));
 
@@ -463,8 +512,30 @@ export function conectarCategoria(sel, tipoDe = () => 'gasto', alCambiar = () =>
     alCambiar(sel.value);
   });
 }
+// Las que casi siempre faltan y uno termina metiendo en "Otros", que es donde
+// van a morir los gastos que despues no se pueden explicar.
+const SUGERIDAS = [
+  ['Libros y cómics', 'lista'], ['Juegos de mesa', 'play'], ['Salidas', 'comida'],
+  ['Almuerzos', 'comida'], ['Cenas', 'comida'], ['Regalos', 'sobre'],
+  ['Indumentaria', 'varios'], ['Mascotas', 'varios']
+];
+
 export function formCategorias() {
   const lista = h('div.grp');
+  const sugeridas = h('div.chips', { style: { flexWrap: 'wrap', marginBottom: '16px' } });
+  const pintarSugeridas = () => {
+    const tengo = new Set(state.categories.map(c => c.nombre.toLowerCase()));
+    const faltan = SUGERIDAS.filter(([n]) => !tengo.has(n.toLowerCase()));
+    sugeridas.replaceChildren(...faltan.map(([nombre, ic]) =>
+      h('button.pill.mut', { onclick: async e => {
+        e.currentTarget.disabled = true;
+        await guardar('categories', { nombre, tipo: 'gasto', icono: ic,
+                                      orden: state.categories.length + 1 });
+        pintar(); pintarSugeridas(); aviso(`${nombre} agregada`);
+      } }, icono('mas', 13), nombre)));
+    sugeridas.hidden = !faltan.length;
+  };
+
   const pintar = () => {
     lista.replaceChildren(...state.categories
       .slice().sort((a, b) => (a.tipo === b.tipo ? (a.orden || 0) - (b.orden || 0)
@@ -504,8 +575,13 @@ export function formCategorias() {
           cerrar2(); pintar(); aviso('Guardada');
         } }, 'Guardar'))));
   };
-  pintar();
+  pintar(); pintarSugeridas();
   hoja('Categorías', h('div', lista,
+    h('div', { style: { marginTop: '16px' } },
+      h('div.ghead', { style: { margin: '0 0 9px' } }, 'Sugeridas'),
+      h('div.small.mut', { style: { marginBottom: '11px', lineHeight: '1.5' } },
+        'Las que casi siempre faltan y terminan cayendo en "Otros". Tocá y se crean.'),
+      sugeridas),
     h('button.btn.sec', { style: { marginTop: '14px' }, onclick: () => editar() },
       icono('mas', 16), 'Nueva categoría')));
 }
