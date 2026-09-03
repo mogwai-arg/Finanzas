@@ -15,6 +15,38 @@ var CORS = {
 };
 var json = (b, status = 200) => new Response(JSON.stringify(b), { status, headers: { ...CORS, "Content-Type": "application/json" } });
 
+// supabase/functions/_shared/pagos.ts
+var ES_PAGO = /pago\s*(de\s*)?(tu\s*)?(tarjeta|resumen)|pago\s*(visa|master|mastercard|amex|american)|su pago en pesos|pagaste tu (resumen|tarjeta)|pago de tu (resumen|tarjeta)|cancelaci[oó]n de resumen/i;
+function esPagoDeTarjeta(texto, cuentas = []) {
+  const t = String(texto || "");
+  if (!ES_PAGO.test(t)) return null;
+  const tarjetas = cuentas.filter((c) => c.tipo === "credito" && c.activo !== false);
+  if (!tarjetas.length) return null;
+  const cuatro = t.match(/\b(?:\*{2,4}\s*)?(\d{4})\b(?!\s*[.,]\d)/g) || [];
+  for (const c of tarjetas) {
+    if (c.ultimos4 && cuatro.some((x) => x.replace(/\D/g, "") === c.ultimos4)) return c;
+  }
+  for (const c of tarjetas) {
+    const marca = String(c.nombre || "").toLowerCase().match(/visa|master(card)?|amex|american/)?.[0];
+    if (marca && new RegExp(marca, "i").test(t)) return c;
+  }
+  return tarjetas.length === 1 ? tarjetas[0] : null;
+}
+function comoPagoDeTarjeta(fila, tarjeta) {
+  return {
+    ...fila,
+    tipo: "transferencia",
+    destino_account_id: tarjeta.id,
+    account_id: fila.account_id ?? null,
+    descripcion: `Pago ${tarjeta.nombre ?? "tarjeta"}`,
+    // Una movida no va a ninguna categoría de gasto: la plata sigue siendo
+    // tuya, cambió de lugar. Dejarle la categoría la metería en el gráfico de
+    // en qué se fue.
+    category_id: null,
+    cuotas: 1
+  };
+}
+
 // supabase/functions/_shared/parsers.ts
 function plata(s) {
   if (!s) return NaN;
@@ -455,7 +487,7 @@ async function insertar(sb, userId, mov, cuentas, cats, reglas, externoId) {
     }).eq("id", previo.id);
     return "adoptado";
   }
-  const fila = {
+  let fila = {
     user_id: userId,
     fecha: mov.fecha,
     descripcion: mov.comercio,
@@ -471,6 +503,11 @@ async function insertar(sb, userId, mov, cuentas, cats, reglas, externoId) {
     revisado: false,
     confianza: mov.confianza
   };
+  const laTarjeta = esPagoDeTarjeta(`${mov.comercio} ${texto}`.slice(0, 400), cuentas);
+  if (laTarjeta) {
+    fila = comoPagoDeTarjeta(fila, laTarjeta);
+    if (fila.account_id === laTarjeta.id) fila.account_id = null;
+  }
   const { data, error } = await sb.from("transactions").insert(fila).select().single();
   if (error) return error.code === "23505" ? "duplicado" : Promise.reject(error);
   return data;

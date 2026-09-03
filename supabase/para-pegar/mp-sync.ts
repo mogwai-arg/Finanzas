@@ -41,6 +41,38 @@ function loQueSuma(previo, nuevo) {
   return Object.keys(cambios).length ? cambios : null;
 }
 
+// supabase/functions/_shared/pagos.ts
+var ES_PAGO = /pago\s*(de\s*)?(tu\s*)?(tarjeta|resumen)|pago\s*(visa|master|mastercard|amex|american)|su pago en pesos|pagaste tu (resumen|tarjeta)|pago de tu (resumen|tarjeta)|cancelaci[oó]n de resumen/i;
+function esPagoDeTarjeta(texto, cuentas = []) {
+  const t = String(texto || "");
+  if (!ES_PAGO.test(t)) return null;
+  const tarjetas = cuentas.filter((c) => c.tipo === "credito" && c.activo !== false);
+  if (!tarjetas.length) return null;
+  const cuatro = t.match(/\b(?:\*{2,4}\s*)?(\d{4})\b(?!\s*[.,]\d)/g) || [];
+  for (const c of tarjetas) {
+    if (c.ultimos4 && cuatro.some((x) => x.replace(/\D/g, "") === c.ultimos4)) return c;
+  }
+  for (const c of tarjetas) {
+    const marca = String(c.nombre || "").toLowerCase().match(/visa|master(card)?|amex|american/)?.[0];
+    if (marca && new RegExp(marca, "i").test(t)) return c;
+  }
+  return tarjetas.length === 1 ? tarjetas[0] : null;
+}
+function comoPagoDeTarjeta(fila, tarjeta) {
+  return {
+    ...fila,
+    tipo: "transferencia",
+    destino_account_id: tarjeta.id,
+    account_id: fila.account_id ?? null,
+    descripcion: `Pago ${tarjeta.nombre ?? "tarjeta"}`,
+    // Una movida no va a ninguna categoría de gasto: la plata sigue siendo
+    // tuya, cambió de lugar. Dejarle la categoría la metería en el gráfico de
+    // en qué se fue.
+    category_id: null,
+    cuotas: 1
+  };
+}
+
 // supabase/functions/mp-sync/index.ts
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
@@ -84,7 +116,7 @@ async function traer(sb, it) {
     const esGasto = String(p.payer?.id ?? "") === String(it.cuenta);
     const monto = Number(p.transaction_amount ?? 0);
     if (!(monto > 0)) continue;
-    const fila = {
+    let fila = {
       user_id: it.user_id,
       fecha: String(p.date_approved ?? p.date_created).slice(0, 10),
       descripcion: p.description ?? "Mercado Pago",
@@ -99,6 +131,11 @@ async function traer(sb, it) {
       revisado: false,
       confianza: 95
     };
+    const tarjeta = esPagoDeTarjeta(
+      `${fila.descripcion} ${fila.comercio} ${p.payment_method_id ?? ""}`,
+      cuentas ?? []
+    );
+    if (tarjeta) fila = comoPagoDeTarjeta(fila, tarjeta);
     const previo = yaEstaba(fila, previos ?? []);
     if (previo) {
       const suma = loQueSuma(previo, fila);

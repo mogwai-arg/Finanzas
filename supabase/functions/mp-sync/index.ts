@@ -6,6 +6,7 @@
 // =====================================================================
 import { admin, json, CORS } from '../_shared/comun.ts';
 import { yaEstaba, loQueSuma } from '../_shared/duplicados.ts';
+import { esPagoDeTarjeta, comoPagoDeTarjeta } from '../_shared/pagos.ts';
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS });
@@ -58,7 +59,7 @@ async function traer(sb: any, it: any) {
     const monto = Number(p.transaction_amount ?? 0);
     if (!(monto > 0)) continue;
 
-    const fila = {
+    let fila: any = {
       user_id: it.user_id,
       fecha: String(p.date_approved ?? p.date_created).slice(0, 10),
       descripcion: p.description ?? 'Mercado Pago',
@@ -70,6 +71,14 @@ async function traer(sb: any, it: any) {
       fuente: 'mercadopago', externo_id: String(p.id),
       revisado: false, confianza: 95
     };
+
+    // Pagar la tarjeta no es un gasto: es plata que sale de una cuenta y salda
+    // la tarjeta. Cargarlo como gasto dejaba el resumen figurando impago —solo
+    // cuentan las movidas con destino a la tarjeta— y encima inflaba el mes,
+    // contando las compras y después el pago de esas mismas compras.
+    const tarjeta = esPagoDeTarjeta(
+      `${fila.descripcion} ${fila.comercio} ${p.payment_method_id ?? ''}`, cuentas ?? []);
+    if (tarjeta) fila = comoPagoDeTarjeta(fila, tarjeta);
     // ¿Ya estaba, por el mail o cargado a mano? Se completa esa fila en vez de
     // crear otra, y no se pisa nada de lo que hayas tocado vos.
     const previo = yaEstaba(fila, previos ?? []);

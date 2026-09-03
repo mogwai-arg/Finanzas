@@ -4,6 +4,7 @@
 // o a demanda con { user_id } en el body.
 // =====================================================================
 import { admin, json, CORS, hoyISO } from '../_shared/comun.ts';
+import { esPagoDeTarjeta, comoPagoDeTarjeta } from '../_shared/pagos.ts';
 import { parsearMail, leerAumento, ES_RUIDO, ES_CONSUMO, type Movimiento } from '../_shared/parsers.ts';
 
 const REMITENTES = [
@@ -308,12 +309,26 @@ async function insertar(sb: any, userId: string, mov: Movimiento, cuentas: any[]
     return 'adoptado';
   }
 
-  const fila = {
+
+  let fila: any = {
     user_id: userId, fecha: mov.fecha, descripcion: mov.comercio, comercio: mov.comercio,
     monto: mov.monto, moneda: mov.moneda, tipo: mov.tipo, cuotas: mov.cuotas,
     account_id: cuenta?.id ?? null, category_id: catId,
     fuente: 'gmail', externo_id: externoId, revisado: false, confianza: mov.confianza
   };
+
+  // Pagar la tarjeta no es un gasto: es plata que sale de una cuenta y salda
+  // la tarjeta. Como gasto dejaba el resumen figurando impago —solo cuentan
+  // las movidas con destino a la tarjeta— y encima inflaba el mes, contando
+  // las compras y después el pago de esas mismas compras.
+  const laTarjeta = esPagoDeTarjeta(`${mov.comercio} ${texto}`.slice(0, 400), cuentas);
+  if (laTarjeta) {
+    fila = comoPagoDeTarjeta(fila, laTarjeta);
+    // El origen no puede ser la tarjeta misma: si el aviso vino de la tarjeta,
+    // la cuenta que se detectó es el destino, no el origen.
+    if (fila.account_id === laTarjeta.id) fila.account_id = null;
+  }
+
   const { data, error } = await sb.from('transactions').insert(fila).select().single();
   if (error) return error.code === '23505' ? 'duplicado' : Promise.reject(error);
   return data;
