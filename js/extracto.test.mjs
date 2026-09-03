@@ -344,5 +344,160 @@ t('encuentra la retención también en el texto copiado', () => {
   assert.equal(c.total, 27200);
 });
 
+
+// ---------------------------------------------------------------------
+// Conciliar: el banco contra lo anotado a mano
+// ---------------------------------------------------------------------
+console.log('\nCONCILIAR');
+
+const CON_TARJETA = `BANCO GALICIA - RESUMEN DE CUENTA
+Caja de ahorro en pesos  Cuenta 4001234-5 001-9
+Periodo 01/09/2026 al 30/09/2026
+SALDO ANTERIOR                                       1.000.000,00
+02/09  DEBITO AUTOMATICO EDESUR              20.581,06     979.418,94
+05/09  ACREDITAMIENTO DE HABERES          2.026.665,38   3.005.960,83
+08/09  PAGO TARJETA VISA                    300.000,00   2.705.960,83
+12/09  COMPRA COTO ABASTO                    47.310,00   2.658.650,83
+20/09  COMISION MANTENIMIENTO PAQUETE        18.500,00   2.640.150,83
+SALDO FINAL                                          2.640.150,83`;
+
+const CUENTA = 'gal';
+const ext = E.parseExtracto(CON_TARJETA);
+
+t('el pago de tarjeta del banco matchea la transferencia de la app, no un gasto', () => {
+  // La trampa: en el banco es plata que sale, pero en la app pagar el resumen
+  // es una movida a la tarjeta. Si se compara contra gastos, el pago aparece
+  // como "falta cargarlo" y ademas la movida aparece como "sobra".
+  const c = E.conciliar(ext, [
+    { id: 't', fecha: '2026-09-08', tipo: 'transferencia', monto: 300000,
+      account_id: CUENTA, destino_account_id: 'visa', descripcion: 'Pago Visa' }
+  ], CUENTA);
+  assert.equal(c.coinciden, 1);
+  assert.equal(c.sobran.length, 0);
+  assert.ok(!c.faltan.some(f => /PAGO TARJETA/.test(f.descripcion)));
+});
+
+t('la transferencia que ENTRA a la cuenta tambien cuenta', () => {
+  const soloEntrada = E.parseExtracto(`BANCO GALICIA - RESUMEN DE CUENTA
+Cuenta 4001234-5 001-9
+Periodo 01/09/2026 al 30/09/2026
+SALDO ANTERIOR                                         100.000,00
+03/09  TRANSF. CTAS. PROPIAS                 50.000,00     150.000,00
+SALDO FINAL                                            150.000,00`);
+  const c = E.conciliar(soloEntrada, [
+    { id: 'm', fecha: '2026-09-03', tipo: 'transferencia', monto: 50000,
+      account_id: 'efvo', destino_account_id: CUENTA }
+  ], CUENTA);
+  assert.equal(c.coinciden, 1);
+});
+
+t('lo que esta en el banco y no en la app queda en faltan', () => {
+  const c = E.conciliar(ext, [], CUENTA);
+  assert.equal(c.total, 5);
+  assert.equal(c.coinciden, 0);
+  assert.equal(c.faltan.length, 5);
+});
+
+t('lo que esta en la app y no en el banco queda en sobran', () => {
+  const c = E.conciliar(ext, [
+    { id: 'x', fecha: '2026-09-14', tipo: 'gasto', monto: 9999,
+      account_id: CUENTA, comercio: 'No existe' }
+  ], CUENTA);
+  assert.equal(c.sobran.length, 1);
+  assert.equal(c.sobran[0].tx.id, 'x');
+});
+
+t('mismo dia y tipo con otro importe no se da por bueno: se marca', () => {
+  const c = E.conciliar(ext, [
+    { id: 'c', fecha: '2026-09-12', tipo: 'gasto', monto: 47000,
+      account_id: CUENTA, comercio: 'Coto' }
+  ], CUENTA);
+  assert.equal(c.difieren.length, 1);
+  assert.equal(c.difieren[0].banco.importe, 47310);
+  assert.equal(c.difieren[0].app.importe, 47000);
+  assert.equal(c.sobran.length, 0);
+});
+
+t('una diferencia grande no es el mismo movimiento', () => {
+  const c = E.conciliar(ext, [
+    { id: 'c', fecha: '2026-09-12', tipo: 'gasto', monto: 5000, account_id: CUENTA }
+  ], CUENTA);
+  assert.equal(c.difieren.length, 0);
+  assert.equal(c.sobran.length, 1);
+});
+
+t('la fecha puede correrse unos dias: el banco imputa cuando quiere', () => {
+  const c = E.conciliar(ext, [
+    { id: 'c', fecha: '2026-09-14', tipo: 'gasto', monto: 47310, account_id: CUENTA }
+  ], CUENTA);
+  assert.equal(c.coinciden, 1);
+});
+
+t('pero no un mes despues', () => {
+  const c = E.conciliar(ext, [
+    { id: 'c', fecha: '2026-09-25', tipo: 'gasto', monto: 47310, account_id: CUENTA }
+  ], CUENTA);
+  assert.equal(c.coinciden, 0);
+});
+
+t('lo de otra cuenta no entra en la comparacion', () => {
+  const c = E.conciliar(ext, [
+    { id: 'o', fecha: '2026-09-12', tipo: 'gasto', monto: 47310, account_id: 'efvo' }
+  ], CUENTA);
+  assert.equal(c.coinciden, 0);
+  assert.equal(c.sobran.length, 0);
+});
+
+t('lo de fuera del periodo tampoco', () => {
+  const c = E.conciliar(ext, [
+    { id: 'v', fecha: '2026-08-12', tipo: 'gasto', monto: 47310, account_id: CUENTA }
+  ], CUENTA);
+  assert.equal(c.sobran.length, 0);
+});
+
+t('un movimiento del banco no se empareja dos veces', () => {
+  // Si el mismo gasto se cargo dos veces, uno matchea y el otro sobra. Es
+  // justamente lo que hay que ver.
+  const c = E.conciliar(ext, [
+    { id: 'a', fecha: '2026-09-12', tipo: 'gasto', monto: 47310, account_id: CUENTA },
+    { id: 'b', fecha: '2026-09-12', tipo: 'gasto', monto: 47310, account_id: CUENTA }
+  ], CUENTA);
+  assert.equal(c.coinciden, 1);
+  assert.equal(c.sobran.length, 1);
+});
+
+t('y el duplicado se nombra como duplicado', () => {
+  const c = E.conciliar(ext, [
+    { id: 'a', fecha: '2026-09-12', tipo: 'gasto', monto: 47310, account_id: CUENTA },
+    { id: 'b', fecha: '2026-09-12', tipo: 'gasto', monto: 47310, account_id: CUENTA },
+    { id: 'z', fecha: '2026-09-12', tipo: 'gasto', monto: 47310, account_id: CUENTA }
+  ], CUENTA);
+  assert.equal(c.repetidosEnApp.length, 1);
+  assert.equal(c.repetidosEnApp[0].length, 2);
+});
+
+t('el ingreso del sueldo matchea el ingreso, no un gasto del mismo monto', () => {
+  const c = E.conciliar(ext, [
+    { id: 's', fecha: '2026-09-05', tipo: 'gasto', monto: 2026665.38, account_id: CUENTA }
+  ], CUENTA);
+  assert.equal(c.coinciden, 0);
+  assert.equal(c.sobran.length, 1);
+});
+
+t('los cargos del banco salen marcados para poder saltearlos', () => {
+  const c = E.conciliar(ext, [], CUENTA);
+  const com = c.faltan.find(f => /MANTENIMIENTO/.test(f.descripcion));
+  assert.ok(com.cargo, 'la comision tiene que venir reconocida como cargo del banco');
+  const coto = c.faltan.find(f => /COTO/.test(f.descripcion));
+  assert.equal(coto.cargo, null);
+});
+
+t('un extracto sin periodo no descarta nada por fecha', () => {
+  const c = E.conciliar({ movimientos: ext.movimientos }, [
+    { id: 'c', fecha: '2026-09-12', tipo: 'gasto', monto: 47310, account_id: CUENTA }
+  ], CUENTA);
+  assert.equal(c.coinciden, 1);
+});
+
 console.log(`\n${ok} pruebas OK${mal ? `, ${mal} FALLAN` : ''}\n`);
 process.exit(mal ? 1 : 0);

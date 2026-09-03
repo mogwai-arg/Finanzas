@@ -511,3 +511,91 @@ export function revisarExtracto(texto) {
     encabezado: lineas.slice(0, 4).map(l => l.slice(0, 70))
   };
 }
+
+// ---------------------------------------------------------------------
+// CONCILIAR: EL BANCO CONTRA LO QUE ANOTASTE
+// ---------------------------------------------------------------------
+
+/**
+ * Que coincide, que falta y que sobra entre el extracto y la cuenta.
+ *
+ * Decir "estos 12 ya estaban cargados" es la mitad facil. La otra mitad es la
+ * que da tranquilidad, y es la que no existia: lo que esta en la app y NO en
+ * el banco. Ahi aparecen el gasto anotado dos veces, el que quedo con el
+ * importe equivocado y el que se cargo en la cuenta que no era. El extracto
+ * es la unica verdad disponible para encontrarlos.
+ *
+ * El emparejado es por TIPO, importe y fecha cercana. El tipo importa: el
+ * extracto trae pagos de tarjeta y movidas entre cuentas propias, que en la
+ * app son transferencias y no gastos. Compararlas contra gastos diria que
+ * faltan seis movimientos que estan perfectos.
+ *
+ * Y la fecha se compara con holgura: el banco anota cuando le llega, uno
+ * anota cuando compra, y entre las dos cosas hay uno o dos dias.
+ */
+export function conciliar(ext, txs, cuentaId, { dias = 3, cerca = 0.05 } = {}) {
+  const desde = ext.periodo?.desde, hasta = ext.periodo?.hasta;
+  const dentro = f => (!desde || f >= desde) && (!hasta || f <= hasta);
+
+  const banco = (ext.movimientos || []).map((m, i) => ({
+    i, fecha: m.fecha, importe: m.importe, comercio: m.comercio || m.descripcion,
+    descripcion: m.descripcion,
+    tipo: m.clase === 'transferencia' ? 'transferencia' : m.entra ? 'ingreso' : 'gasto',
+    cargo: queCargo(`${m.descripcion} ${m.comercio || ''}`)
+  }));
+
+  // Lo que la app tiene en ESA cuenta y en ese periodo. Una transferencia
+  // cuenta tambien cuando la cuenta es el destino: la plata entro ahi.
+  const app = (txs || [])
+    .filter(t => (t.account_id === cuentaId || t.destino_account_id === cuentaId) &&
+                 dentro(String(t.fecha).slice(0, 10)))
+    .map(t => ({
+      tx: t, fecha: String(t.fecha).slice(0, 10),
+      importe: Math.abs(Number(t.destino_account_id === cuentaId && t.monto_destino != null
+        ? t.monto_destino : t.monto) || 0),
+      tipo: t.tipo || 'gasto'
+    }));
+
+  const distancia = (a, b) => Math.abs(
+    (new Date(a + 'T00:00:00') - new Date(b + 'T00:00:00')) / 86400000);
+
+  const usados = new Set();
+  const pares = [], difieren = [];
+
+  // Primera pasada: importe igual. Es la unica que se puede dar por segura.
+  for (const b of banco) {
+    const j = app.findIndex((a, k) => !usados.has(k) && a.tipo === b.tipo &&
+      Math.abs(a.importe - b.importe) <= cerca && distancia(a.fecha, b.fecha) <= dias);
+    if (j >= 0) { usados.add(j); pares.push({ banco: b, app: app[j] }); }
+  }
+
+  // Segunda: mismo tipo y fecha cercana pero otro importe. No se empareja
+  // solo: se marca, porque uno de los dos numeros esta mal y hay que mirarlo.
+  for (const b of banco) {
+    if (pares.some(p => p.banco === b)) continue;
+    const j = app.findIndex((a, k) => !usados.has(k) && a.tipo === b.tipo &&
+      distancia(a.fecha, b.fecha) <= dias &&
+      Math.abs(a.importe - b.importe) / Math.max(a.importe, b.importe) <= 0.15);
+    if (j >= 0) { usados.add(j); difieren.push({ banco: b, app: app[j] }); }
+  }
+
+  const faltan = banco.filter(b => !pares.some(p => p.banco === b) &&
+                                   !difieren.some(d => d.banco === b));
+  const sobran = app.filter((a, k) => !usados.has(k));
+
+  return {
+    coinciden: pares.length, total: banco.length,
+    faltan, sobran, difieren,
+    // Sobrantes con la misma fecha y el mismo importe: es la firma de un
+    // gasto anotado dos veces, que es lo que mas ensucia el mes.
+    repetidosEnApp: (() => {
+      const g = new Map();
+      for (const a of sobran) {
+        if (a.tipo === 'transferencia') continue;
+        const k = `${a.fecha}|${Math.round(a.importe * 100)}`;
+        g.set(k, [...(g.get(k) || []), a]);
+      }
+      return [...g.values()].filter(v => v.length > 1);
+    })()
+  };
+}

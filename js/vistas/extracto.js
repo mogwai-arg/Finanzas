@@ -11,11 +11,15 @@
 // bajarlo de su app. Así que acá no se puede automatizar el paso del medio —
 // se avisa, y cuando el archivo está, la app hace el resto.
 // =====================================================================
-import { h, icono, hoja, aviso, campo, select } from '../ui.js';
+import { h, frag, icono, hoja, aviso, campo, select } from '../ui.js';
 import { state, guardar, guardarVarios } from '../db.js';
 import { parseExtracto, revisarExtracto, aMovimientos, cargosDelBanco,
-         queCargo } from '../extracto.js';
+         queCargo, conciliar } from '../extracto.js';
 import { plata } from '../formato.js';
+
+// El formulario se pide recién cuando se toca la fila. Cargarlo arriba deja
+// dos módulos esperándose entre sí y la pantalla queda en blanco.
+const abrirMovimiento = tx => import('./form-movimiento.js').then(m => m.formMovimiento(tx));
 
 export function formImportarExtracto(yaBajado = null) {
   const texto = h('textarea', {
@@ -146,6 +150,11 @@ export function formImportarExtracto(yaBajado = null) {
     // son los cargos del banco, y por eso vienen elegidos por defecto.
     const soloBanco = h('input', { type: 'checkbox', checked: true,
                                    onchange: () => pintarBoton() });
+
+    // El cotejo se rehace al cambiar de cuenta: comparar contra otra cuenta
+    // da otro resultado, y dejarlo viejo sería peor que no mostrarlo. Se
+    // declara acá y no abajo porque el append de más abajo ya lo usa.
+    const cotejo = h('div');
     const cuantos = () => soloBanco.checked ? aCargar.filter(m => m.cargoBanco).length
                                             : aCargar.length;
 
@@ -169,12 +178,18 @@ export function formImportarExtracto(yaBajado = null) {
           h('div.v', plata(Math.round(c.monto))))))) : null,
 
       h('div', { style: { marginTop: '16px' } }, campo('Cargar en', cual)),
+      cotejo,
       h('label.li', { style: { padding: '11px 0' } },
         h('div.m', h('div.t', 'Solo lo que cobra el banco'),
           h('div.s', { style: { whiteSpace: 'normal', lineHeight: '1.4' } },
             'Los gastos de todos los días ya entran por los avisos del banco. ' +
             'Lo que no entra por ningún lado son las comisiones.')),
         soloBanco));
+
+    const pintarCotejo = () => cotejo.replaceChildren(
+      cual.value ? conciliacion(r, cual.value) : null);
+    cual.addEventListener('change', pintarCotejo);
+    pintarCotejo();
 
     const btn = h('button.btn');
     const pintarBoton = () => {
@@ -210,6 +225,80 @@ export function formImportarExtracto(yaBajado = null) {
     if (hay) return hay;
     return guardar('categories', { nombre: 'Bancarios', tipo: 'gasto', icono: 'banco',
                                    color: '#5C6272', orden: 99 });
+  }
+
+  /**
+   * El banco contra lo que anotaste.
+   *
+   * "Ya estaban cargados 12" es la mitad fácil. La otra mitad es la que da
+   * tranquilidad: lo que está en la app y NO en el banco. Ahí aparece el
+   * gasto anotado dos veces, el que quedó con el importe equivocado y el que
+   * se cargó en la cuenta que no era. El extracto es la única verdad
+   * disponible para encontrarlos.
+   */
+  function conciliacion(r, cuentaId) {
+    const c = conciliar(r, state.transactions, cuentaId);
+    const nombre = (state.accounts.find(a => a.id === cuentaId) || {}).nombre || 'la cuenta';
+    const todoBien = !c.faltan.length && !c.sobran.length && !c.difieren.length;
+
+    // El numero del encabezado es el total, no las filas que entran en
+    // pantalla: decir 12 cuando son 19 es peor que no decir nada.
+    const bloque = (rot, filas, color, ayuda, total = filas.length) =>
+      !filas.length ? null : h('div',
+      { style: { marginTop: '16px' } },
+      h('div.ghead', rot, h('span', { style: { textTransform: 'none', letterSpacing: '0',
+                                               fontWeight: '500', color } },
+        String(total))),
+      h('div.grp', filas),
+      ayuda ? h('div.small.mut', { style: { padding: '9px 4px 0', lineHeight: '1.5' } },
+        ayuda) : null);
+
+    return h('div', { style: { marginTop: '18px' } },
+      h('div.grp.pad',
+        h('div', { style: { fontSize: '15px', lineHeight: '1.5' } },
+          todoBien
+            ? frag('De los ', h('b', String(c.total)), ' movimientos del banco, ',
+                h('b', { style: { color: 'var(--pos)' } }, 'coinciden todos'),
+                ` con lo que tenés en ${nombre}.`)
+            : frag('De los ', h('b', String(c.total)), ' movimientos del banco, ',
+                h('b', String(c.coinciden)), ' coinciden con ', nombre, '. ',
+                'Lo demás está abajo.'))),
+
+      bloque('Falta cargarlos', c.faltan.slice(0, 12).map(f => h('div.li',
+        h('div.av.amb', icono('mas', 15)),
+        h('div.m', h('div.t', f.comercio || f.descripcion),
+          h('div.s', `${dia(f.fecha)} · ${f.tipo}`)),
+        h('div.v', plata(Math.round(f.importe))))), 'var(--amb)',
+        (c.faltan.length > 12 ? `Y ${c.faltan.length - 12} más. ` : '') +
+        'Están en el banco y no en la app. Se cargan con el botón de abajo si ' +
+        'destildás "solo lo que cobra el banco".', c.faltan.length),
+
+      bloque('Sobran en la app', c.sobran.slice(0, 8).map(a => h('button.li', {
+        onclick: () => abrirMovimiento(a.tx) },
+        h('div.av.neg', icono('cerrar', 15)),
+        h('div.m', h('div.t', a.tx.comercio || a.tx.descripcion || 'Sin nombre'),
+          h('div.s', `${dia(a.fecha)} · ${a.tipo}`)),
+        h('div.v', plata(Math.round(a.importe))),
+        h('span.chev', icono('chev', 15)))), 'var(--neg)',
+        (c.sobran.length > 8 ? `Y ${c.sobran.length - 8} más. ` : '') +
+        'Están cargados y el banco no los tiene. Suele ser un gasto anotado ' +
+        'dos veces, o uno que va en otra cuenta. Tocá para abrirlo.', c.sobran.length),
+
+      c.repetidosEnApp.length ? h('div.small', {
+        style: { padding: '9px 4px 0', lineHeight: '1.5', color: 'var(--amb)',
+                 fontWeight: '600' } },
+        `De esos, ${c.repetidosEnApp.length} ` +
+        `${c.repetidosEnApp.length === 1 ? 'está' : 'están'} dos veces el mismo día ` +
+        'y por el mismo importe.') : null,
+
+      bloque('No coincide el importe', c.difieren.map(d => h('button.li', {
+        onclick: () => abrirMovimiento(d.app.tx) },
+        h('div.av.amb', icono('sube', 15)),
+        h('div.m', h('div.t', d.banco.comercio || d.banco.descripcion),
+          h('div.s', `${dia(d.banco.fecha)} · anotaste ${plata(Math.round(d.app.importe))}`)),
+        h('div.v', plata(Math.round(d.banco.importe)), h('small', 'el banco')),
+        h('span.chev', icono('chev', 15)))), 'var(--amb)',
+        'Mismo día y tipo, distinto importe. Manda el banco: tocá para corregirlo.'));
   }
 
   /**
