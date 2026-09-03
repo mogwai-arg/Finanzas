@@ -320,5 +320,41 @@ t('la regla nueva le gana a la ancha sin tocarla', () => {
   assert.equal(R.categoriaPara('Shell Gral Paz', { reglas: todas, categories: CATS2 }).category_id, 'n');
 });
 
+
+console.log('\nUNA CATEGORÍA QUE NO EXISTE');
+
+const nueva = s => C.categoriaNueva(s, CATS2);
+
+t('la nombra y se crea', () => {
+  assert.equal(nueva('ponelo en mascotas'), 'Mascotas');
+  assert.equal(nueva('categoría regalos'), 'Regalos');
+  assert.equal(nueva('va a cuidado personal'), 'Cuidado Personal');
+  // La palabra sola: es cómo se contesta "¿de qué categoría es?".
+  assert.equal(nueva('mascotas'), 'Mascotas');
+});
+
+t('un adjetivo no es una categoría', () => {
+  // Dictando salen todo el tiempo, y cada uno ensuciaría la lista que arma el
+  // gráfico de en qué se fue.
+  for (const s of ['es carísimo', 'es caro', 'barato', 'no', 'listo', 'urgente', 'es un regalo'])
+    assert.equal(nueva(s), null, s);
+});
+
+t('ni una frase entera', () => {
+  assert.equal(nueva('es un regalo para mi vieja'), null);
+  assert.equal(nueva('ay la pagué con efectivo'), null);
+  assert.equal(nueva('lo compré el martes en el chino'), null);
+});
+
+t('ni algo con números o símbolos', () => {
+  assert.equal(nueva('ponelo en 1234'), null);
+  assert.equal(nueva('ponelo en @#$'), null);
+});
+
+t('una que ya existe no se crea de nuevo', () => {
+  assert.equal(nueva('gastronomía'), null);
+  assert.equal(nueva('es gastronomia'), null, 'ni escrita sin tilde');
+});
+
 console.log(`\n${ok} pruebas OK${mal ? `, ${mal} FALLAN` : ''}\n`);
 process.exit(mal ? 1 : 0);

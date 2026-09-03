@@ -102,4 +102,54 @@ export function queCategoria(texto, categorias = []) {
   return mejor;
 }
 
+/**
+ * Una categoría que todavía no existe.
+ *
+ * Decir "ponelo en mascotas" cuando no hay Mascotas tiene una sola respuesta
+ * razonable: crearla. Pedir que la persona salga del chat, vaya a Ajustes, la
+ * cree y vuelva es exactamente la fricción que este chat viene a sacar.
+ *
+ * Lo delicado es no llenar la lista de categorías de basura, porque esa lista
+ * es la que arma el gráfico de en qué se fue. Tres candados:
+ *
+ *   Tiene que sonar a que la nombró: "ponelo en X", "categoría X", o la
+ *   palabra sola, que es cómo se contesta la pregunta de "¿de qué categoría
+ *   es?".
+ *   Tiene que parecer un nombre: una o dos palabras, solo letras.
+ *   No puede ser un adjetivo. "es carísimo" es una queja, no una categoría, y
+ *   dictando aparecen todo el tiempo.
+ *
+ * Y arriba de los tres, se puede deshacer en el mismo renglón.
+ */
+const NOMBRA_CATEGORIA =
+  /(?:^|\s)(?:categor[ií]a|ponelo en|pon[eé] en|meselo en|metelo en|guardalo en|va a|es|era|son|ponelo como)\s+(.{3,24})$/i;
+
+// Lo que uno dice de un gasto y no es una categoría. Dictando salen solos.
+const NO_ES_CATEGORIA = new RegExp('^(' + [
+  'caro', 'carisimo', 'car[ií]simo', 'cara', 'barato', 'mucho', 'poco', 'todo', 'nada',
+  'eso', 'esa', 'ese', 'otra', 'otro', 'igual', 'raro', 'lo mismo', 'mio', 'm[ií]o',
+  'para mi', 'un regalo', 'regalo', 'urgente', 'importante', 'necesario', 'al pedo',
+  'si', 's[ií]', 'no', 'bueno', 'malo', 'ok', 'listo', 'gasto', 'ingreso', 'plata'
+].join('|') + ')$', 'iu');
+
+export function categoriaNueva(texto, categorias = []) {
+  const dicho = String(texto || '').trim().replace(/[.!?]+$/, '');
+  if (!dicho) return null;
+
+  // La palabra sola cuenta: es cómo se contesta "¿de qué categoría es?".
+  const m = dicho.match(NOMBRA_CATEGORIA);
+  const crudo = (m ? m[1] : dicho).trim().replace(/^(la|el|los|las|un|una)\s+/i, '');
+
+  const palabras = crudo.split(/\s+/);
+  if (palabras.length > 2) return null;
+  if (!/^[\p{L}][\p{L}\s]{2,23}$/u.test(crudo)) return null;
+  if (NO_ES_CATEGORIA.test(sinTildes(crudo))) return null;
+
+  // Si ya existe no hay nada que crear: de eso se ocupa queCategoria.
+  const igual = sinTildes(crudo.toLowerCase());
+  if (categorias.some(c => sinTildes(String(c.nombre || '').toLowerCase()) === igual)) return null;
+
+  return crudo.replace(/(^|\s)(\p{L})/gu, (_, a, b) => a + b.toUpperCase());
+}
+
 const escapar = s => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');

@@ -18,11 +18,11 @@
 //   "¿de qué fue?" y con la respuesta completa el mismo movimiento, en vez de
 //   abrir un formulario y hacerte empezar de nuevo.
 // =====================================================================
-import { h, frag, icono, aviso } from '../ui.js';
+import { h, frag, icono, iconoDe, aviso } from '../ui.js';
 import { state, guardar, borrar } from '../db.js';
 import { leerFrase } from '../frase.js';
 import { categoriaPara, comoRegla, reglaQueChoca } from '../reglas.js';
-import { leerCorreccion, MARCA_CORRECCION } from '../correccion.js';
+import { leerCorreccion, categoriaNueva, MARCA_CORRECCION } from '../correccion.js';
 import { bishu } from '../bishu.js';
 import { plata, nombreDe, hoyISO } from '../formato.js';
 import { dictado } from '../voz.js';
@@ -122,6 +122,39 @@ export function vistaChat(root) {
         h('div', { style: { marginTop: '8px' } }, botonesCategoria(tx, m.comercio))), { animo: 'pensando' });
     }
     return tx;
+  }
+
+  /**
+   * Crear la categoría que nombró y poner el gasto ahí.
+   *
+   * Se hace y después se cuenta, con cómo deshacerlo en el mismo renglón. La
+   * lista de categorías es la que arma el gráfico de en qué se fue, así que
+   * una de más ensucia algo que importa: por eso deshacer borra la categoría
+   * y no solo la saca del movimiento.
+   */
+  async function crearCategoria(nombre) {
+    const cat = await guardar('categories', {
+      nombre, tipo: 'gasto', icono: iconoDe(nombre),
+      orden: (state.categories || []).length + 1
+    });
+    const tx = { ...ultimo.tx, category_id: cat.id };
+    await guardar('transactions', tx);
+    ultimo.tx = tx;
+    const aprendio = await aprender(ultimo.comercio, cat.id);
+
+    const burbuja = decir('bishu', h('div',
+      h('div', 'No tenía ', h('b', nombre), '. La creé y puse ahí ',
+        plata(tx.monto, tx.moneda),
+        tx.comercio ? ` de ${tx.comercio}` : '', '.'),
+      aprendio ? aprendio.nota : null,
+      h('div', { style: { marginTop: '8px' } },
+        enlace('No era eso', async () => {
+          await guardar('transactions', { ...tx, category_id: ultimo.tx?.category_id === cat.id
+            ? null : ultimo.tx.category_id });
+          await borrar('categories', cat.id);
+          ultimo.tx = { ...tx, category_id: null };
+          burbuja.replaceChildren(h('span.mut', `Listo, borré ${nombre}.`));
+        }))));
   }
 
   /**
@@ -235,19 +268,22 @@ export function vistaChat(root) {
     // porque un movimiento sin monto no existe.
     const corrige = ultimo && (!m || MARCA_CORRECCION.test(dicho));
     if (corrige) {
-      const c = leerCorreccion(dicho, {
-        cuentas: state.accounts,
-        categorias: (state.categories || []).filter(x => x.tipo !== 'ingreso')
-      });
+      const gastos = (state.categories || []).filter(x => x.tipo !== 'ingreso');
+      const c = leerCorreccion(dicho, { cuentas: state.accounts, categorias: gastos });
       if (c) { await corregir(c); return; }
+
+      // Nombró una categoría que no existe. Mandarlo a Ajustes a crearla y
+      // volver es justo la fricción que este chat viene a sacar.
+      const nueva = categoriaNueva(dicho, state.categories || []);
+      if (nueva) { await crearCategoria(nueva); return; }
     }
 
     if (!m) {
       decir('bishu', h('div',
         ultimo
           ? frag('Eso no lo entendí. Podés decirme ', h('b', 'con efectivo'), ', ',
-                 h('b', 'gastronomía'), ', ', h('b', 'fue ayer'), ' o ', h('b', 'borralo'),
-                 ' para cambiar lo último, o contarme otro gasto.')
+                 h('b', 'fue ayer'), ' o ', h('b', 'borralo'), ' para cambiar lo último, ',
+                 'nombrar una categoría —si no existe la creo— o contarme otro gasto.')
           : frag('No encontré el monto. Escribime algo como ',
                  h('b', 'coto 47310'), ' o ', h('b', '45 lucas de nafta'), '.')),
         { animo: 'pensando' });
