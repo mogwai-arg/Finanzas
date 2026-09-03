@@ -74,6 +74,14 @@ export function vistaMes(root) {
             h('button.btn.sec', { onclick: () => formRecurrente() }, 'Cargar el primero'))),
 
     h('section',
+      h('div.grp',
+        h('button.li', { onclick: () => irA('/estadisticas') },
+          h('div.av', icono('tendencia', 17)),
+          h('div.m', h('div.t', 'Dónde estás parado'),
+            h('div.s', 'Mes a mes, en qué se fue y los gastos más grandes')),
+          h('span.chev', icono('chev', 15))))),
+
+    h('section',
       h('div.ghead', 'Presupuesto',
         h('button', { onclick: () => formPresupuesto(p) }, budgets.length ? 'Ajustar' : 'Definir')),
       budgets.length

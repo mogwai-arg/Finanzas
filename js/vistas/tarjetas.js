@@ -3,7 +3,7 @@
 // El grafico muestra lo que YA debes, no lo que gastaste: las barras bajan
 // solas a medida que se terminan las cuotas.
 // =====================================================================
-import { h, icono, iconoDe } from '../ui.js';
+import { h, icono, iconoDe, hoja } from '../ui.js';
 import { state } from '../db.js';
 import * as F from '../finance.js';
 import { plata, plataPartida, diasHasta, fechaISO, mesCorto, periodoLargo, buscar,
@@ -132,8 +132,12 @@ function plastico(t, hoy, linkear) {
     // error, y una que arranca en 180.000 sin decir por qué, también.
     !sinCiclo && !aPagar && (pagado > 0 || comprometido > 0) &&
       h('div.foot', { style: { marginTop: '2px' } },
-        comprometido > 0 ? h('div', h('span', 'De eso, en cuotas'),
-          h('b', plata(Math.round(comprometido), moneda))) : null,
+        // Un total no se puede discutir; una lista sí. Tocarlo abre de qué
+        // compras está hecho ese compromiso.
+        comprometido > 0 ? h('button.foot-link', {
+          onclick: e => { e.stopPropagation(); hojaCuotas(t, hoy); } },
+          h('span', 'De eso, en cuotas'),
+          h('b', plata(Math.round(comprometido), moneda), icono('chev', 12))) : null,
         previstos.total > 0 ? h('div', h('span', 'Faltan caer'),
           h('b', `${plata(Math.round(previstos.total), moneda)} de débitos`)) : null,
         pagado > 0 ? h('div', h('span', 'Pagaste'),
@@ -192,6 +196,44 @@ function limite(t, hoy) {
       h('div.small.mut', { style: { marginTop: '9px', lineHeight: '1.45' } },
         `Consumido ${plata(l.consumido, t.moneda)} de ${plata(l.limite, t.moneda)}. `
         + 'Incluye las cuotas que todavía no vencieron.')));
+}
+
+/**
+ * De qué compras está hecho el compromiso en cuotas de este resumen.
+ *
+ * Es la pregunta que sigue a ver el número: "¿88.728 de qué?". Y la respuesta
+ * útil no es solo el nombre, es cuál de cuántas y cuándo se termina de pagar:
+ * con eso se decide si conviene adelantar o si mejor no comprar nada más en
+ * cuotas por un rato.
+ */
+function hojaCuotas(t, hoy) {
+  const { ciclo, moneda } = estadoTarjeta(t, hoy);
+  const per = F.periodo(ciclo.vence);
+  const cs = F.cuotasComprometidas(state.transactions, t, per, moneda);
+  const total = cs.reduce((s, c) => s + c.monto, 0);
+
+  hoja('En cuotas este resumen', h('div',
+    h('div.grp.pad', { style: { marginBottom: '16px' } },
+      h('div.cifra', { style: { fontSize: '30px' } }, plata(Math.round(total), moneda)),
+      h('div.small.mut', { style: { marginTop: '4px' } },
+        `${cs.length} ${cs.length === 1 ? 'compra' : 'compras'} de meses anteriores, ` +
+        `en el resumen de ${periodoLargo(per)}`)),
+
+    h('div.grp', cs.map(c => h('button.li', {
+      onclick: () => formMovimiento(state.transactions.find(x => x.id === c.tx.id))
+    },
+      h('div.av', icono(iconoDe(c.tx.comercio || tituloTx(c.tx)), 17)),
+      h('div.m',
+        h('div.t', tituloTx(c.tx)),
+        h('div.s', [`cuota ${c.nro} de ${c.total}`,
+                    c.quedan === 0 ? 'la última' : `quedan ${c.quedan}`,
+                    `termina en ${periodoLargo(c.ultimo)}`].join(' · '))),
+      h('div.v', plata(Math.round(c.monto), moneda),
+        h('small', `de ${plata(Math.round(c.tx.monto), moneda)}`))))),
+
+    h('div.small.mut', { style: { padding: '12px 4px 0', lineHeight: '1.5' } },
+      'Esto entra al resumen aunque no compres nada más: es plata ya gastada. ',
+      'Tocá cualquiera para ver o corregir la compra.')));
 }
 
 /**

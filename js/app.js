@@ -12,6 +12,7 @@ import { vistaRevisar } from './vistas/revisar.js';
 import { vistaPago } from './vistas/pago.js';
 import { vistaDonde } from './vistas/donde.js';
 import { vistaGastos } from './vistas/gastos.js';
+import { vistaEstadisticas } from './vistas/estadisticas.js';
 import { vistaTarjetas, vistaTarjeta } from './vistas/tarjetas.js';
 import { vistaPromos } from './vistas/promos.js';
 import { vistaMes } from './vistas/mes.js';
@@ -33,7 +34,9 @@ const RUTAS = [
   ['/donde',          { tab: 'hoy',      titulo: 'Dónde está', vista: vistaDonde, atras: true, acciones: ['ojo'] }],
   ['/mes',            { tab: 'hoy',      titulo: 'El mes',     vista: vistaMes, atras: true }],
   ['/sueldo',         { tab: 'hoy',      titulo: 'Sueldo',     sub: 'Recibos, paritarias y proyección', vista: vistaSueldo, atras: true }],
-  ['/gastos',         { tab: 'gastos',   titulo: 'Gastos',     vista: vistaGastos, acciones: ['buscar'] }],
+  ['/gastos',         { tab: 'gastos',   titulo: 'Gastos',     vista: vistaGastos, acciones: ['estadisticas', 'buscar'] }],
+  ['/estadisticas',     { tab: 'gastos',   titulo: 'Dónde estás parado', vista: r => vistaEstadisticas(r, { moneda: 'ARS' }), atras: true }],
+  ['/estadisticas/usd', { tab: 'gastos',   titulo: 'Dónde estás parado', vista: r => vistaEstadisticas(r, { moneda: 'USD' }), atras: true }],
   ['/tarjetas',       { tab: 'tarjetas', titulo: 'Tarjetas',   vista: vistaTarjetas }],
   ['/tarjetas/:id',   { tab: 'tarjetas', titulo: 'Tarjeta',    vista: vistaTarjeta, atras: true }],
   ['/promos',         { tab: 'promos',   titulo: 'Promos',     vista: vistaPromos }],
@@ -208,6 +211,9 @@ function cabecera(def, params) {
       acciones.append(h('button.iconbtn', { 'aria-label': 'Avisos', onclick: () => irA('/revisar') },
         icono('campana', 19), n > 0 && h('span.badge', String(n))));
     }
+    if (a === 'estadisticas') acciones.append(h('button.iconbtn',
+      { 'aria-label': 'Estadísticas', onclick: () => irA('/estadisticas') },
+      icono('tendencia', 19)));
     if (a === 'ajustes') acciones.append(h('button.iconbtn',
       { 'aria-label': 'Ajustes', onclick: () => irA('/ajustes') }, icono('ajustes', 19)));
     if (a === 'ojo') acciones.append(h('button.iconbtn', {

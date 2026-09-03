@@ -1,12 +1,13 @@
 // node js/bishu.test.mjs
 import assert from 'node:assert/strict';
-import { queDiceBishu } from './bishu.js';
+import { queDiceBishu, frasesDeBishu } from './bishu.js';
 import * as F from './finance.js';
 
 let ok = 0, mal = 0;
 const t = (n, fn) => { try { fn(); console.log('  ok  ' + n); ok++; }
                        catch (e) { console.log('  FALLA  ' + n + '\n         ' + e.message); mal++; } };
 const d = s => F.parseFecha(s);
+const d2 = d;
 
 console.log('\nLO QUE DICE BISHU');
 
@@ -79,6 +80,42 @@ t('nunca dice dos cosas a la vez', () => {
     assert.ok(r.texto.length <= 90, `muy largo: ${r.texto}`);
     assert.ok(r.animo, 'sin ánimo');
   }
+});
+
+t('tiene más de una cosa para decir, y la primera es la que importa', () => {
+  const d = { excedida: { nombre: 'Combustible', exceso: 12000 },
+              cierraManana: 'Galicia Visa',
+              gastadoEsteMesAlDia: 300000, gastadoMesPasadoAlDia: 500000,
+              ahorro: { falta: 200000 },
+              mayor: { nombre: 'Coto', monto: 154136 } };
+  const f = frasesDeBishu(d, d2('2026-09-15'));
+  assert.ok(f.length >= 5, `solo tiene ${f.length} para decir`);
+  assert.equal(f[0].texto, queDiceBishu(d, d2('2026-09-15')).texto);
+  assert.match(f[0].texto, /Combustible se pasó \$ 12\.000/);
+  // Cada una es corta y sabe a dónde lleva.
+  for (const x of f) {
+    assert.ok(x.texto.length <= 100, `muy largo: ${x.texto}`);
+    assert.ok(x.animo, 'sin ánimo');
+  }
+});
+
+t('un tope pasado va antes que una comparación que puede esperar', () => {
+  const f = frasesDeBishu({ excedida: { nombre: 'Comida', exceso: 5000 },
+    gastadoEsteMesAlDia: 100000, gastadoMesPasadoAlDia: 500000 }, d2('2026-09-15'));
+  assert.match(f[0].texto, /Comida se pasó/);
+  assert.match(f[1].texto, /menos que el mes pasado/);
+});
+
+t('el silencio de tres días gana incluso a un tope pasado', () => {
+  const f = frasesDeBishu({ diasSinCargar: 4, excedida: { nombre: 'Comida', exceso: 5000 } },
+    d2('2026-09-15'));
+  assert.match(f[0].texto, /4 días/);
+});
+
+t('cuando el mes viene tranquilo igual tiene algo honesto que decir', () => {
+  const f = frasesDeBishu({}, d2('2026-09-15'));
+  assert.ok(f.length >= 1);
+  assert.equal(f[f.length - 1].animo, 'dormido');
 });
 
 // --------------------------------------------------- lo que le da de comer

@@ -15,7 +15,7 @@ import { plataPartida, plata, cuandoVence, diasHasta, hoyISO, aFecha, nombreDe,
          aNumero, etiquetaCuenta } from '../formato.js';
 import { irA } from '../ruteo.js';
 import { formPago } from './mes.js';
-import { bishu, queDiceBishu } from '../bishu.js';
+import { bishu, frasesDeBishu as F_frases } from '../bishu.js';
 
 const per = () => hoyISO().slice(0, 7);
 
@@ -35,9 +35,14 @@ export function vistaHoy(root, { arranca = 0 } = {}) {
       conexionCaida(),
       carrusel(arranca, heroMes(res, hoy, p), plataLibre(hoy), heroDolares()),
       loQueSeViene(hoy),
-      proximoSueldo(),
-      presupuesto(res, p),
+      // Bishu arriba del presupuesto: es la voz de la app, y al fondo de la
+      // pantalla no la lee nadie.
       tiraBishu(hoy),
+      presupuesto(res, p),
+      // La proyección del sueldo es del MES QUE VIENE: útil, pero no es una
+      // decisión de hoy. Abajo del presupuesto y con la cifra más chica, para
+      // que no le gane al número del mes en curso.
+      proximoSueldo(),
       antesDeComprar()
     )
   );
@@ -362,6 +367,16 @@ function cuandoCae(d, fecha) {
  */
 function tiraBishu(hoy) {
   const p = per();
+  const res = F.resumenMes(state.transactions, p, 'ARS');
+  const budgets = state.budgets.filter(b => b.periodo === p);
+  const peor = F.estadoPresupuesto(budgets, res, 80).find(b => b.gastado > b.tope);
+  const cierra = state.accounts.find(a => a.tipo === 'credito' && a.activo !== false &&
+    F.tieneCiclo(a) && F.proximoCiclo(a, hoy).diasACierre === 1);
+  const mayor = state.transactions
+    .filter(t => t.tipo === 'gasto' && (t.moneda || 'ARS') === 'ARS' &&
+                 F.periodo(F.parseFecha(t.fecha)) === p)
+    .sort((a, b) => Number(b.monto) - Number(a.monto))[0];
+
   const datos = {
     // Las promos marcadas, con cuántos días faltan: Bishu las dice él mismo
     // en vez de que haya una sección arriba repitiendo lo mismo.
@@ -374,23 +389,63 @@ function tiraBishu(hoy) {
     gastadoEsteMesAlDia: F.gastadoAlDia(state.transactions, p, hoy.getDate()),
     gastadoMesPasadoAlDia: F.gastadoAlDia(state.transactions, F.mesAnterior(p), hoy.getDate()),
     cargoHoy: state.transactions.some(t =>
-      (!t.fuente || t.fuente === 'manual') && String(t.fecha).slice(0, 10) === hoyISO())
+      (!t.fuente || t.fuente === 'manual') && String(t.fecha).slice(0, 10) === hoyISO()),
+    excedida: peor ? { nombre: nombreDe('categories', peor.category_id, 'Una categoría'),
+                       exceso: Math.round(peor.gastado - peor.tope) } : null,
+    cierraManana: cierra ? cierra.nombre : null,
+    ahorro: F.estadoAhorro(budgets, state.transactions, p, 'ARS'),
+    mayor: mayor ? { nombre: mayor.comercio || mayor.descripcion || 'un gasto',
+                     monto: Math.round(mayor.monto) } : null
   };
-  const { animo, texto, ir } = queDiceBishu(datos, hoy);
-  const color = animo === 'festejo' ? 'var(--pos)' : animo === 'alerta' ? 'var(--amb)' : 'var(--bra)';
+
+  const frases = F_frases(datos, hoy);
+  let i = 0;
+
+  const dibujo = h('div', { style: { flex: 'none' } });
+  const linea = h('div', { style: { fontSize: '14.5px', lineHeight: '1.45',
+                                    color: 'var(--tx2)' } });
+  const accion = h('button', { style: { background: 'none', border: '0', padding: '6px 0 0',
+                                        fontSize: '12.5px', cursor: 'pointer',
+                                        minHeight: '0', textAlign: 'left' } });
+  const pintar = () => {
+    const { animo, texto, ir } = frases[i % frases.length];
+    dibujo.replaceChildren(bishu(animo, 46));
+    dibujo.style.color = animo === 'festejo' ? 'var(--pos)'
+                       : animo === 'alerta' ? 'var(--amb)' : 'var(--bra)';
+    linea.textContent = texto;
+    accion.textContent = ir ? 'Ver' : 'Elegí de qué te aviso';
+    accion.style.color = ir ? 'var(--brand)' : 'var(--tx3)';
+    accion.onclick = () => irA(ir || '/ajustes');
+  };
+  pintar();
+
+  // Tocarlo trae lo que sigue. Es lo que lo saca de ser un cartel: cuando el
+  // mes viene tranquilo, lo segundo y lo tercero son justo lo que uno no sabe
+  // que quiere saber.
+  const seguir = () => {
+    i++;
+    dibujo.animate?.(
+      [{ transform: 'scale(1)' }, { transform: 'scale(.9)' }, { transform: 'scale(1)' }],
+      { duration: 180, easing: 'cubic-bezier(.32,.72,0,1)' });
+    pintar();
+  };
 
   return h('section',
     h('div.grp.pad', { style: { display: 'flex', alignItems: 'center', gap: '13px' } },
-      h('div', { style: { color, flex: 'none' } }, bishu(animo, 46)),
+      h('button', { 'aria-label': 'Bishu: tocá para lo que sigue',
+                    style: { background: 'none', border: '0', padding: '0', minHeight: '0',
+                             cursor: 'pointer', flex: 'none' },
+                    onclick: seguir }, dibujo),
       h('div', { style: { flex: '1', minWidth: '0' } },
         h('div', { style: { fontWeight: '600', fontSize: '14.5px', letterSpacing: '-.015em',
                             marginBottom: '2px' } }, '¡Hola! Soy Bishu'),
-        h('div', { style: { fontSize: '14.5px', lineHeight: '1.45', color: 'var(--tx2)' } }, texto),
-        h('button', { style: { background: 'none', border: '0', padding: '6px 0 0',
-                               color: ir ? 'var(--bra)' : 'var(--tx3)', fontSize: '12.5px',
-                               cursor: 'pointer' },
-                      onclick: () => irA(ir || '/ajustes') },
-          ir ? 'Ver las promos' : 'Elegí de qué te aviso'))));
+        linea,
+        h('div', { style: { display: 'flex', alignItems: 'center', gap: '12px' } },
+          accion,
+          frases.length > 1 ? h('button', {
+            style: { background: 'none', border: '0', padding: '6px 0 0', minHeight: '0',
+                     color: 'var(--tx3)', fontSize: '12.5px', cursor: 'pointer' },
+            onclick: seguir }, `algo más (${frases.length - 1})`) : null))));
 }
 
 // ------------------------------------------------------- proximo sueldo
@@ -435,8 +490,10 @@ function proximoSueldo() {
       h('div', { style: { display: 'flex', justifyContent: 'space-between',
                           alignItems: 'flex-start', gap: '10px' } },
         h('div',
+          // 24 y no 30: es una proyección del mes que viene, y a 30 le ganaba
+          // por tamaño al número del mes en curso, que es el que decide hoy.
           h('div', { class: 'cifra' + (state.ocultarMontos ? ' oculto' : ''),
-                     style: { fontSize: '30px' } }, plata(Math.round(cobro.total))),
+                     style: { fontSize: '24px' } }, plata(Math.round(cobro.total))),
           h('div.small.mut', { style: { marginTop: '4px' } },
             `entrarían el ${diaMes(cobro.fecha)}`)),
         h('span', { class: `pill ${baja ? 'amb' : 'pos'}` },

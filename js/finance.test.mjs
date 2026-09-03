@@ -265,8 +265,67 @@ t('marca vencidos y ordena por fecha', () => {
 });
 t('un pago registrado lo saca de vencido y usa el monto real', () => {
   const rr = F.recurrentesDelMes(recs, [{ recurring_id: 'r1', periodo: '2026-09', monto: 262000, pagado_at: 'x' }], '2026-09', d('2026-09-15'));
-  assert.equal(rr[0].pagado, true);
-  assert.equal(rr[0].monto, 262000);
+  // Por id y no por posición: los pagados se van al final de la lista.
+  const pagado = rr.find(x => x.id === 'r1');
+  assert.equal(pagado.pagado, true);
+  assert.equal(pagado.monto, 262000);
+  assert.equal(pagado.vencido, false);
+});
+
+t('los gastos fijos pendientes van primero', () => {
+  const rs = [
+    { id: 'a', activo: true, nombre: 'Edesur', monto_estimado: 20000, moneda: 'ARS', dia_vencimiento: 1 },
+    { id: 'b', activo: true, nombre: 'Colegio', monto_estimado: 500000, moneda: 'ARS', dia_vencimiento: 10 },
+    { id: 'c', activo: true, nombre: 'OSDE', monto_estimado: 300000, moneda: 'ARS', dia_vencimiento: 15 }
+  ];
+  // Edesur, que vence primero, ya está pagado: tiene que quedar al final.
+  const pagos = [{ recurring_id: 'a', periodo: '2026-09', monto: 20000, pagado_at: 'x' }];
+  const out = F.recurrentesDelMes(rs, pagos, '2026-09', d('2026-09-05'));
+  assert.deepEqual(out.map(x => x.id), ['b', 'c', 'a']);
+  // Y entre los pendientes sigue mandando la fecha.
+  assert.deepEqual(F.recurrentesDelMes(rs, [], '2026-09', d('2026-09-05')).map(x => x.id),
+                   ['a', 'b', 'c']);
+});
+
+console.log('Estadísticas');
+const SERIE = [
+  { tipo: 'ingreso', moneda: 'ARS', monto: 3000000, fecha: '2026-07-01' },
+  { tipo: 'gasto',   moneda: 'ARS', monto: 800000,  fecha: '2026-07-05', category_id: 'c1' },
+  { tipo: 'gasto',   moneda: 'ARS', monto: 200000,  fecha: '2026-07-06', category_id: 'c2' },
+  { tipo: 'ingreso', moneda: 'ARS', monto: 3200000, fecha: '2026-08-01' },
+  { tipo: 'gasto',   moneda: 'ARS', monto: 1500000, fecha: '2026-08-10', category_id: 'c1' },
+  { tipo: 'gasto',   moneda: 'ARS', monto: 300000,  fecha: '2026-09-02', category_id: 'c2' },
+  { tipo: 'gasto',   moneda: 'ARS', monto: 100000,  fecha: '2026-09-02' },
+  { tipo: 'transferencia', moneda: 'ARS', monto: 999999, fecha: '2026-09-02' },
+  { tipo: 'gasto',   moneda: 'USD', monto: 900,     fecha: '2026-09-02' }
+];
+
+t('la serie mensual va del más viejo al más nuevo y marca el mes en curso', () => {
+  const s = F.serieMensual(SERIE, 3, 'ARS', d('2026-09-03'));
+  assert.deepEqual(s.map(x => x.periodo), ['2026-07', '2026-08', '2026-09']);
+  assert.deepEqual(s.map(x => x.enCurso), [false, false, true]);
+  assert.equal(s[0].ingresos, 3000000);
+  assert.equal(s[0].gastos, 1000000);
+  assert.equal(s[0].balance, 2000000);
+});
+
+t('las movidas entre cuentas y los dólares no entran en la serie de pesos', () => {
+  const s = F.serieMensual(SERIE, 1, 'ARS', d('2026-09-03'))[0];
+  assert.equal(s.gastos, 400000);          // 300.000 + 100.000, sin la movida
+  assert.equal(s.ingresos, 0);
+});
+
+t('las categorías salen de mayor a menor, con su parte del total', () => {
+  const cs = F.gastoPorCategoria(SERIE, '2026-07');
+  assert.deepEqual(cs.map(x => x.id), ['c1', 'c2']);
+  assert.equal(cs[0].monto, 800000);
+  assert.equal(Math.round(cs[0].parte * 100), 80);
+});
+
+t('lo que no tiene categoría también se cuenta, sin inventarle una', () => {
+  const cs = F.gastoPorCategoria(SERIE, '2026-09');
+  assert.deepEqual(cs.map(x => x.id), ['c2', null]);
+  assert.equal(cs[1].monto, 100000);
 });
 
 console.log('Presupuesto');
@@ -275,8 +334,10 @@ t('clasifica ok / alerta / excedido', () => {
   const st = F.estadoPresupuesto([
     { category_id: 'a', monto: 1000 }, { category_id: 'b', monto: 1000 }, { category_id: 'c', monto: 1000 }
   ], res, 80);
-  assert.deepEqual(st.map(x => x.estado), ['ok', 'alerta', 'excedido']);
-  assert.equal(st[2].restante, -200);
+  // Sale ordenado del más usado al menos: el excedido primero.
+  assert.deepEqual(st.map(x => x.estado), ['excedido', 'alerta', 'ok']);
+  assert.deepEqual(st.map(x => x.category_id), ['c', 'b', 'a']);
+  assert.equal(st[0].restante, -200);      // el excedido, que ahora va primero
 });
 
 console.log('Promos');
@@ -355,6 +416,17 @@ t('una movida entre cuentas de la misma moneda se ve una sola vez', () => {
   assert.equal(F.resumenMes(txs, '2026-09', 'USD').movido, 0);
 });
 
+t('el presupuesto se ordena por lo más usado, y los vacíos al final', () => {
+  const budgets = [
+    { id: 'a', category_id: 'c1', monto: 260000, periodo: '2026-09' },
+    { id: 'b', category_id: 'c2', monto: 180000, periodo: '2026-09' },
+    { id: 'c', category_id: 'c3', monto: 140000, periodo: '2026-09' }
+  ];
+  const resumen = { porCategoria: { c1: 202336, c2: 0, c3: 152000 } };
+  // Combustible está excedido (109 %), Supermercado al 78 %, Gastronomía en 0.
+  assert.deepEqual(F.estadoPresupuesto(budgets, resumen).map(x => x.id), ['c', 'a', 'b']);
+});
+
 t('un resto de centavos cuenta como resumen pagado', () => {
   const tj = { id: 'v', tipo: 'credito', nombre: 'Visa', moneda: 'ARS',
                ciclos: [{ cierre: '2026-08-27', vence: '2026-09-04' }] };
@@ -388,6 +460,30 @@ t('el resumen nuevo arranca debiendo las cuotas de antes', () => {
   assert.equal(F.totalTarjetaEnPeriodo(txs, tj, '2026-10'), 150000);
   // En el resumen de la compra, la cuota 1 no es un compromiso de antes.
   assert.equal(F.comprometidoEnPeriodo(txs, tj, '2026-08'), 0);
+});
+
+t('el compromiso en cuotas se puede abrir y dice de qué está hecho', () => {
+  const tj = { id: 'v', tipo: 'credito', moneda: 'ARS', cierre_dia: 27, vencimiento_dia: 4 };
+  const txs = [
+    { id: 'a', tipo: 'gasto', moneda: 'ARS', monto: 300000, cuotas: 3, comercio: 'Naked',
+      fecha: '2026-07-10', account_id: 'v' },
+    { id: 'b', tipo: 'gasto', moneda: 'ARS', monto: 60000, cuotas: 6, comercio: 'Juguetería',
+      fecha: '2026-08-01', account_id: 'v' },
+    { id: 'c', tipo: 'gasto', moneda: 'ARS', monto: 50000, cuotas: 1, comercio: 'Coto',
+      fecha: '2026-09-02', account_id: 'v' }
+  ];
+  const cs = F.cuotasComprometidas(txs, tj, '2026-10');
+  // La compra en una cuota de este ciclo no es un compromiso de antes.
+  assert.deepEqual(cs.map(x => x.tx.comercio), ['Naked', 'Juguetería']);
+  // Ordenadas de mayor a menor, con cuál de cuántas y cuándo termina.
+  assert.equal(cs[0].monto, 100000);
+  assert.equal(cs[0].nro, 3);
+  assert.equal(cs[0].quedan, 0);
+  assert.equal(cs[1].nro, 2);
+  assert.equal(cs[1].quedan, 4);
+  assert.equal(cs[1].ultimo, '2027-02');
+  // Y la suma es exactamente el total que muestra la tarjeta.
+  assert.equal(F.comprometidoEnPeriodo(txs, tj, '2026-10'), 110000);
 });
 
 t('pagar el resumen libera el límite en el momento', () => {

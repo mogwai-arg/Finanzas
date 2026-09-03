@@ -30,6 +30,19 @@
   --amb:       #9A5D00;  --amb-bg: #FBF0DE;  /* vence pronto · cerca del tope */
   --neg:       #C1293D;  --neg-bg: #FBE9EB;  /* vencido. NUNCA para "te pasaste" */
 
+  /* ---------- datos ----------
+     Los colores de los gráficos son otro trabajo que los de la interfaz: una
+     barra es una mancha grande y necesita cuerpo, mientras que el petróleo de
+     la marca —bueno para texto e iconos— sobre un relleno lee gris y queda
+     fuera de la banda de luminosidad.
+     Estos dos pasan los cinco chequeos: banda de luminosidad, piso de croma,
+     separación con visión normal (ΔE 17,7) y con daltonismo (16,4 deutan) y
+     contraste contra la superficie. Verde = entra plata, que es lo que ya
+     significa en el resto de la app. */
+  --dato-in:  #1A9E63;   /* ingresos */
+  --dato-out: #2478A6;   /* egresos y cualquier serie de gasto */
+  --dato-eje: #E4E5EA;   /* la grilla, que tiene que desaparecer */
+
   /* ---------- elevación ---------- en claro la da la sombra */
   --elev-1: 0 1px 3px rgba(20,22,30,.07), 0 10px 26px -14px rgba(20,22,30,.22);
   --elev-2: 0 6px 24px -8px rgba(20,22,30,.26), 0 0 0 .5px rgba(20,22,30,.09);
@@ -84,6 +97,12 @@
     --amb:      #E3A94F;  --amb-bg:   #2C2211;
     --neg:      #FF6E80;  --neg-bg:   #2E1519;
 
+    /* Los pasos del oscuro se eligen contra su propia superficie, no se
+       aclaran los del claro: validados igual, ΔE 16,5 normal y 14,8 deutan. */
+    --dato-in:  #2FA87C;
+    --dato-out: #4A96D8;
+    --dato-eje: #2A2D37;
+
     --elev-1: 0 1px 3px rgba(0,0,0,.5), 0 10px 26px -14px rgba(0,0,0,.8);
     --elev-2: 0 6px 24px -8px rgba(0,0,0,.6), 0 0 0 .5px rgba(255,255,255,.07);
   }
@@ -95,6 +114,7 @@
   --pos:#3FC08F; --pos-bg:#0F2A22;
   --amb:#E3A94F; --amb-bg:#2C2211;
   --neg:#FF6E80; --neg-bg:#2E1519;
+  --dato-in:#2FA87C; --dato-out:#4A96D8; --dato-eje:#2A2D37;
   --elev-1: 0 1px 3px rgba(0,0,0,.5), 0 10px 26px -14px rgba(0,0,0,.8);
   --elev-2: 0 6px 24px -8px rgba(0,0,0,.6), 0 0 0 .5px rgba(255,255,255,.07);
 }

@@ -20,12 +20,13 @@ const SHELL = [
   './css/app.css', './css/tokens.css',
   './js/app.js', './js/db.js', './js/filas.js', './js/finance.js', './js/formato.js',
   './js/geo.js', './js/resumen.js', './js/ruteo.js', './js/sueldo.js', './js/texto.js',
-  './js/ui.js', './js/demo.js', './js/bishu.js', './js/push.js',
+  './js/ui.js', './js/demo.js', './js/bishu.js', './js/push.js', './js/graficos.js',
   './js/vistas/hoy.js', './js/vistas/revisar.js', './js/vistas/pago.js',
   './js/vistas/donde.js', './js/vistas/gastos.js', './js/vistas/tarjetas.js',
   './js/vistas/mes.js', './js/vistas/promos.js', './js/vistas/ajustes.js',
   './js/vistas/sueldo.js', './js/vistas/form-movimiento.js',
   './js/vistas/formularios.js', './js/vistas/importar.js',
+  './js/vistas/estadisticas.js',
   './vendor/supabase.js',
   // pdf.mjs y su worker NO van acá: pesan 1,7 MB entre los dos y solo hacen
   // falta al importar un resumen. Se guardan solos la primera vez que se

@@ -110,8 +110,11 @@ button.li:active{background:var(--fill)}
    ciclo de culpa es una de las razones por las que se abandonan estas apps. */
 .mini{display:flex;gap:2px;height:6px;border-radius:99px;background:var(--fill);
       margin-top:7px;overflow:hidden}
-.mini b{height:100%;border-radius:99px;background:var(--tx2)}
-.mini b.al{background:var(--tx)}
+/* El avance es un DATO, no tinta: en negro cada barra era una franja pesada
+   y cinco filas de presupuesto se leían como un tablero de luto. El paso de
+   dato está validado contra la superficie. */
+.mini b{height:100%;border-radius:99px;background:var(--dato-out)}
+.mini b.al{background:var(--dato-out);opacity:.92}
 .mini s{height:100%;border-radius:99px;background:var(--amb);text-decoration:none}
 
 /* --------------------------------------------------------- tarjeta cc */
@@ -171,6 +174,51 @@ input[type=checkbox]{width:auto;min-height:0}
      cursor:pointer;-webkit-tap-highlight-color:transparent}
 .dia:active{background:var(--line)}
 .dia[aria-pressed="true"]{background:var(--brand);color:#fff}
+
+/* ======================================================== gráficos */
+/* Barras horizontales: el valor arriba, la barra debajo. En un teléfono de
+   390 px una etiqueta al costado dejaría la barra en 120 px y todas se
+   verían iguales. */
+.gr-barras{display:flex;flex-direction:column;gap:var(--s3)}
+.gr-fila{display:block;width:100%;border:0;background:none;padding:0;min-height:0;
+         text-align:left;color:inherit;font:inherit;cursor:pointer}
+.gr-tope{display:flex;justify-content:space-between;align-items:baseline;gap:10px;
+         margin-bottom:5px}
+.gr-et{font-size:14px;font-weight:500;letter-spacing:-.012em;color:var(--tx);
+       overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.gr-val{font-size:13.5px;font-weight:600;font-variant-numeric:tabular-nums;
+        color:var(--tx);flex:none}
+.gr-pista{height:9px;border-radius:5px;background:var(--fill);overflow:hidden}
+.gr-marca{height:100%;border-radius:5px;background:var(--dato-out);
+          transition:width var(--d-panel) var(--e-entra)}
+.gr-nota{font-size:11.5px;color:var(--tx3);margin-top:4px}
+
+/* Dos series por mes: dos alturas contra la misma base. */
+.gr-meses{display:flex;align-items:flex-end;gap:var(--s2)}
+.gr-mes{flex:1;min-width:0;min-height:0;padding:0;border:0;background:none;cursor:pointer;
+        display:flex;flex-direction:column;align-items:center;gap:6px;
+        border-radius:8px;-webkit-tap-highlight-color:transparent}
+.gr-mes[aria-pressed="true"]{background:var(--fill)}
+.gr-par{display:flex;align-items:flex-end;justify-content:center;gap:2px;width:100%}
+.gr-col{flex:1;max-width:16px;min-height:2px;border-radius:4px 4px 0 0;
+        transition:height var(--d-panel) var(--e-entra)}
+.gr-col.in{background:var(--dato-in)}
+.gr-col.out{background:var(--dato-out)}
+.gr-mesnom{font-size:11px;color:var(--tx3);letter-spacing:.02em}
+.gr-mesnom.hoy{color:var(--tx2);font-weight:700}
+
+.gr-leyenda{display:flex;gap:var(--s4);flex-wrap:wrap;font-size:12.5px;color:var(--tx2)}
+.gr-lg{display:inline-flex;align-items:center;gap:6px}
+.gr-pt{width:9px;height:9px;border-radius:3px;display:inline-block}
+.gr-pt.in{background:var(--dato-in)}
+.gr-pt.out{background:var(--dato-out)}
+
+/* Una línea del pie del plástico que se puede abrir. Hereda el tamaño y el
+   color del pie: es la misma información, con una puerta. */
+.cc .foot-link{background:none;border:0;padding:0;min-height:0;width:100%;
+               display:flex;justify-content:space-between;align-items:baseline;
+               gap:10px;color:inherit;font:inherit;cursor:pointer;text-align:left}
+.cc .foot-link b{display:inline-flex;align-items:center;gap:3px}
 
 /* ------------------------------------------------- dos héroes en carrusel */
 /* Los dos números importan y son distintos: lo consumido y lo que queda

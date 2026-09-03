@@ -69,32 +69,45 @@ const detalle = p => [
 ].filter(Boolean).join(' ') + '.';
 
 /**
- * La única cosa que Bishu tiene para decir ahora, elegida por urgencia.
+ * Todo lo que Bishu tiene para decir, de lo más urgente a lo más opinable.
+ *
+ * Devuelve una lista y no una frase para que se pueda tocar y seguir: la
+ * primera es la que importa, pero cuando el mes viene tranquilo lo segundo y
+ * lo tercero son justo lo que uno no sabe que quiere saber.
  *
  * Es una función pura a propósito: lo que dice se prueba, no se mira. Y no
- * repite lo que la pantalla ya muestra al lado —cuánto va gastado, qué vence—
- * porque un cartel que dice lo mismo que el de arriba es ruido.
+ * repite lo que la pantalla ya muestra al lado —cuánto va gastado, qué vence,
+ * cuántos movimientos hay sin revisar— porque un cartel que dice lo mismo que
+ * el de arriba es ruido.
  */
-export function queDiceBishu(d, hoy = new Date()) {
+export function frasesDeBishu(d, hoy = new Date()) {
   const dia = hoy.getDate();
+  const out = [];
+  const decir = (animo, texto, ir) => out.push({ animo, texto, ir });
 
-  // 0. Una promo que aplica hoy vence hoy: no hay nada que pueda esperar
+  // 1. Una promo que aplica hoy vence hoy: no hay nada que pueda esperar
   //    menos. Va antes que todo lo demás, y por eso no hace falta una
   //    sección de promos aparte repitiendo lo mismo dos renglones más arriba.
   const hoyMismo = (d.promos || []).find(x => x.dias === 0);
-  if (hoyMismo) {
-    return { animo: 'festejo', ir: '/promos',
-             texto: `Hoy es la de ${hoyMismo.titulo}. ${detalle(hoyMismo)}` };
-  }
+  if (hoyMismo) decir('festejo', `Hoy es la de ${hoyMismo.titulo}. ${detalle(hoyMismo)}`, '/promos');
 
-  // 1. La app vive de que le cuenten los gastos. Tres días en silencio es la
+  // 2. La app vive de que le cuenten los gastos. Tres días en silencio es la
   //    diferencia entre un mes que cierra y uno que no.
-  if (d.diasSinCargar != null && d.diasSinCargar >= 3) {
-    return { animo: 'atento',
-             texto: `Hace ${d.diasSinCargar} días que no cargás nada. ¿Quedó algo suelto?` };
-  }
+  if (d.diasSinCargar != null && d.diasSinCargar >= 3)
+    decir('atento', `Hace ${d.diasSinCargar} días que no cargás nada. ¿Quedó algo suelto?`);
 
-  // 2. Contra el mes pasado al mismo día, que es la única comparación que
+  // 3. Un tope pasado es plata que ya se fue, y el nombre de la categoría es
+  //    lo único que hace que la próxima vez uno se acuerde.
+  if (d.excedida)
+    decir('alerta', `${d.excedida.nombre} se pasó $ ${plata(d.excedida.exceso)} del tope.`, '/mes');
+
+  // 4. El cierre no se puede mover, y comprar un día antes o un día después
+  //    cambia en un mes cuándo se paga.
+  if (d.cierraManana)
+    decir('atento', `${d.cierraManana} cierra mañana. Lo que compres después se paga ` +
+                    'el mes siguiente.', '/tarjetas');
+
+  // 5. Contra el mes pasado al mismo día, que es la única comparación que
   //    contesta "¿voy gastando más o menos que la vez pasada?".
   const antes = Number(d.gastadoMesPasadoAlDia) || 0;
   const ahora = Number(d.gastadoEsteMesAlDia) || 0;
@@ -102,26 +115,45 @@ export function queDiceBishu(d, hoy = new Date()) {
     const dif = ahora - antes;
     const pct = Math.abs(dif) / antes;
     if (pct >= 0.08 && Math.abs(dif) >= 1000) {
-      return dif < 0
-        ? { animo: 'festejo',
-            texto: `Vas $ ${plata(dif)} menos que el mes pasado a esta altura. Bien ahí.` }
-        : { animo: 'alerta',
-            texto: `Vas $ ${plata(dif)} más que el mes pasado a esta altura.` };
+      decir(dif < 0 ? 'festejo' : 'alerta',
+        dif < 0 ? `Vas $ ${plata(dif)} menos que el mes pasado a esta altura. Bien ahí.`
+                : `Vas $ ${plata(dif)} más que el mes pasado a esta altura.`,
+        '/estadisticas');
+    } else {
+      decir('contento', 'Vas casi igual que el mes pasado a esta altura.', '/estadisticas');
     }
-    return { animo: 'contento', texto: 'Vas casi igual que el mes pasado a esta altura.' };
   }
 
-  // 3. La que viene, si viene pronto. Las de una vez al mes son las que uno
-  //    se pierde, y avisarlas dos días antes es lo que las hace servir.
-  const proxima = (d.promos || []).find(x => x.dias <= 3);
-  if (proxima) {
-    return { animo: 'contento', ir: '/promos',
-             texto: `${proxima.dias === 1 ? 'Mañana' : `El ${proxima.cuando}`} cae la de ` +
-                    `${proxima.titulo}. ${detalle(proxima)}` };
-  }
+  // 6. El ahorro es un piso al que llegar, así que se dice lo que falta.
+  if (d.ahorro && d.ahorro.falta > 0)
+    decir('atento', `Te faltan $ ${plata(d.ahorro.falta)} para el ahorro que te propusiste.`, '/mes');
+  else if (d.ahorro && d.ahorro.falta <= 0)
+    decir('festejo', 'Ya llegaste al ahorro que te propusiste este mes.', '/mes');
 
-  // 4. Recién arrancado el mes todavía no hay con qué comparar.
-  if (d.cargoHoy) return { animo: 'contento', texto: 'Ya está todo cargado por hoy.' };
-  if (dia <= 4) return { animo: 'contento', texto: 'Arranca el mes. Cargá lo de hoy y yo llevo la cuenta.' };
-  return { animo: 'dormido', texto: 'Por acá tranquilo. Cargá lo que gastes y te aviso si algo se desvía.' };
+  // 7. Las de una vez al mes son las que uno se pierde, y avisarlas dos días
+  //    antes es lo que las hace servir.
+  const proxima = (d.promos || []).find(x => x.dias > 0 && x.dias <= 3);
+  if (proxima)
+    decir('contento', `${proxima.dias === 1 ? 'Mañana' : `El ${proxima.cuando}`} cae la de ` +
+                      `${proxima.titulo}. ${detalle(proxima)}`, '/promos');
+
+  // 8. El gasto más grande del mes: es el que uno recuerda y el que puede
+  //    decidir no repetir.
+  if (d.mayor && d.mayor.monto > 0)
+    decir('contento', `Lo más grande del mes fue ${d.mayor.nombre}, ` +
+                      `$ ${plata(d.mayor.monto)}.`, '/estadisticas');
+
+  // 9. Y si no hay nada de lo anterior, algo honesto según el momento del mes.
+  if (d.cargoHoy) decir('contento', 'Ya está todo cargado por hoy.');
+  if (dia <= 4) decir('contento', 'Arranca el mes. Cargá lo de hoy y yo llevo la cuenta.');
+  decir('dormido', 'Por acá tranquilo. Cargá lo que gastes y te aviso si algo se desvía.');
+
+  return out;
 }
+
+/**
+ * La única cosa que Bishu tiene para decir ahora, elegida por urgencia.
+/**
+ * La única cosa que Bishu tiene para decir ahora, elegida por urgencia.
+ */
+export const queDiceBishu = (d, hoy = new Date()) => frasesDeBishu(d, hoy)[0];

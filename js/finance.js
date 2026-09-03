@@ -202,15 +202,32 @@ export function totalTarjetaEnPeriodo(txs, tarjeta, per, moneda = 'ARS') {
  * resumen recien pagado no se lea como una tarjeta vacia.
  */
 export function comprometidoEnPeriodo(txs, tarjeta, per, moneda = 'ARS') {
-  let total = 0;
+  return round2(cuotasComprometidas(txs, tarjeta, per, moneda)
+    .reduce((s, c) => s + c.monto, 0));
+}
+
+/**
+ * Que compras componen ese compromiso, para poder abrirlo.
+ *
+ * Un total no se puede discutir; una lista si. "88.728 en cuotas" invita a
+ * preguntar de que, y la respuesta —la heladera de junio, cuota 2 de 3— es la
+ * que deja decidir si conviene adelantar o no comprar nada mas en cuotas.
+ */
+export function cuotasComprometidas(txs, tarjeta, per, moneda = 'ARS') {
+  const out = [];
   for (const tx of txs) {
     if (tx.account_id !== tarjeta.id || tx.tipo !== 'gasto' || tx.moneda !== moneda) continue;
-    for (const c of cronograma(tx, tarjeta)) {
+    const cron = cronograma(tx, tarjeta);
+    for (const c of cron) {
       // La cuota 1 es la compra de este ciclo; de la 2 en adelante viene de antes.
-      if (c.periodoVenc === per && c.nro > 1) total += c.monto;
+      if (c.periodoVenc !== per || c.nro <= 1) continue;
+      out.push({ tx, monto: round2(c.monto), nro: c.nro, total: c.total,
+                 quedan: c.total - c.nro,
+                 // Cuando termina de pagarse, que es el dato que uno busca.
+                 ultimo: cron[cron.length - 1].periodoVenc });
     }
   }
-  return round2(total);
+  return out.sort((a, b) => b.monto - a.monto);
 }
 
 /**
@@ -366,6 +383,40 @@ export function resumenMes(txs, per, moneda = 'ARS') {
 }
 
 /**
+ * Ingresos y gastos de los ultimos N meses, del mas viejo al mas nuevo.
+ *
+ * Sirve para la unica comparacion que contesta "¿como vengo?": la de un mes
+ * contra los de antes. El mes en curso va marcado, porque comparar un mes por
+ * la mitad contra meses enteros es la forma mas facil de creer que se esta
+ * gastando poco.
+ */
+export function serieMensual(txs, meses = 6, moneda = 'ARS', ref = hoy()) {
+  const out = [];
+  const actual = periodo(ref);
+  for (let i = meses - 1; i >= 0; i--) {
+    const p = periodo(new Date(ref.getFullYear(), ref.getMonth() - i, 1));
+    const r = resumenMes(txs, p, moneda);
+    out.push({ periodo: p, ingresos: r.ingresos, gastos: r.gastos,
+               balance: round2(r.ingresos - r.gastos), enCurso: p === actual });
+  }
+  return out;
+}
+
+/**
+ * Lo gastado por categoria en un mes, de mayor a menor y con su parte del
+ * total. Sin ordenar no se lee, y sin el porcentaje no se sabe si ese numero
+ * grande es grande de verdad.
+ */
+export function gastoPorCategoria(txs, per, moneda = 'ARS') {
+  const r = resumenMes(txs, per, moneda);
+  const total = r.gastos;
+  return Object.entries(r.porCategoria)
+    .map(([id, monto]) => ({ id: id === 'sin' ? null : id, monto: round2(monto),
+                             parte: total > 0 ? monto / total : 0 }))
+    .sort((a, b) => b.monto - a.monto);
+}
+
+/**
  * Lo que se ve en una moneda, con la pata que corresponde a cada movimiento.
  *
  * Una transferencia entre monedas es una sola fila en la base pero dos cosas
@@ -495,7 +546,10 @@ export function recurrentesDelMes(recurrings, pagos, per, ref = hoy()) {
       vencido: !pagado && vence < ref,
       diasRestantes: dias(ref, vence)
     };
-  }).sort((a, b) => a.vence - b.vence);
+  // Los pendientes primero, y entre ellos el que vence antes. Un pagado ya no
+  // pide nada: ordenar todo junto por fecha deja lo que hay que hacer
+  // desperdigado entre lo que ya esta hecho.
+  }).sort((a, b) => (a.pagado - b.pagado) || (a.vence - b.vence));
 }
 
 /**
@@ -669,7 +723,13 @@ export function plataLibre(cuentas, txs, recurrings, pagos, ref = hoy(), moneda 
   };
 }
 
-/** Presupuesto vs gastado por categoria. */
+/**
+ * Presupuesto vs gastado por categoria, del mas usado al menos.
+ *
+ * Ordenar por el porcentaje y no por el monto: el que esta al 95 % de un tope
+ * chico es el que hay que mirar hoy, no el mas grande. Los que estan en cero
+ * van al final, que es donde molestan menos.
+ */
 export function estadoPresupuesto(budgets, resumen, alertPct = 80) {
   return budgets.filter(b => b.category_id).map(b => {
     const gastado = round2(resumen.porCategoria[b.category_id] || 0);
@@ -680,7 +740,7 @@ export function estadoPresupuesto(budgets, resumen, alertPct = 80) {
       estado: pct >= 100 ? 'excedido' : pct >= alertPct ? 'alerta' : 'ok',
       restante: round2(tope - gastado)
     };
-  });
+  }).sort((a, b) => (b.pct - a.pct) || (b.gastado - a.gastado));
 }
 
 /**
