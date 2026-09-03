@@ -11,11 +11,12 @@
 // de efectivo al banco, ese millón y medio no aparece en ningún lado como
 // entrada, y con razón: entró antes. Acá se ve cuándo.
 // =====================================================================
-import { h, icono, iconoDe, deslizable, confirmar, aviso } from '../ui.js';
-import { state, borrar } from '../db.js';
+import { h, icono, iconoDe, deslizable, confirmar, aviso, hoja, campo } from '../ui.js';
+import { state, borrar, guardar } from '../db.js';
 import * as F from '../finance.js';
-import { plata, plataPartida, nombreDe, buscar, tituloTx, aFecha } from '../formato.js';
-import { formCuenta } from './formularios.js';
+import { plata, plataPartida, nombreDe, buscar, tituloTx, aFecha, hoyISO,
+         aNumero as num } from '../formato.js';
+import { formCuenta, pintarCategorias, conectarCategoria } from './formularios.js';
 import { formMovimiento } from './form-movimiento.js';
 import { irA } from '../ruteo.js';
 
@@ -67,7 +68,74 @@ export function vistaCuenta(root, params) {
           h('h3', 'Sin movimientos'),
           h('p', 'Todavía no hay nada cargado en esta cuenta.')),
 
+    // Saldo inicial e ingreso se parecen y no son lo mismo, y la diferencia
+    // no se ve hasta que un mes no cierra: el saldo inicial es la plata que ya
+    // estaba cuando empezaste a usar la app, y no entró en ningún mes. Un
+    // sueldo en efectivo cargado ahí queda fuera de "lo que entró" para
+    // siempre. Pasarlo de un lado al otro tiene que costar un toque, no
+    // rehacer la cuenta a mano.
+    e.inicial > 0 ? h('section',
+      h('div.grp',
+        h('button.li', { onclick: () => hojaAIngreso(c, e) },
+          h('div.av', icono('billete', 17)),
+          h('div.m', h('div.t', '¿Ese saldo inicial fue plata que entró?'),
+            h('div.s', { style: { whiteSpace: 'normal', lineHeight: '1.4' } },
+              'Pasalo a ingreso y va a contar en el mes en que entró. El saldo ',
+              'de la cuenta no cambia.')),
+          h('span.chev', icono('chev', 15))))) : null,
+
     h('button.btn.sec', { onclick: () => formCuenta(c) }, icono('lapiz', 17), 'Editar la cuenta')));
+}
+
+/**
+ * Pasar el saldo inicial a un ingreso, sin que cambie el saldo.
+ *
+ * El saldo sale igual por los dos caminos —arranca en 1.532.000, o arranca en
+ * cero y entra un ingreso de 1.532.000 el mismo día— pero solo uno de los dos
+ * cuenta como plata que entró en el mes. Por eso el ingreso se fecha en el
+ * día del saldo declarado: mueve el mes, no el saldo.
+ */
+function hojaAIngreso(c, e) {
+  const moneda = c.moneda || 'ARS';
+  const fecha = e.desde || hoyISO();
+  const cMonto = h('input', { type: 'text', inputmode: 'decimal',
+                              value: String(Math.round(e.inicial)), 'aria-label': 'Importe' });
+  const cDetalle = h('input', { type: 'text', value: '',
+                                placeholder: `Plata que había en ${c.nombre}` });
+  const cFecha = h('input', { type: 'date', value: fecha });
+  const cCat = h('select');
+  pintarCategorias(cCat, 'ingreso', '');
+  conectarCategoria(cCat, () => 'ingreso');
+
+  const cerrar = hoja('Pasarlo a ingreso', h('div',
+    h('div.small.mut', { style: { lineHeight: '1.55', marginBottom: '16px' } },
+      'Queda como un ingreso en esta cuenta y el saldo inicial pasa a cero. ',
+      h('b', { style: { color: 'var(--tx)' } },
+        `${c.nombre} va a seguir teniendo ${plata(moneda === 'USD' ? e.saldo : Math.round(e.saldo), moneda)}`),
+      ': lo que cambia es que ahora esta plata cuenta como algo que entró, y ',
+      'aparece en Números y en el mes que le pongas.'),
+    campo('Importe', cMonto),
+    campo('Detalle (opcional)', cDetalle),
+    campo('Cuándo entró', cFecha),
+    campo('Categoría', cCat),
+    h('button.btn', { style: { marginTop: '16px' }, onclick: async () => {
+      const monto = num(cMonto.value);
+      if (!monto) { cMonto.focus(); aviso('Falta el importe'); return; }
+      await guardar('transactions', {
+        fecha: cFecha.value || fecha,
+        descripcion: cDetalle.value.trim() || `Plata que había en ${c.nombre}`,
+        comercio: null, monto, moneda, tipo: 'ingreso',
+        account_id: c.id, category_id: cCat.value || null,
+        cuotas: 1, fuente: 'manual', origen: 'manual', revisado: true
+      });
+      // El saldo declarado se pone en cero PERO se conserva la fecha de
+      // corte: sin ella volverían a contar los movimientos anteriores, que ya
+      // estaban adentro de ese número, y el saldo se movería.
+      await guardar('accounts', { ...c, saldo_inicial: 0 });
+      cerrar();
+      aviso('Listo, ahora cuenta como plata que entró');
+      irA(`/cuenta/${c.id}`);
+    } }, 'Pasarlo a ingreso')));
 }
 
 function renglon(rot, monto, moneda, signo, apoyo) {
