@@ -39,6 +39,9 @@ export const $ = s => document.querySelector(s);
 const TRAZOS = {
   casa:    'm3 10 9-7 9 7v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z',
   lista:   'M4 6h16M4 12h16M4 18h10',
+  micro:   'M12 3a3 3 0 0 1 3 3v6a3 3 0 0 1-6 0V6a3 3 0 0 1 3-3z M19 11a7 7 0 0 1-14 0 M12 18v3M8.5 21h7',
+  enviar:  'M4 12h14M13 6l6 6-6 6',
+  chat:    'M21 12a8 8 0 0 1-8 8H8l-4 3v-4.5A8 8 0 0 1 12 4h1a8 8 0 0 1 8 8z',
   mas:     'M12 5v14M5 12h14',
   tarjeta: 'M2.5 5h19a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2h-19a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2zM.5 9.8h23M4 15.2h3.4',
   pin:     'M21 10c0 7-9 12-9 12s-9-5-9-12a9 9 0 0 1 18 0zM12 12.6a2.6 2.6 0 1 0 0-5.2 2.6 2.6 0 0 0 0 5.2z',

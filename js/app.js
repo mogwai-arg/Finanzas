@@ -17,6 +17,7 @@ import { vistaEstadisticas } from './vistas/estadisticas.js';
 import { vistaCierre, nombreDelMes as tituloDelCierre } from './vistas/cierre.js';
 import { vistaTarjetas, vistaTarjeta } from './vistas/tarjetas.js';
 import { vistaPromos } from './vistas/promos.js';
+import { vistaChat } from './vistas/chat.js';
 import { vistaMes } from './vistas/mes.js';
 import { vistaAjustes } from './vistas/ajustes.js';
 import { vistaSueldo } from './vistas/sueldo.js';
@@ -27,10 +28,10 @@ const tabs = document.getElementById('tabs');
 
 // Cada entrada: patron -> { titulo, sub, vista, tab, atras, acciones }
 const RUTAS = [
-  ['/hoy',            { tab: 'hoy',      titulo: 'Hoy',        sub: () => fechaLarga(new Date()), vista: r => vistaHoy(r), acciones: ['campana', 'promos', 'ajustes'] }],
+  ['/hoy',            { tab: 'hoy',      titulo: 'Hoy',        sub: () => fechaLarga(new Date()), vista: r => vistaHoy(r), acciones: ['campana', 'chat', 'promos', 'ajustes'] }],
   // Los dólares dejaron de ser una pestaña y son la tercera ficha del
   // carrusel; el link viejo sigue llevando ahí.
-  ['/hoy/usd',        { tab: 'hoy',      titulo: 'Hoy',        sub: () => fechaLarga(new Date()), vista: r => vistaHoy(r, { arranca: 2 }), acciones: ['campana', 'promos', 'ajustes'] }],
+  ['/hoy/usd',        { tab: 'hoy',      titulo: 'Hoy',        sub: () => fechaLarga(new Date()), vista: r => vistaHoy(r, { arranca: 2 }), acciones: ['campana', 'chat', 'promos', 'ajustes'] }],
   ['/revisar',        { tab: 'hoy',      titulo: 'Revisar',    vista: vistaRevisar, atras: true }],
   ['/pago',           { tab: 'hoy',      titulo: '¿Con qué pago?', vista: vistaPago, atras: true }],
   ['/donde',          { tab: 'hoy',      titulo: 'Dónde está', vista: vistaDonde, atras: true, acciones: ['ojo'] }],
@@ -44,6 +45,7 @@ const RUTAS = [
   ['/estadisticas/usd', { tab: 'numeros',  titulo: 'Números',    sub: 'Dónde estás parado', vista: r => vistaEstadisticas(r, { moneda: 'USD' }) }],
   ['/tarjetas',       { tab: 'pagar',    titulo: 'Tarjetas',   vista: vistaTarjetas, atras: true }],
   ['/tarjetas/:id',   { tab: 'pagar',    titulo: 'Tarjeta',    vista: vistaTarjeta, atras: true }],
+  ['/chat',           { tab: 'nuevo',    titulo: 'Contale a Bishu', sub: 'Escribí o dictá y lo anoto', vista: vistaChat, atras: true }],
   ['/promos',         { tab: null,       titulo: 'Promos',     vista: vistaPromos, atras: true }],
   ['/ajustes',        { tab: null,       titulo: 'Ajustes',    vista: vistaAjustes, atras: true }]
 ];
@@ -249,6 +251,8 @@ function cabecera(def, params) {
       acciones.append(h('button.iconbtn', { 'aria-label': 'Avisos', onclick: () => irA('/revisar') },
         icono('campana', 19), n > 0 && h('span.badge', String(n))));
     }
+    if (a === 'chat') acciones.append(h('button.iconbtn',
+      { 'aria-label': 'Contale a Bishu', onclick: () => irA('/chat') }, icono('chat', 19)));
     if (a === 'promos') acciones.append(h('button.iconbtn',
       { 'aria-label': 'Promos', onclick: () => irA('/promos') }, icono('pin', 19)));
     if (a === 'ajustes') acciones.append(h('button.iconbtn',

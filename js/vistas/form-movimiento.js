@@ -16,6 +16,7 @@ import { h, icono, iconoDe, hoja, aviso, campo, select, confirmar } from '../ui.
 import { state, guardar, borrar } from '../db.js';
 import { opcionesCategoria, pintarCategorias, conectarCategoria } from './formularios.js';
 import { plata, hoyISO, nombreDe, etiquetaCuenta, tituloTx, aNumero } from '../formato.js';
+import { irA } from '../ruteo.js';
 
 const TIPOS = [['gasto', 'Gasto'], ['ingreso', 'Ingreso'], ['transferencia', 'Movida']];
 const TITULO = {
@@ -174,6 +175,12 @@ export function formMovimiento(tx = null) {
 
   const cerrar = hoja(nuevo ? 'Nuevo gasto' : 'Editar', h('div',
     segTipo,
+    // El camino corto, para el que ya sabe lo que va a escribir. El
+    // formulario sigue siendo el camino seguro; esto es el atajo, y va acá
+    // porque es donde uno está cuando quiere cargar algo.
+    nuevo ? h('button.btn.sec', { style: { marginBottom: '14px' }, onclick: () => {
+      cerrar(); irA('/chat');
+    } }, icono('chat', 16), 'Contámelo en un renglón') : null,
     atajos,
     bloqueMonto,
     bloqueDonde,
