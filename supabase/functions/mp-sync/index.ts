@@ -5,6 +5,7 @@
 // mail de MP sigue funcionando como respaldo en gmail-sync.
 // =====================================================================
 import { admin, json, CORS } from '../_shared/comun.ts';
+import { yaEstaba, loQueSuma } from '../_shared/duplicados.ts';
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS });
@@ -40,8 +41,16 @@ async function traer(sb: any, it: any) {
 
   const { data: cuentas } = await sb.from('accounts').select('*').eq('user_id', it.user_id);
   const cuentaMP = (cuentas ?? []).find((c: any) => /mercado ?pago/i.test(c.nombre));
-  let cargados = 0;
+  let cargados = 0, adoptados = 0;
   const nuevos: string[] = [];
+
+  // Lo que ya está cargado en esa ventana, venga de donde venga. El mismo pago
+  // llega por el mail de MP y por esta API con identificadores distintos: para
+  // la base son dos filas, y el mes queda inflado. Tener las dos puertas vale
+  // la pena —una tapa lo que la otra no ve— pero hay que reconocer cuándo
+  // dicen lo mismo.
+  const { data: previos } = await sb.from('transactions').select('*')
+    .eq('user_id', it.user_id).gte('fecha', String(desde).slice(0, 10));
 
   for (const p of data.results ?? []) {
     if (p.status !== 'approved') continue;
@@ -61,8 +70,19 @@ async function traer(sb: any, it: any) {
       fuente: 'mercadopago', externo_id: String(p.id),
       revisado: false, confianza: 95
     };
+    // ¿Ya estaba, por el mail o cargado a mano? Se completa esa fila en vez de
+    // crear otra, y no se pisa nada de lo que hayas tocado vos.
+    const previo = yaEstaba(fila, previos ?? []);
+    if (previo) {
+      const suma = loQueSuma(previo, fila);
+      if (suma) await sb.from('transactions').update(suma).eq('id', (previo as any).id);
+      adoptados++;
+      continue;
+    }
+
     const { error } = await sb.from('transactions').insert(fila);
     if (error) { if (error.code !== '23505') console.error(error); continue; }
+    (previos ?? []).push(fila as any);   // para no duplicar dentro del mismo lote
     cargados++;
     nuevos.push(`${fila.comercio} $${monto.toLocaleString('es-AR')}`);
   }
@@ -74,7 +94,7 @@ async function traer(sb: any, it: any) {
       user_id: it.user_id, tipo: 'carga_auto',
       titulo: `${cargados} de Mercado Pago`, cuerpo: nuevos.slice(0, 4).join(' · ') });
   }
-  return { user: it.user_id, cargados };
+  return { user: it.user_id, cargados, adoptados };
 }
 
 async function accessToken(sb: any, it: any) {

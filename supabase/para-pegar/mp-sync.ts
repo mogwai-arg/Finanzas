@@ -15,6 +15,32 @@ var CORS = {
 };
 var json = (b, status = 200) => new Response(JSON.stringify(b), { status, headers: { ...CORS, "Content-Type": "application/json" } });
 
+// supabase/functions/_shared/duplicados.ts
+function elMismo(a, b, { dias = 3, pesos = 1 } = {}) {
+  if ((a.tipo || "gasto") !== (b.tipo || "gasto")) return false;
+  if ((a.moneda || "ARS") !== (b.moneda || "ARS")) return false;
+  if (Math.abs(Number(a.monto) - Number(b.monto)) > pesos) return false;
+  if (a.account_id && b.account_id && a.account_id !== b.account_id) return false;
+  const d = Math.abs(
+    (Date.parse(String(a.fecha).slice(0, 10)) - Date.parse(String(b.fecha).slice(0, 10))) / 864e5
+  );
+  return Number.isFinite(d) && d <= dias;
+}
+function yaEstaba(fila, previos = [], opciones = {}) {
+  return previos.find((p) => elMismo(fila, p, opciones)) ?? null;
+}
+function loQueSuma(previo, nuevo) {
+  const cambios = {};
+  if (!previo.account_id && nuevo.account_id) cambios.account_id = nuevo.account_id;
+  if ((!previo.cuotas || previo.cuotas === 1) && nuevo.cuotas > 1) cambios.cuotas = nuevo.cuotas;
+  if (!previo.category_id && nuevo.category_id) cambios.category_id = nuevo.category_id;
+  if (nuevo.externo_id && previo.externo_id !== nuevo.externo_id) {
+    cambios.externo_id = nuevo.externo_id;
+    cambios.fuente = "mercadopago";
+  }
+  return Object.keys(cambios).length ? cambios : null;
+}
+
 // supabase/functions/mp-sync/index.ts
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
@@ -50,8 +76,9 @@ async function traer(sb, it) {
   const data = await r.json();
   const { data: cuentas } = await sb.from("accounts").select("*").eq("user_id", it.user_id);
   const cuentaMP = (cuentas ?? []).find((c) => /mercado ?pago/i.test(c.nombre));
-  let cargados = 0;
+  let cargados = 0, adoptados = 0;
   const nuevos = [];
+  const { data: previos } = await sb.from("transactions").select("*").eq("user_id", it.user_id).gte("fecha", String(desde).slice(0, 10));
   for (const p of data.results ?? []) {
     if (p.status !== "approved") continue;
     const esGasto = String(p.payer?.id ?? "") === String(it.cuenta);
@@ -72,11 +99,19 @@ async function traer(sb, it) {
       revisado: false,
       confianza: 95
     };
+    const previo = yaEstaba(fila, previos ?? []);
+    if (previo) {
+      const suma = loQueSuma(previo, fila);
+      if (suma) await sb.from("transactions").update(suma).eq("id", previo.id);
+      adoptados++;
+      continue;
+    }
     const { error } = await sb.from("transactions").insert(fila);
     if (error) {
       if (error.code !== "23505") console.error(error);
       continue;
     }
+    (previos ?? []).push(fila);
     cargados++;
     nuevos.push(`${fila.comercio} $${monto.toLocaleString("es-AR")}`);
   }
@@ -89,7 +124,7 @@ async function traer(sb, it) {
       cuerpo: nuevos.slice(0, 4).join(" \xB7 ")
     });
   }
-  return { user: it.user_id, cargados };
+  return { user: it.user_id, cargados, adoptados };
 }
 async function accessToken(sb, it) {
   if (it.expira_at && new Date(it.expira_at) > new Date(Date.now() + 6e4)) return it.access_token;
