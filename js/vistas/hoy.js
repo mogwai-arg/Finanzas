@@ -393,7 +393,9 @@ function tiraBishu(hoy) {
     excedida: peor ? { nombre: nombreDe('categories', peor.category_id, 'Una categoría'),
                        exceso: Math.round(peor.gastado - peor.tope) } : null,
     cierraManana: cierra ? cierra.nombre : null,
-    ahorro: F.estadoAhorro(budgets, state.transactions, p, 'ARS'),
+    ahorro: F.estadoAhorro(budgets, { cuentas: state.accounts, txs: state.transactions,
+                                      recurrings: state.recurrings,
+                                      pagos: state.recurring_payments }, p, 'ARS', hoy),
     mayor: mayor ? { nombre: mayor.comercio || mayor.descripcion || 'un gasto',
                      monto: Math.round(mayor.monto) } : null
   };

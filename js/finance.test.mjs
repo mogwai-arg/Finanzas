@@ -328,6 +328,66 @@ t('lo que no tiene categoría también se cuenta, sin inventarle una', () => {
   assert.equal(cs[1].monto, 100000);
 });
 
+console.log('Ahorro');
+const META = [{ clase: 'ahorro', moneda: 'ARS', monto: 350000 },
+              { clase: 'ahorro', moneda: 'USD', monto: 200 }];
+const CTAS_AH = [
+  { id: 'gal', nombre: 'Galicia', tipo: 'cuenta', moneda: 'ARS',
+    saldo_inicial: 1000000, saldo_al: '2026-08-01' },
+  { id: 'usd', nombre: 'Dólares', tipo: 'efectivo', moneda: 'USD',
+    saldo_inicial: 500, saldo_al: '2026-08-01' }
+];
+
+t('el mes en curso nunca se declara cumplido: el día 3 no se sabe', () => {
+  // Entró el sueldo el 1 y todavía no se gastó nada: la plata libre está
+  // genuinamente arriba, pero eso no es ahorro todavía.
+  const txs = [{ tipo: 'ingreso', moneda: 'ARS', monto: 3000000, fecha: '2026-09-01',
+                 account_id: 'gal' }];
+  const a = F.estadoAhorro(META, { cuentas: CTAS_AH, txs }, '2026-09', 'ARS', d('2026-09-03'));
+  assert.equal(a.enCurso, true);
+  assert.equal(a.logrado, false, 'no puede darse por cumplido con el mes corriendo');
+  assert.equal(a.dias, 27);
+  // Y trae con qué compararlo: cómo venía a esta altura del mes pasado.
+  assert.equal(typeof a.referencia, 'number');
+});
+
+t('un mes cerrado sí se puede declarar cumplido', () => {
+  const txs = [
+    { tipo: 'ingreso', moneda: 'ARS', monto: 3000000, fecha: '2026-08-01', account_id: 'gal' },
+    { tipo: 'gasto',   moneda: 'ARS', monto: 2500000, fecha: '2026-08-15', account_id: 'gal' }
+  ];
+  const a = F.estadoAhorro(META, { cuentas: CTAS_AH, txs }, '2026-08', 'ARS', d('2026-09-03'));
+  assert.equal(a.enCurso, false);
+  assert.equal(a.ahorrado, 500000);
+  assert.equal(a.logrado, true);
+  assert.equal(a.falta, 0);
+});
+
+t('en dólares: entraron 1000 y salieron 900, ahorraste 100', () => {
+  const txs = [
+    { tipo: 'ingreso', moneda: 'USD', monto: 1000, fecha: '2026-09-02', account_id: 'usd' },
+    { tipo: 'gasto',   moneda: 'USD', monto: 900,  fecha: '2026-09-02', account_id: 'usd' }
+  ];
+  const a = F.estadoAhorro(META, { cuentas: CTAS_AH, txs }, '2026-09', 'USD', d('2026-09-03'));
+  assert.equal(a.ahorrado, 100);
+  assert.equal(a.desde, 500);
+  assert.equal(a.ahora, 600);
+  assert.equal(a.pct, 50);                 // 100 de los 200 que se propuso
+});
+
+t('gastar más de lo que entró da ahorro negativo, no un cero piadoso', () => {
+  const txs = [{ tipo: 'gasto', moneda: 'USD', monto: 900, fecha: '2026-09-02', account_id: 'usd' }];
+  const a = F.estadoAhorro(META, { cuentas: CTAS_AH, txs }, '2026-09', 'USD', d('2026-09-03'));
+  assert.equal(a.ahorrado, -900);
+  assert.equal(a.falta, 1100);             // los 200 que quería más los 900 que perdió
+});
+
+t('sin meta cargada no hay nada que mostrar', () => {
+  assert.equal(F.estadoAhorro([], { cuentas: CTAS_AH, txs: [] }, '2026-09', 'ARS'), null);
+  assert.equal(F.estadoAhorro([{ clase: 'ahorro', moneda: 'ARS', monto: 0 }],
+    { cuentas: CTAS_AH, txs: [] }, '2026-09', 'ARS'), null);
+});
+
 console.log('Presupuesto');
 t('clasifica ok / alerta / excedido', () => {
   const res = { porCategoria: { a: 500, b: 850, c: 1200 } };

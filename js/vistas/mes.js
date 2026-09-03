@@ -1,7 +1,7 @@
 // =====================================================================
 // vistas/mes.js — gastos fijos y presupuesto del mes.
 // =====================================================================
-import { h, icono, iconoDe, hoja, aviso, select, deslizable, confirmar } from '../ui.js';
+import { h, frag, icono, iconoDe, hoja, aviso, select, deslizable, confirmar } from '../ui.js';
 import { state, guardar, borrar } from '../db.js';
 import * as F from '../finance.js';
 import { plata, cuandoVence, nombreDe, fechaISO, hoyISO, etiquetaCuenta,
@@ -17,8 +17,10 @@ export function vistaMes(root) {
   const budgets = state.budgets.filter(b => b.periodo === p);
   const alertPct = Number(state.settings?.alert_pct) || 80;
   const porCuenta = F.estadoPorCuenta(budgets, state.transactions, p, alertPct);
+  const paraAhorro = { cuentas: state.accounts, txs: state.transactions,
+                       recurrings: state.recurrings, pagos: state.recurring_payments };
   const ahorro = ['ARS', 'USD']
-    .map(m => F.estadoAhorro(budgets, state.transactions, p, m)).filter(Boolean);
+    .map(m => F.estadoAhorro(budgets, paraAhorro, p, m, hoy)).filter(Boolean);
   const faltan = rec.filter(r => !r.pagado);
   // Los que se debitan en la tarjeta no se pagan aparte: salen con el resumen,
   // que ya está contado más arriba. Sumarlos sería cobrarlos dos veces.
@@ -277,23 +279,54 @@ function totalFijos(rec) {
   return h('div', { style: { padding: '12px 14px 2px' } }, filas);
 }
 
-/** El ahorro no es un tope que no hay que pasar: es un piso al que llegar. */
+/**
+ * El ahorro no es un tope que no hay que pasar: es un piso al que llegar, y
+ * por eso se muestra al revés que un presupuesto: cuánto falta, no cuánto
+ * queda.
+ *
+ * Y con el mes corriendo NO se declara cumplido. El día 3, con el sueldo
+ * adentro y los gastos sin hacer, la plata libre está arriba de cualquier
+ * meta: festejar ahí es felicitar a alguien que no tiene plata. Mientras el
+ * mes corre se dice cómo viene y contra qué compararlo.
+ */
 function filaAhorro(a) {
-  const pct = Math.min(100, Math.max(0, a.pct));
+  const nombre = a.moneda === 'USD' ? 'En dólares' : 'En pesos';
+  // Con signo, siempre. Sin él, "pasó de $ 1.930.458 a $ 1.350.971" escondía
+  // que el primero era NEGATIVO y que la plata libre había subido, no bajado.
+  const con = n => (n < 0 ? '−' : '') + plata(Math.round(Math.abs(n)), a.moneda);
+
   return h('div', { style: { padding: '13px 14px' } },
     h('div', { style: { display: 'flex', justifyContent: 'space-between',
                         alignItems: 'baseline', gap: '10px' } },
-      h('span', { style: { fontSize: '14.5px', fontWeight: '500' } },
-        a.moneda === 'USD' ? 'En dólares' : 'En pesos'),
-      h('span.small.mut', h('b', { style: { color: a.ahorrado >= a.tope ? 'var(--pos)' : 'var(--tx)' } },
-        plata(Math.round(a.ahorrado), a.moneda)), ` de ${plata(a.tope, a.moneda)}`)),
-    h('div.mini', h('b', { class: a.ahorrado >= a.tope ? '' : 'al',
-                           style: { flex: String(Math.max(1, pct)) } }),
-      h('span', { style: { flex: String(Math.max(1, 100 - pct)) } })),
-    h('div.small.mut', { style: { marginTop: '7px' } },
-      a.ahorrado >= a.tope ? '¡Llegaste!'
-        : a.ahorrado < 0 ? `Vas ${plata(Math.abs(a.ahorrado), a.moneda)} en contra este mes.`
-        : `Te faltan ${plata(Math.round(a.falta), a.moneda)}.`));
+      h('span', { style: { fontSize: '14.5px', fontWeight: '500' } }, nombre),
+      h('span.small.mut',
+        h('b', { style: { color: a.ahorrado < 0 ? 'var(--amb)'
+                                : a.logrado ? 'var(--pos)' : 'var(--tx)' } }, con(a.ahorrado)),
+        ` de ${plata(a.tope, a.moneda)}`)),
+
+    // La barra aparece cuando el mes cerró. Mientras corre, una barra llena se
+    // lee como "listo", y el día 3 —con el sueldo adentro y los gastos sin
+    // hacer— eso es felicitar a alguien que todavía no ahorró nada.
+    !a.enCurso ? h('div.mini',
+      h('b', { style: { flex: String(Math.max(1, a.pct)) } }),
+      h('span', { style: { flex: String(Math.max(1, 100 - a.pct)) } })) : null,
+
+    h('div.small.mut', { style: { marginTop: '7px', lineHeight: '1.45' } },
+      a.enCurso
+        ? frag('Así viene, y faltan ', h('b', { style: { color: 'var(--tx)' } },
+            `${a.dias} ${a.dias === 1 ? 'día' : 'días'}`),
+            ' de gastos. ',
+            a.referencia != null
+              ? `A esta altura del mes pasado ibas ${con(a.referencia)}.`
+              : 'Todavía no hay un mes anterior con qué comparar.')
+        : a.logrado ? '¡Llegaste!'
+        : a.ahorrado < 0 ? `El mes cerró ${con(a.ahorrado)}: se fue más de lo que entró.`
+        : `Te faltaron ${con(a.falta)}.`),
+
+    // De dónde sale el número: sin esto, un ahorro que no cierra no se puede
+    // discutir con la app.
+    h('div.small.mut', { style: { marginTop: '4px', color: 'var(--tx3)' } },
+      `tu plata libre pasó de ${con(a.desde)} a ${con(a.ahora)}`));
 }
 
 function filaPresupuesto(b, nombre) {
@@ -307,9 +340,14 @@ function filaPresupuesto(b, nombre) {
       h('span.small.mut', h('b', { style: { color: 'var(--tx)' } },
         plata(Math.round(b.gastado), b.moneda || 'ARS')),
         ` de ${plata(b.tope, b.moneda || 'ARS')}`)),
+    // El tramo vacío tiene que estar: con Math.max(1, …) y sin hermano, una
+    // categoría en cero dibujaba la barra ENTERA llena. Se veía como gastado
+    // todo el tope justo donde no se gastó nada.
     h('div.mini',
-      h('b', { class: b.pct >= 80 ? 'al' : '', style: { flex: String(Math.max(1, dentro)) } }),
-      exceso > 0 && h('s', { style: { flex: String(exceso) } })),
+      dentro > 0 ? h('b', { class: b.pct >= 80 ? 'al' : '',
+                            style: { flex: String(dentro) } }) : null,
+      exceso > 0 ? h('s', { style: { flex: String(exceso) } }) : null,
+      b.restante > 0 ? h('span', { style: { flex: String(b.restante) } }) : null),
     exceso > 0 && h('div', {
       style: { fontSize: '12.5px', color: 'var(--amb)', fontWeight: '600', marginTop: '7px' } },
       `${plata(Math.round(exceso), b.moneda || 'ARS')} de más`),

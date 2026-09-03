@@ -770,18 +770,54 @@ export function estadoPorCuenta(budgets, txs, per, alertPct = 80) {
 /**
  * Lo ahorrado en el mes contra lo que uno se propuso.
  *
- * Ahorrado es lo que entro menos lo que salio: no hace falta que la plata
- * este en una cuenta aparte para que cuente. Las movidas entre cuentas
- * propias no son ni una cosa ni la otra, y por eso no entran.
+ * Ahorrar es que suba la PLATA LIBRE: lo que hay en las cuentas menos lo que
+ * ya se debe. Se mide como la diferencia entre la plata libre de hoy y la del
+ * ultimo dia del mes pasado.
+ *
+ * La version anterior hacia ingresos menos gastos del mes, y eso miente dos
+ * veces. El dia 3, con el sueldo adentro y los gastos todavia sin hacer, daba
+ * un millon ahorrado y la app felicitaba a alguien que no tenia plata. Y del
+ * otro lado, un ingreso que entro como transferencia —o que todavia no se
+ * cargo— dejaba el mes entero en negativo aunque hubiera plata guardada.
+ *
+ * Medir el cambio de la plata libre no se puede enganar: si al 1 tenias X
+ * libre y hoy tenes X mas 100, ahorraste 100, sin importar por donde entro ni
+ * como se contabilizo.
  */
-export function estadoAhorro(budgets, txs, per, moneda = 'ARS') {
-  const meta = budgets.find(b => b.clase === 'ahorro' && (b.moneda || 'ARS') === moneda);
+export function estadoAhorro(budgets, datos, per, moneda = 'ARS', ref = hoy()) {
+  const meta = (budgets || []).find(b => b.clase === 'ahorro' && (b.moneda || 'ARS') === moneda);
   if (!meta || !(Number(meta.monto) > 0)) return null;
-  const r = resumenMes(txs, per, moneda);
-  const ahorrado = round2(r.ingresos - r.gastos);
+  const { cuentas = [], txs = [], recurrings = [], pagos = [] } = datos || {};
+
+  // El mes en curso se mide hasta hoy; uno cerrado, hasta su ultimo dia.
+  const [y, m] = per.split('-').map(Number);
+  const finDelMes = new Date(y, m, 0);
+  const enCurso = periodo(ref) === per;
+  const hasta = enCurso ? ref : finDelMes;
+  const antesDe = new Date(y, m - 1, 0);          // ultimo dia del mes anterior
+
+  const libre = f => plataLibre(cuentas, txs, recurrings, pagos, f, moneda).libre;
+  const desde = libre(antesDe);
+  const ahora = libre(hasta);
+  const ahorrado = round2(ahora - desde);
   const tope = Number(meta.monto);
-  return { ...meta, ahorrado, tope, moneda,
-           pct: Math.max(0, Math.round((ahorrado / tope) * 100)),
+
+  // A mitad de mes el ahorro NO se puede saber: el dia 3, con el sueldo
+  // adentro y los gastos sin hacer, la plata libre esta genuinamente arriba.
+  // Lo unico honesto es compararlo contra la misma altura del mes pasado.
+  let referencia = null;
+  if (enCurso) {
+    const mismoDia = new Date(y, m - 2, Math.min(ref.getDate(), new Date(y, m - 1, 0).getDate()));
+    referencia = round2(libre(mismoDia) - libre(new Date(y, m - 2, 0)));
+  }
+
+  return { ...meta, moneda, tope, ahorrado, desde: round2(desde), ahora: round2(ahora),
+           enCurso, referencia,
+           dias: enCurso ? Math.max(0, dias(ref, finDelMes)) : 0,
+           // El porcentaje se acota al 100: una barra que se pasa no dice nada
+           // mas que "llego", y mientras el mes corre todavia puede bajar.
+           pct: Math.max(0, Math.min(100, Math.round((ahorrado / tope) * 100))),
+           logrado: !enCurso && ahorrado >= tope,
            falta: round2(Math.max(0, tope - ahorrado)) };
 }
 

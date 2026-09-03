@@ -124,11 +124,17 @@ export function frasesDeBishu(d, hoy = new Date()) {
     }
   }
 
-  // 6. El ahorro es un piso al que llegar, así que se dice lo que falta.
-  if (d.ahorro && d.ahorro.falta > 0)
-    decir('atento', `Te faltan $ ${plata(d.ahorro.falta)} para el ahorro que te propusiste.`, '/mes');
-  else if (d.ahorro && d.ahorro.falta <= 0)
-    decir('festejo', 'Ya llegaste al ahorro que te propusiste este mes.', '/mes');
+  // 6. El ahorro es un piso al que llegar, así que se dice lo que falta. Con
+  //    el mes corriendo no se festeja: el día 3 la plata libre está arriba de
+  //    cualquier meta porque el sueldo entró y los gastos no se hicieron.
+  if (d.ahorro && d.ahorro.logrado)
+    decir('festejo', 'Llegaste al ahorro que te propusiste este mes.', '/mes');
+  else if (d.ahorro && d.ahorro.falta > 0 && !d.ahorro.enCurso)
+    decir('atento', `El mes cerró $ ${plata(d.ahorro.falta)} abajo del ahorro que querías.`, '/mes');
+  else if (d.ahorro && d.ahorro.enCurso && d.ahorro.referencia != null)
+    decir(d.ahorro.ahorrado >= d.ahorro.referencia ? 'contento' : 'atento',
+      `Para el ahorro vas $ ${plata(d.ahorro.ahorrado)}; a esta altura del mes ` +
+      `pasado ibas $ ${plata(d.ahorro.referencia)}.`, '/mes');
 
   // 7. Las de una vez al mes son las que uno se pierde, y avisarlas dos días
   //    antes es lo que las hace servir.
