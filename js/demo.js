@@ -231,6 +231,17 @@ export const DEMO = {
       tipo: 'reintegro', valor: 25, tope: 20000, tope_periodo: 'mensual', dias: [3, 6],
       medio_pago: 'Galicia Visa', canal: 'presencial', activa: true, favorita: true,
       recordar: true, osm_filtro: 'shop=supermarket', marcas: ['Coto'] },
+    // El mismo comercio con varios medios de pago: asi vienen de Clash, y es
+    // lo que hacia que la lista dijera "Coto" cinco veces seguidas.
+    { id: id('p1b'), titulo: 'Coto', comercio: 'Coto', rubro: 'supermercado', emisor: 'macro',
+      tipo: 'descuento', valor: 20, tope: 15000, tope_periodo: 'mensual', dias: [1],
+      medio_pago: 'Macro Visa', canal: 'presencial', activa: true, marcas: ['Coto'] },
+    { id: id('p1c'), titulo: 'Coto', comercio: 'Coto', rubro: 'supermercado', emisor: 'mercadopago',
+      tipo: 'reintegro', valor: 15, tope: 10000, tope_periodo: 'mensual', dias: [],
+      medio_pago: 'Mercado Pago', canal: 'presencial', activa: true, marcas: ['Coto'] },
+    { id: id('p1d'), titulo: 'Coto', comercio: 'Coto', rubro: 'supermercado', emisor: 'uala',
+      tipo: 'descuento', valor: 10, tope: 6000, tope_periodo: 'mensual', dias: [4],
+      medio_pago: 'Ualá', canal: 'presencial', activa: true, marcas: ['Coto'] },
     { id: id('p2'), titulo: 'Shell', comercio: 'Shell', rubro: 'combustible', emisor: 'modo',
       tipo: 'reintegro', valor: 15, tope: 8000, tope_periodo: 'mensual', dias: [],
       medio_pago: 'MODO', canal: 'presencial', activa: true, favorita: false,

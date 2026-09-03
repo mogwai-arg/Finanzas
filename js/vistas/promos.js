@@ -41,7 +41,123 @@ export function vistaPromos(root) {
         h('button.btn.sec', { onclick: () => formPromo() }, 'Cargar una promo')));
       return;
     }
-    for (const p of promos) lista.append(tarjeta(p, hoy));
+    // Agrupadas por comercio: en Clash el mismo Coto aparece una vez por
+    // banco y por tarjeta, y diez filas que dicen "Coto" no son diez datos,
+    // son un dato repetido diez veces. Lo que uno quiere saber es "¿hay algo
+    // en Coto?" y recién después "¿con cuál?".
+    for (const g of agrupar(promos)) lista.append(g.promos.length > 1
+      ? tarjetaGrupo(g, hoy) : tarjeta(g.promos[0], hoy));
+  }
+
+  /** Por comercio, con la mejor adelante. */
+  function agrupar(promos) {
+    const llave = p => String(p.comercio || p.titulo || '')
+      .toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9]/g, '') || String(p.id);
+    const mapa = new Map();
+    for (const p of promos) {
+      const k = llave(p);
+      if (!mapa.has(k)) mapa.set(k, { nombre: p.comercio || p.titulo, promos: [] });
+      mapa.get(k).promos.push(p);
+    }
+    for (const g of mapa.values()) {
+      g.promos.sort((a, b) => (Number(b.valor) || 0) - (Number(a.valor) || 0));
+      g.mejor = g.promos[0];
+      g.recordadas = g.promos.filter(p => p.recordar).length;
+    }
+    // Primero las que tienen algo marcado, después por el mejor porcentaje.
+    return [...mapa.values()].sort((a, b) =>
+      (b.recordadas > 0) - (a.recordadas > 0) ||
+      (Number(b.mejor.valor) || 0) - (Number(a.mejor.valor) || 0));
+  }
+
+  /**
+   * Un comercio, con lo mejor que tiene y cuántas opciones más.
+   *
+   * No se muestran los medios de pago acá: son cuatro o cinco por comercio y
+   * en la lista no se pueden comparar. La decisión de con cuál pagar se toma
+   * adentro, cuando ya decidiste que vas a ese comercio.
+   */
+  function tarjetaGrupo(g, hoy) {
+    const per = hoyISO().slice(0, 7);
+    const aplicaHoy = g.promos.some(p => !p.dias?.length || p.dias.includes(hoy.getDay()));
+    const usado = g.promos.reduce((s, p) => {
+      const u = (state.promo_usos || []).find(x => x.promo_id === p.id && x.periodo === per);
+      return s + (u ? Number(u.usado) : 0);
+    }, 0);
+    const bancos = [...new Set(g.promos.map(p => p.medio_pago).filter(Boolean))];
+
+    return h('button.grp.pad', {
+      style: { width: '100%', textAlign: 'left', border: '0', display: 'block',
+               cursor: 'pointer', opacity: aplicaHoy ? '1' : '.62' },
+      onclick: () => hojaGrupo(g, hoy) },
+      h('div', { style: { display: 'flex', alignItems: 'flex-start', gap: '11px' } },
+        h('div', { class: 'cifra' + (aplicaHoy ? ' pos' : ''), style: { fontSize: '22px' } },
+          Number(g.mejor.valor) > 0
+            ? `${Number(g.mejor.valor)}${g.mejor.tipo === 'cuotas' ? '×' : '%'}` : '—'),
+        h('div', { style: { flex: '1', minWidth: '0' } },
+          h('div', { style: { fontWeight: '600', fontSize: '15.5px', letterSpacing: '-.015em' } },
+            g.nombre),
+          h('div.small.mut', { style: { marginTop: '1px' } },
+            `hasta ${Number(g.mejor.valor)} % · ${g.promos.length} opciones` +
+            (bancos.length ? ` · ${bancos.length} ${bancos.length === 1 ? 'medio' : 'medios'}` : ''))),
+        g.recordadas > 0
+          ? h('span.pill.bra', icono('campana', 13),
+              g.recordadas === 1 ? 'Te aviso' : `${g.recordadas} avisos`)
+          : h('span.chev', icono('chev', 15))),
+      usado > 0 ? h('div.small.mut', { style: { marginTop: '9px' } },
+        `Llevás ${plata(Math.round(usado))} de reintegro este mes`) : null);
+  }
+
+  /**
+   * Todas las de un comercio, para elegir con cuál.
+   *
+   * Acá sí se ve el medio de pago de cada una, que es lo único que las
+   * distingue, y se marca de a una cuál querés que te recuerde.
+   */
+  function hojaGrupo(g, hoy) {
+    const cuerpo = h('div');
+    const pintarLista = () => cuerpo.replaceChildren(h('div.grp',
+      g.promos.map(p => {
+        const aplica = !p.dias?.length || p.dias.includes(hoy.getDay());
+        const cae = F.proximaFechaPromo(p, hoy);
+        const cuando = p.dias?.length || p.vigencia_hasta
+          ? (cae ? cuandoCae(Math.round((cae - new Date(hoy.toDateString())) / 86400000), cae)
+                 : 'ya pasó')
+          : 'todos los días';
+        const campana = h('button', { 'aria-pressed': String(!!p.recordar),
+          class: 'pill ' + (p.recordar ? 'bra' : 'mut'),
+          style: { flex: 'none', border: '0', cursor: 'pointer', minHeight: '34px',
+                   padding: '0 10px' },
+          onclick: async e => {
+            e.stopPropagation();
+            await guardar('promos', { ...p, recordar: !p.recordar });
+            p.recordar = !p.recordar;
+            pintarLista();
+          } }, icono('campana', 13), p.recordar ? 'Te aviso' : 'Avisame');
+
+        return h('div.li', { style: { opacity: aplica ? '1' : '.6' } },
+          h('div', { class: 'cifra' + (aplica ? ' pos' : ''),
+                     style: { fontSize: '18px', flex: 'none', width: '48px' } },
+            `${Number(p.valor) || 0}${p.tipo === 'cuotas' ? '×' : '%'}`),
+          h('div.m',
+            h('div.t', p.medio_pago || p.emisor || 'Sin medio'),
+            h('div.s', [p.tipo === 'descuento' ? 'descuento' : p.tipo === 'cuotas' ? 'cuotas' : 'reintegro',
+                        p.tope ? `tope ${plata(p.tope)}` : null, cuando]
+              .filter(Boolean).join(' · '))),
+          campana);
+      })));
+    pintarLista();
+
+    return hoja(g.nombre, h('div',
+      h('div.small.mut', { style: { lineHeight: '1.55', marginBottom: '14px' } },
+        `${g.promos.length} promos en ${g.nombre}, ordenadas de mayor a menor. `,
+        'Marcá la que quieras que te recuerde el día que aplica: las que no ',
+        'marques no te van a molestar.'),
+      cuerpo,
+      h('button.btn.sec', { style: { marginTop: '14px' },
+                            onclick: () => { pintar(); formPromo(g.mejor); } },
+        icono('lapiz', 16), 'Editar la de arriba')));
   }
 
   function tarjeta(p, hoy) {
