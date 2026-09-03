@@ -130,6 +130,17 @@ function avisosDelDia(d, ref = /* @__PURE__ */ new Date()) {
       ));
     }
   }
+  const despegado = dia === 5 ? seDespegoDelResto(d.recurrings ?? [], d.pagosViejos ?? [], per, d.inflacionRef ?? null) : null;
+  if (on("aumentos") && despegado) {
+    const a = despegado;
+    out.push(msg(
+      "aumentos",
+      `${a.nombre} subi\xF3 ${Math.round(a.subio)} % en tres meses`,
+      `El resto de tus fijos subi\xF3 ${Math.round(a.normal)} %. Son ${plata(a.demas, a.moneda)} de m\xE1s por mes: casi siempre es una promo que se venci\xF3.`,
+      `despego-${a.nombre}`,
+      "./#/mes"
+    ));
+  }
   if (on("bishu") && hoy.getDay() === 1 && dia > 7) {
     const antes = Number(d.gastadoMesPasado) || 0;
     const ahora = Number(d.gastadoEsteMes) || 0;
@@ -158,6 +169,34 @@ function avisosDelDia(d, ref = /* @__PURE__ */ new Date()) {
     }
   }
   return out;
+}
+function seDespegoDelResto(recurrings, pagos, per, referencia = null, meses = 3, margen = 10) {
+  let desdePer = per;
+  for (let i = 0; i < meses; i++) desdePer = mesAnterior(desdePer);
+  const pagado = (id, p) => {
+    const x = pagos.find((v) => v.recurring_id === id && v.periodo === p && v.pagado_at && v.monto != null);
+    return x ? Number(x.monto) : null;
+  };
+  const cambios = [];
+  for (const r of recurrings) {
+    if (r.activo === false) continue;
+    const desde = pagado(r.id, desdePer), hasta = pagado(r.id, per);
+    if (!(desde > 0) || !(hasta > 0)) continue;
+    cambios.push({ r, desde, hasta, subio: (hasta - desde) / desde * 100 });
+  }
+  if (!cambios.length) return null;
+  const orden = cambios.map((c) => c.subio).sort((a, b) => a - b);
+  const m = Math.floor(orden.length / 2);
+  const normal = cambios.length >= 3 ? orden.length % 2 ? orden[m] : (orden[m - 1] + orden[m]) / 2 : referencia != null ? Number(referencia) : null;
+  if (normal == null) return null;
+  const casos = cambios.filter((c) => c.subio - normal >= margen).map((c) => ({
+    nombre: c.r.nombre,
+    moneda: c.r.moneda || "ARS",
+    subio: c.subio,
+    normal,
+    demas: c.hasta - c.desde * (1 + normal / 100)
+  })).sort((a, b) => b.demas - a.demas);
+  return casos[0] ?? null;
 }
 var MESES_LARGOS = [
   "enero",
@@ -427,7 +466,9 @@ Deno.serve(async (req) => {
     const [cuentas, recurrings, pagos, promos, aumentos] = await Promise.all([
       de("accounts"),
       de("recurrings"),
-      sb.from("recurring_payments").select("*").eq("user_id", u.user_id).eq("periodo", per),
+      // Cuatro meses de pagos y no solo el mes: el aviso de "subió más que el
+      // resto" compara contra lo que pagabas tres meses atrás.
+      sb.from("recurring_payments").select("*").eq("user_id", u.user_id).gte("periodo", mesAntesDe(mesAntesDe(mesAntesDe(mesPasado)))),
       de("promos"),
       sb.from("notificaciones").select("*").eq("user_id", u.user_id).eq("tipo", "aumento").eq("leida", false)
     ]);
@@ -445,6 +486,9 @@ Deno.serve(async (req) => {
       pagos: pagos.data ?? [],
       promos: promos.data ?? [],
       aumentos: aumentos.data ?? [],
+      // Sin referencia a mano: con menos de tres fijos comparables el aviso
+      // simplemente no sale, que es mejor que salir con un supuesto.
+      pagosViejos: pagos.data ?? [],
       gastadoEsteMes: gastado(per),
       gastadoMesPasado: gastado(mesPasado),
       salioMesCerrado: salioEnTodo(mesPasado),

@@ -30,6 +30,7 @@ export function vistaMes(root) {
 
   root.append(h('div.flow',
     ...aumentos(),
+    subioDeMas(p),
 
     (faltan.length || esteMes.length) ? h('div.grp.pad',
       h('div.ghead', { style: { margin: '0' } }, 'Falta pagar'),
@@ -264,6 +265,98 @@ function totalFijos(rec) {
   }).filter(Boolean);
   if (!filas.length) return null;
   return h('div', { style: { padding: '12px 14px 2px' } }, filas);
+}
+
+/**
+ * El gasto fijo que subió más de lo que subió todo lo demás.
+ *
+ * En Argentina todo sube todos los meses, así que un aviso por cualquier
+ * aumento es un aviso por todo, que es lo mismo que ninguno. Lo que sí es
+ * información es que UNO se haya despegado del resto: eso no es la inflación,
+ * es casi siempre una promo que se venció, y es lo único que se puede
+ * discutir con alguien.
+ *
+ * La medida sale de tus propios pagos y no de un índice: es la canasta que
+ * pagás vos.
+ */
+function subioDeMas(per) {
+  const r = F.aumentosSospechosos(state.recurrings, state.recurring_payments, per, {
+    meses: 3, margen: 10,
+    referencia: state.settings?.inflacion_ref != null
+      ? Number(state.settings.inflacion_ref) : null
+  });
+  if (!r.casos.length) return null;
+
+  return h('section',
+    h('div.ghead', 'Subió más que el resto',
+      h('span', { style: { textTransform: 'none', letterSpacing: '0', fontWeight: '500' } },
+        `tus fijos subieron ${r.normal} %`)),
+    h('div.grp', r.casos.slice(0, 3).map(c => h('button.li', {
+      onclick: () => hojaAumento(c, r) },
+      h('div.av.amb', icono('sube', 17)),
+      h('div.m', h('div.t', c.nombre),
+        h('div.s', `${plata(Math.round(c.desde), c.moneda)} → ${plata(Math.round(c.hasta), c.moneda)}`)),
+      h('div.v', { style: { color: 'var(--amb)' } }, `+${Math.round(c.subio)} %`,
+        h('small', `${plata(Math.round(c.demas), c.moneda)} de más`)),
+      h('span.chev', icono('chev', 15))))),
+    !r.mediaPropia ? h('div.small.mut', { style: { padding: '10px 4px 0', lineHeight: '1.5' } },
+      'Con menos de tres gastos fijos pagados no puedo sacar tu propio ',
+      'promedio, así que estoy usando la referencia que pusiste a mano.') : null);
+}
+
+const COMO = {
+  internet: ['Internet y cable tienen área de retención, y el precio de retención es ' +
+             'bastante más bajo que el de lista. El descuento ya existe: está ' +
+             'condicionado a que lo pidas.',
+             'Pedí la baja por teléfono, no por chat. El chat no puede retenerte; ' +
+             'retención sí.'],
+  celular: ['Las telefónicas tienen retención igual que el cable, y los planes ' +
+            'nuevos suelen salir menos que el que ya tenés.',
+            'Preguntá qué plan están dando a los que se dan de alta hoy, y pedí ese.'],
+  prepaga: ['Preguntá si hay un plan equivalente más barato: la misma cobertura con ' +
+            'otro nombre cambia bastante de precio.',
+            'Y si no lo pagás por débito automático, preguntá cuánto baja pagándolo así.'],
+  seguro: ['Cotizá en otras dos compañías y llamá con esos números en la mano. Es el ' +
+           'rubro donde más rápido se consigue algo.'],
+  suscripcion: ['Suele haber plan anual o familiar más barato que el mensual. ' +
+                'Y es de las pocas cosas que se pueden cortar sin que pase nada.']
+};
+
+/** Qué subió, cuánto de eso es de más, y qué se puede hacer. */
+function hojaAumento(c, r) {
+  const pasos = COMO[c.queEs] || [
+    'Llamá y preguntá por qué subió: a veces hay un cargo agregado que se saca ' +
+    'con pedirlo.'
+  ];
+  return hoja(c.nombre, h('div.flow', { style: { gap: '16px' } },
+    h('div.grp.pad',
+      h('div.ghead', { style: { margin: '0 0 5px' } }, 'Subió'),
+      h('div', { class: 'cifra amb', style: { fontSize: 'var(--t-cifra2)' } },
+        `+${Math.round(c.subio)} %`),
+      h('div.small.mut', { style: { marginTop: '5px' } },
+        `de ${plata(Math.round(c.desde), c.moneda)} a ${plata(Math.round(c.hasta), c.moneda)} ` +
+        'en tres meses'),
+      h('div.small.mut', { style: { marginTop: '13px', paddingTop: '13px',
+                                    borderTop: '1px solid var(--line)', lineHeight: '1.5' } },
+        'En el mismo período, el resto de tus gastos fijos subió ',
+        h('b', { style: { color: 'var(--tx)' } }, `${r.normal} %`),
+        `. Con ese aumento estarías pagando ${plata(Math.round(c.deberia), c.moneda)}: `,
+        h('b', { style: { color: 'var(--amb)' } }, `${plata(Math.round(c.demas), c.moneda)} de más`),
+        ' por mes, ',
+        h('b', { style: { color: 'var(--amb)' } }, plata(Math.round(c.demas * 12), c.moneda)),
+        ' en un año.')),
+
+    h('div',
+      h('div.ghead', 'Qué se puede hacer'),
+      h('div.grp', pasos.map(t => h('div.li',
+        h('div.av.bra', icono('celular', 15)),
+        h('div.m', h('div.s', { style: { whiteSpace: 'normal', lineHeight: '1.45',
+                                         color: 'var(--tx)', fontSize: '14px' } }, t)))))),
+
+    h('div.small.mut', { style: { lineHeight: '1.5' } },
+      'Esto sale de lo que pagaste vos, no de un índice: por eso la comparación ',
+      'es contra tu propia canasta y no contra la inflación del país. Si el mes ',
+      'que viene lo bajás, se va a ver acá.')));
 }
 
 /**

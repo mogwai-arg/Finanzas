@@ -101,13 +101,22 @@ export function frasesDeBishu(d, hoy = new Date()) {
   if (d.excedida)
     decir('alerta', `${d.excedida.nombre} se pasó $ ${plata(d.excedida.exceso)} del tope.`, '/mes');
 
-  // 4. El cierre no se puede mover, y comprar un día antes o un día después
+  // 4. Un fijo que se despegó del resto es plata sobre la mesa todos los
+  //    meses, no una vez: va antes que las comparaciones del mes, aunque no
+  //    tenga vencimiento. Y solo se dice si se despegó de LO TUYO: en
+  //    Argentina todo sube, avisar por cualquier aumento es no avisar.
+  if (d.aumento)
+    decir('alerta', `${d.aumento.nombre} subió ${Math.round(d.aumento.subio)} % en tres meses ` +
+                    `y el resto de tus fijos ${Math.round(d.aumento.normal)} %. ` +
+                    `Son $ ${plata(d.aumento.demas)} de más por mes.`, '/mes');
+
+  // 5. El cierre no se puede mover, y comprar un día antes o un día después
   //    cambia en un mes cuándo se paga.
   if (d.cierraManana)
     decir('atento', `${d.cierraManana} cierra mañana. Lo que compres después se paga ` +
                     'el mes siguiente.', '/tarjetas');
 
-  // 5. Contra el mes pasado al mismo día, que es la única comparación que
+  // 6. Contra el mes pasado al mismo día, que es la única comparación que
   //    contesta "¿voy gastando más o menos que la vez pasada?".
   const antes = Number(d.gastadoMesPasadoAlDia) || 0;
   const ahora = Number(d.gastadoEsteMesAlDia) || 0;

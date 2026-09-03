@@ -125,7 +125,7 @@ const TIPOS = [
   ['promos',   'Promos marcadas',    'El día que cae la que pediste que te recuerde'],
   ['resumen',  'Cierre de tarjeta',  'La víspera del cierre, para llegar con la compra'],
   ['saldo',    'Saldo bajo',         'Cuando una cuenta queda por debajo del mínimo'],
-  ['aumentos', 'Aumentos',           'Cuando un correo dice que subió un gasto fijo'],
+  ['aumentos', 'Aumentos',           'Cuando un fijo sube más que el resto, o un correo lo dice'],
   ['bishu',    'Cómo venís',         'Bishu compara con el mes pasado, una vez por semana'],
   ['cierre',   'Cierre del mes',     'El día 1, cómo cerró el mes que terminó']
 ];

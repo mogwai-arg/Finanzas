@@ -1,6 +1,6 @@
 // node --experimental-strip-types supabase/functions/_shared/avisos.test.ts
 import assert from 'node:assert/strict';
-import { avisosDelDia, saldoDeCuenta } from './avisos.ts';
+import { avisosDelDia, saldoDeCuenta, seDespegoDelResto } from './avisos.ts';
 
 let ok = 0, mal = 0;
 const t = (n: string, fn: () => void) => { try { fn(); console.log('  ok  ' + n); ok++; }
@@ -145,6 +145,66 @@ t('el cierre se puede apagar como cualquier otro', () => {
   const m = avisosDelDia({ prefs: { cierre: false }, salioMesCerrado: 2_500_000,
                            movimientosMesCerrado: 41 }, new Date(2026, 8, 1));
   assert.ok(!m.some(x => x.tipo === 'cierre'), 'apagado no avisa');
+});
+
+// ------------------------------------------------- subio mas que el resto
+const FIJOS = [{ id: 'flow', nombre: 'Flow', activo: true },
+               { id: 'luz', nombre: 'Edesur', activo: true },
+               { id: 'gas', nombre: 'Metrogas', activo: true },
+               { id: 'agua', nombre: 'Aysa', activo: true }];
+const pg = (id: string, periodo: string, monto: number) =>
+  ({ recurring_id: id, periodo, monto, pagado_at: `${periodo}-05T00:00:00Z` });
+// Todo sube 6 %, menos Flow que sube 22 %.
+const PAGOS = [
+  pg('flow', '2026-06', 38000), pg('flow', '2026-09', 46400),
+  pg('luz', '2026-06', 20000), pg('luz', '2026-09', 21200),
+  pg('gas', '2026-06', 37000), pg('gas', '2026-09', 39220),
+  pg('agua', '2026-06', 26000), pg('agua', '2026-09', 27560)
+];
+
+t('el que se despegó del resto es el que se marca, no el que subió', () => {
+  const a = seDespegoDelResto(FIJOS, PAGOS, '2026-09')!;
+  assert.equal(a.nombre, 'Flow');
+  assert.equal(Math.round(a.subio), 22);
+  assert.equal(Math.round(a.normal), 6);
+  assert.equal(Math.round(a.demas), 6120);
+});
+
+t('si TODOS suben parejo, no hay nada que avisar', () => {
+  // Es la prueba que importa: en Argentina sube todo todos los meses, y una
+  // regla que mida contra cero avisaria por los cuatro, todos los meses.
+  const parejo = PAGOS.map(p => p.recurring_id === 'flow' && p.periodo === '2026-09'
+    ? { ...p, monto: 40280 } : p);          // Flow tambien al 6 %
+  assert.equal(seDespegoDelResto(FIJOS, parejo, '2026-09'), null);
+});
+
+t('con menos de tres comparables no se opina sin referencia', () => {
+  const dos = PAGOS.filter(p => p.recurring_id === 'flow' || p.recurring_id === 'luz');
+  assert.equal(seDespegoDelResto(FIJOS, dos, '2026-09'), null);
+  const conRef = seDespegoDelResto(FIJOS, dos, '2026-09', 6)!;
+  assert.equal(conRef.nombre, 'Flow');
+});
+
+t('gana el que cuesta más plata, no el que subió más por ciento', () => {
+  const conSuscripcion = [...FIJOS, { id: 'spo', nombre: 'Spotify', activo: true }];
+  const pagos = [...PAGOS, pg('spo', '2026-06', 9000), pg('spo', '2026-09', 12600)];
+  const a = seDespegoDelResto(conSuscripcion, pagos, '2026-09')!;
+  assert.equal(a.nombre, 'Flow');           // Spotify subio 40 %, pero son $ 3.000
+});
+
+t('el aviso sale el día 5 y nombra las dos cifras', () => {
+  const m = avisosDelDia({ recurrings: FIJOS, pagosViejos: PAGOS }, new Date(2026, 8, 5));
+  const a = m.find(x => x.tipo === 'aumentos')!;
+  assert.ok(a, 'tiene que haber aviso');
+  assert.ok(a.titulo.includes('Flow') && a.titulo.includes('22'), a.titulo);
+  assert.ok(a.cuerpo.includes('6 %'), a.cuerpo);
+});
+
+t('y no sale ningún otro día', () => {
+  for (const dia of [1, 4, 6, 20]) {
+    const m = avisosDelDia({ recurrings: FIJOS, pagosViejos: PAGOS }, new Date(2026, 8, dia));
+    assert.ok(!m.some(x => x.tipo === 'aumentos'), 'no debería avisar el ' + dia);
+  }
 });
 
 console.log(`\n${ok} pruebas OK${mal ? `, ${mal} FALLAN` : ''}\n`);

@@ -475,6 +475,14 @@ function tiraBishu(hoy) {
                valor: promo.valor, tipo: promo.tipo, medio: promo.medio_pago };
     }),
     diasSinCargar: F.diasSinCargar(state.transactions, hoy),
+    // El fijo que se despegó del resto, si hay uno: el de más plata.
+    aumento: (() => {
+      const r = F.aumentosSospechosos(state.recurrings, state.recurring_payments, p, {
+        meses: 3, margen: 10,
+        referencia: state.settings?.inflacion_ref != null
+          ? Number(state.settings.inflacion_ref) : null });
+      return r.casos.length ? { ...r.casos[0], normal: r.normal } : null;
+    })(),
     gastadoEsteMesAlDia: F.gastadoAlDia(state.transactions, p, hoy.getDate()),
     gastadoMesPasadoAlDia: F.gastadoAlDia(state.transactions, F.mesAnterior(p), hoy.getDate()),
     cargoHoy: state.transactions.some(t =>

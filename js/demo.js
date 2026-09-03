@@ -153,6 +153,10 @@ export const DEMO = {
       category_id: id('c4'), account_id: id('gal'), variable: true, activo: true, orden: 4 },
     { id: id('rc5'), nombre: 'Aysa', monto_estimado: 26088, moneda: 'ARS', dia_vencimiento: 1,
       category_id: id('c4'), account_id: id('gal'), variable: true, activo: true, orden: 5 },
+    // Internet, para que se vea la deteccion de aumentos: subio 22 % en tres
+    // meses mientras el resto subio 6 %.
+    { id: id('rc8'), nombre: 'Flow', monto_estimado: 46400, moneda: 'ARS', dia_vencimiento: 8,
+      category_id: id('c4'), account_id: id('gal'), variable: false, activo: true, orden: 8 },
     // Spotify cae solo en la tarjeta; el colegio y OSDE se pagan a mano, y
     // según el mes salen por transferencia o con la tarjeta.
     // El alquiler se paga en dólares y a mano: entra en "Lo que se viene"
@@ -164,14 +168,25 @@ export const DEMO = {
       debito_automatico: true, orden: 6 }
   ],
 
+  // Tres meses de pagos: es lo que hace falta para que la app pueda decir
+  // cuanto subio LO TUYO y comparar cada fijo contra eso.
   recurring_payments: [
     { id: id('rp1'), recurring_id: id('rc3'), periodo: '2026-09', monto: 20581.06,
       pagado_at: '2026-09-01T12:00:00Z', transaction_id: id('t6') },
     { id: id('rp2'), recurring_id: id('rc4'), periodo: '2026-09', monto: 37784,
       pagado_at: '2026-09-01T12:00:00Z', transaction_id: id('t7') },
     { id: id('rp3'), recurring_id: id('rc5'), periodo: '2026-09', monto: 26087.98,
-      pagado_at: '2026-09-01T12:00:00Z', transaction_id: id('t8') }
-  ],
+      pagado_at: '2026-09-01T12:00:00Z', transaction_id: id('t8') },
+    { id: id('rp4'), recurring_id: id('rc8'), periodo: '2026-09', monto: 46400,
+      pagado_at: '2026-09-01T12:00:00Z' },
+
+    { id: id('rp5'), recurring_id: id('rc3'), periodo: '2026-06', monto: 19416 },
+    { id: id('rp6'), recurring_id: id('rc4'), periodo: '2026-06', monto: 35646 },
+    { id: id('rp7'), recurring_id: id('rc5'), periodo: '2026-06', monto: 24611 },
+    { id: id('rp8'), recurring_id: id('rc8'), periodo: '2026-06', monto: 38000 },
+    { id: id('rp9'), recurring_id: id('rc1'), periodo: '2026-06', monto: 517538 },
+    { id: id('rp10'), recurring_id: id('rc1'), periodo: '2026-09', monto: 548590 }
+  ].map(p => ({ ...p, pagado_at: p.pagado_at || `${p.periodo}-05T12:00:00Z` })),
 
   budgets: [
     { id: id('b1'), periodo: '2026-09', category_id: id('c1'), monto: 260000, moneda: 'ARS' },

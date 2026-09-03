@@ -1118,4 +1118,65 @@ t('lo que quedo es cuanto subio la plata libre, no ingresos menos gastos', () =>
   assert.equal(d.hasta - d.desde, 2000000);
 });
 
+// -------------------------------------------- aumentos que valen la pena
+const FIJOS = [{ id: 'flow', nombre: 'Flow', activo: true },
+               { id: 'luz', nombre: 'Edesur', activo: true },
+               { id: 'gas', nombre: 'Metrogas', activo: true },
+               { id: 'agua', nombre: 'Aysa', activo: true }];
+const pg = (id, periodo, monto) => ({ recurring_id: id, periodo, monto,
+                                      pagado_at: `${periodo}-05T00:00:00Z` });
+const PAGOS = [
+  pg('flow', '2026-06', 38000), pg('flow', '2026-09', 46400),
+  pg('luz', '2026-06', 20000), pg('luz', '2026-09', 21200),
+  pg('gas', '2026-06', 37000), pg('gas', '2026-09', 39220),
+  pg('agua', '2026-06', 26000), pg('agua', '2026-09', 27560)
+];
+
+t('mide contra lo que subio EL RESTO, no contra cero', () => {
+  const r = F.aumentosSospechosos(FIJOS, PAGOS, '2026-09');
+  assert.equal(r.normal, 6);
+  assert.equal(r.casos.length, 1);
+  assert.equal(r.casos[0].nombre, 'Flow');
+  assert.equal(Math.round(r.casos[0].demas), 6120);
+  assert.equal(r.casos[0].queEs, 'internet');
+});
+
+t('si sube todo parejo no avisa nada', () => {
+  // La prueba que decide si esto sirve: en Argentina sube todo todos los
+  // meses, y una regla contra cero avisaria por los cuatro cada mes.
+  const parejo = PAGOS.map(p => p.recurring_id === 'flow' && p.periodo === '2026-09'
+    ? { ...p, monto: 40280 } : p);
+  assert.equal(F.aumentosSospechosos(FIJOS, parejo, '2026-09').casos.length, 0);
+});
+
+t('un pago sin pagado_at no cuenta como historia', () => {
+  // El monto_estimado se pisa cuando uno lo actualiza: no tiene historia, y
+  // usarlo seria comparar el precio de hoy contra el precio de hoy.
+  const sinPagar = PAGOS.map(p => p.periodo === '2026-06' ? { ...p, pagado_at: null } : p);
+  assert.equal(F.aumentosSospechosos(FIJOS, sinPagar, '2026-09').comparados, 0);
+});
+
+t('ordena por la plata y no por el porcentaje', () => {
+  const con = [...FIJOS, { id: 'spo', nombre: 'Spotify', activo: true }];
+  const pagos = [...PAGOS, pg('spo', '2026-06', 9000), pg('spo', '2026-09', 12600)];
+  const r = F.aumentosSospechosos(con, pagos, '2026-09');
+  assert.equal(r.casos[0].nombre, 'Flow');    // Spotify subio 40 %, son $ 3.000
+  assert.equal(r.casos[1].nombre, 'Spotify');
+});
+
+t('con menos de tres comparables no opina, salvo referencia a mano', () => {
+  const dos = PAGOS.filter(p => ['flow', 'luz'].includes(p.recurring_id));
+  assert.equal(F.aumentosSospechosos(FIJOS, dos, '2026-09').normal, null);
+  const conRef = F.aumentosSospechosos(FIJOS, dos, '2026-09', { referencia: 6 });
+  assert.equal(conRef.casos[0].nombre, 'Flow');
+  assert.equal(conRef.mediaPropia, false);
+});
+
+t('sabe con quien se puede discutir y con quien no', () => {
+  assert.equal(F.queServicio('Flow'), 'internet');
+  assert.equal(F.queServicio('Personal Pay'), 'celular');
+  assert.equal(F.queServicio('OSDE 210'), 'prepaga');
+  assert.equal(F.queServicio('Colegio Juan Bautista'), null);
+});
+
 console.log(`\n${ok} pruebas OK`);

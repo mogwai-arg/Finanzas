@@ -122,7 +122,10 @@ Deno.serve(async (req) => {
     const de = (t: string) => sb.from(t).select('*').eq('user_id', u.user_id);
     const [cuentas, recurrings, pagos, promos, aumentos] = await Promise.all([
       de('accounts'), de('recurrings'),
-      sb.from('recurring_payments').select('*').eq('user_id', u.user_id).eq('periodo', per),
+      // Cuatro meses de pagos y no solo el mes: el aviso de "subió más que el
+      // resto" compara contra lo que pagabas tres meses atrás.
+      sb.from('recurring_payments').select('*').eq('user_id', u.user_id)
+        .gte('periodo', mesAntesDe(mesAntesDe(mesAntesDe(mesPasado)))),
       de('promos'),
       sb.from('notificaciones').select('*').eq('user_id', u.user_id)
         .eq('tipo', 'aumento').eq('leida', false)
@@ -152,6 +155,9 @@ Deno.serve(async (req) => {
       cuentas: cuentas.data ?? [], txs: txs ?? [],
       recurrings: recurrings.data ?? [], pagos: pagos.data ?? [],
       promos: promos.data ?? [], aumentos: aumentos.data ?? [],
+      // Sin referencia a mano: con menos de tres fijos comparables el aviso
+      // simplemente no sale, que es mejor que salir con un supuesto.
+      pagosViejos: pagos.data ?? [],
       gastadoEsteMes: gastado(per), gastadoMesPasado: gastado(mesPasado),
       salioMesCerrado: salioEnTodo(mesPasado), salioMesAnterior: salioEnTodo(dosAtras),
       movimientosMesCerrado: cuantosEn(mesPasado)

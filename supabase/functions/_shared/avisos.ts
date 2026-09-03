@@ -82,6 +82,9 @@ export type Datos = {
   pagos?: any[];
   promos?: any[];
   aumentos?: any[];          // notificaciones tipo 'aumento' sin leer
+  // Pagos de gastos fijos de los ultimos meses, para ver cual se despego.
+  pagosViejos?: any[];
+  inflacionRef?: number | null;
   gastadoEsteMes?: number;   // hasta hoy
   gastadoMesPasado?: number; // hasta el mismo dia del mes pasado
   // Para el cierre del dia 1: el mes que acaba de terminar, entero.
@@ -167,6 +170,26 @@ export function avisosDelDia(d: Datos, ref = new Date()): Mensaje[] {
     }
   }
 
+  // ------------------------------------------------- subio mas que el resto
+  //
+  // Una vez por mes y no todos los dias: es plata sobre la mesa, pero de las
+  // que se resuelven con una llamada, no en el momento. El dia 5, cuando los
+  // fijos del mes ya se pagaron.
+  //
+  // La regla que lo hace util es que compara contra lo que subio EL RESTO de
+  // tus fijos, no contra cero: en Argentina avisar por cualquier aumento es
+  // avisar por todo, que es lo mismo que no avisar.
+  const despegado = dia === 5
+    ? seDespegoDelResto(d.recurrings ?? [], d.pagosViejos ?? [], per, d.inflacionRef ?? null)
+    : null;
+  if (on('aumentos') && despegado) {
+    const a = despegado;
+    out.push(msg('aumentos', `${a.nombre} subió ${Math.round(a.subio)} % en tres meses`,
+      `El resto de tus fijos subió ${Math.round(a.normal)} %. Son ${plata(a.demas, a.moneda)} ` +
+      'de más por mes: casi siempre es una promo que se venció.',
+      `despego-${a.nombre}`, './#/mes'));
+  }
+
   // ------------------------------------------------------------- cómo venís
   // Una vez por semana y no todos los días: es una opinión, no una urgencia.
   if (on('bishu') && hoy.getDay() === 1 && dia > 7) {
@@ -204,6 +227,56 @@ export function avisosDelDia(d: Datos, ref = new Date()): Mensaje[] {
   }
 
   return out;
+}
+
+/**
+ * El gasto fijo que subio mas que el resto de tus gastos fijos.
+ *
+ * Es la misma regla que aumentosSospechosos() en finance.js, escrita de nuevo
+ * porque de un lado corre el navegador y del otro Deno. Si cambia una tiene
+ * que cambiar la otra.
+ *
+ * Lo que la hace util: mide contra la mediana de TUS propios aumentos, no
+ * contra cero. En Argentina todo sube todos los meses; avisar por cualquier
+ * aumento es avisar por todo. Con menos de tres fijos comparables la mediana
+ * no dice nada y se usa la referencia puesta a mano; sin ninguna de las dos
+ * no se opina.
+ */
+export function seDespegoDelResto(recurrings: any[], pagos: any[], per: string,
+                                  referencia: number | null = null, meses = 3, margen = 10) {
+  let desdePer = per;
+  for (let i = 0; i < meses; i++) desdePer = mesAnterior(desdePer);
+
+  const pagado = (id: string, p: string) => {
+    const x = pagos.find(v => v.recurring_id === id && v.periodo === p &&
+                              v.pagado_at && v.monto != null);
+    return x ? Number(x.monto) : null;
+  };
+
+  const cambios: any[] = [];
+  for (const r of recurrings) {
+    if (r.activo === false) continue;
+    const desde = pagado(r.id, desdePer), hasta = pagado(r.id, per);
+    if (!(desde! > 0) || !(hasta! > 0)) continue;
+    cambios.push({ r, desde, hasta, subio: ((hasta! - desde!) / desde!) * 100 });
+  }
+  if (!cambios.length) return null;
+
+  const orden = cambios.map(c => c.subio).sort((a, b) => a - b);
+  const m = Math.floor(orden.length / 2);
+  const normal = cambios.length >= 3
+    ? (orden.length % 2 ? orden[m] : (orden[m - 1] + orden[m]) / 2)
+    : (referencia != null ? Number(referencia) : null);
+  if (normal == null) return null;
+
+  // Ordenado por lo que cuesta en plata y no por el porcentaje: 40 % de una
+  // suscripcion de 9.000 no es un problema, 18 % del internet si.
+  const casos = cambios
+    .filter(c => c.subio - normal >= margen)
+    .map(c => ({ nombre: c.r.nombre, moneda: c.r.moneda || 'ARS', subio: c.subio, normal,
+                 demas: c.hasta - c.desde * (1 + normal / 100) }))
+    .sort((a, b) => b.demas - a.demas);
+  return casos[0] ?? null;
 }
 
 const MESES_LARGOS = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio',

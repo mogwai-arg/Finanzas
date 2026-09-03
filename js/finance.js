@@ -1171,3 +1171,109 @@ function redondearTope(n) {
 
 /** El ultimo mes cerrado a la fecha: el anterior al que corre. */
 export const ultimoMesCerrado = (ref = hoy()) => mesAnterior(periodo(ref));
+
+// ---------------------------------------------------------------------
+// AUMENTOS QUE VALE LA PENA MIRAR
+// ---------------------------------------------------------------------
+
+/**
+ * Lo que pagaste de un gasto fijo en un mes, si lo pagaste.
+ *
+ * Solo sirve lo pagado de verdad. El `monto_estimado` se pisa cuando uno lo
+ * actualiza, asi que no tiene historia: usarlo seria comparar el precio de
+ * hoy contra el precio de hoy.
+ */
+export function pagadoEn(recurringId, pagos, per) {
+  const p = (pagos || []).find(x => x.recurring_id === recurringId && x.periodo === per &&
+                                    x.pagado_at && x.monto != null);
+  return p ? Number(p.monto) : null;
+}
+
+/** La mediana de una lista de numeros. */
+export function mediana(nums) {
+  const l = [...nums].sort((a, b) => a - b);
+  if (!l.length) return null;
+  const m = Math.floor(l.length / 2);
+  return l.length % 2 ? l[m] : round2((l[m - 1] + l[m]) / 2);
+}
+
+/**
+ * Que gasto fijo subio MAS DE LO NORMAL.
+ *
+ * En Argentina todo sube todos los meses. Avisar por cualquier aumento es
+ * avisar por todo, que es lo mismo que no avisar: la regla tiene que medir
+ * contra la inflacion del periodo y no contra cero.
+ *
+ * Y la inflacion no hace falta ir a buscarla afuera: sale de los datos que la
+ * app ya tiene. Si TODOS tus fijos subieron 6 % y uno subio 22 %, ese uno no
+ * es la inflacion, es otra cosa —casi siempre una promo que se vencio— y es
+ * justo el que se puede discutir. La mediana de tus propios aumentos es una
+ * medida mejor que el indice del pais, porque es la canasta que pagas vos.
+ *
+ * Con menos de tres fijos comparables la mediana no dice nada, y entonces se
+ * usa la referencia que se le haya puesto a mano. Sin ninguna de las dos, no
+ * se opina: no avisar es mejor que avisar cualquier cosa.
+ */
+export function aumentosSospechosos(recurrings, pagos, per, {
+  meses = 3, margen = 10, minimo = 0, referencia = null
+} = {}) {
+  let desdePer = per;
+  for (let i = 0; i < meses; i++) desdePer = mesAnterior(desdePer);
+
+  const cambios = [];
+  for (const r of recurrings || []) {
+    if (r.activo === false) continue;
+    const desde = pagadoEn(r.id, pagos, desdePer);
+    const hasta = pagadoEn(r.id, pagos, per);
+    if (!(desde > 0) || !(hasta > 0)) continue;
+    cambios.push({ r, desde, hasta,
+                   subio: round2(((hasta - desde) / desde) * 100),
+                   diferencia: round2(hasta - desde) });
+  }
+  if (!cambios.length) return { normal: null, desdePer, hastaPer: per, comparados: 0, casos: [] };
+
+  const normal = cambios.length >= 3 ? mediana(cambios.map(c => c.subio))
+               : (referencia != null ? Number(referencia) : null);
+  if (normal == null) {
+    return { normal: null, desdePer, hastaPer: per, comparados: cambios.length, casos: [] };
+  }
+
+  const casos = cambios
+    .filter(c => c.subio - normal >= margen && c.diferencia >= minimo)
+    // Ordenado por lo que cuesta en plata, no por el porcentaje: 40 % de una
+    // suscripcion de 9.000 no es un problema, 18 % del internet si.
+    .sort((a, b) => b.diferencia - a.diferencia)
+    .map(c => ({
+      id: c.r.id, nombre: c.r.nombre, moneda: c.r.moneda || 'ARS',
+      desde: c.desde, hasta: c.hasta, subio: c.subio, diferencia: c.diferencia,
+      exceso: round2(c.subio - normal),
+      // Lo que costaria si hubiera subido como el resto: es la plata que hay
+      // sobre la mesa, y es el numero que decide si vale la pena llamar.
+      deberia: round2(c.desde * (1 + normal / 100)),
+      demas: round2(c.hasta - c.desde * (1 + normal / 100)),
+      queEs: queServicio(c.r.nombre)
+    }));
+
+  return { normal: round2(normal), desdePer, hastaPer: per,
+           comparados: cambios.length, casos,
+           // Con menos de tres, "lo normal" viene de la referencia puesta a
+           // mano y hay que decirlo: no es un dato, es un supuesto.
+           mediaPropia: cambios.length >= 3 };
+}
+
+/**
+ * Que clase de servicio es, para saber si tiene con quien discutirse.
+ *
+ * Internet, cable y celular tienen area de retencion y precio de retencion:
+ * el descuento ya existe, solo esta condicionado a que uno se queje. Los
+ * otros no, y prometerlo seria mentir.
+ */
+export function queServicio(nombre = '') {
+  const t = String(nombre).toLowerCase();
+  if (/flow|cablevis|telecentro|fibertel|internet|wifi|directv|cable/.test(t)) return 'internet';
+  if (/personal|movistar|claro|tuenti|celular|linea|línea/.test(t)) return 'celular';
+  if (/osde|swiss|galeno|medicus|prepaga|omint|premedic/.test(t)) return 'prepaga';
+  if (/seguro|zurich|sancor|federacion|federación|rivadavia|allianz/.test(t)) return 'seguro';
+  if (/netflix|spotify|disney|hbo|max|prime|youtube|apple|suscrip/.test(t)) return 'suscripcion';
+  return null;
+}

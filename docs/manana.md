@@ -41,7 +41,21 @@ fijos que caen en la tarjeta se siguen contando dos veces.
 Después, revisar en cada gasto fijo la cuenta y ese interruptor: de ahí
 dependen la plata libre y los débitos previstos del resumen.
 
-## 3. Detectar aumentos de servicios, estilo TuMango
+## 3. Detectar aumentos de servicios, estilo TuMango — HECHO (3/9)
+
+Está en Pagar ("Subió más que el resto"), en la tira de Bishu y como aviso al
+teléfono el día 5. La regla quedó así, y es lo único que la hace servible:
+
+**se compara contra la mediana de tus PROPIOS aumentos, no contra cero ni
+contra un índice.** Si todos tus fijos subieron 6 % y uno subió 22 %, ese uno
+no es la inflación. Con menos de tres fijos pagados en los dos extremos no
+alcanza para sacar la mediana y el aviso no sale: no opinar es mejor que
+opinar con un supuesto. Y el orden es por PLATA, no por porcentaje: 40 % de
+una suscripción de 9.000 no es un problema, 18 % del internet sí.
+
+Lo que sigue abajo es el análisis original.
+
+### El análisis
 
 De auditar [tumango.com.ar](https://tumango.com.ar/), que negocia facturas de
 internet, cable y celular y cobra 20 % del ahorro. Su negocio es la
