@@ -17,7 +17,7 @@
 // se miran para saber dónde uno está parado, no para decidir hoy: acá tienen
 // una pantalla sola y no se repiten en ninguna otra.
 // =====================================================================
-import { h, frag, icono, iconoDeCategoria, hoja } from '../ui.js';
+import { h, frag, icono, iconoDeCategoria, hoja, plegable } from '../ui.js';
 import { state } from '../db.js';
 import * as F from '../finance.js';
 import * as S from '../sueldo.js';
@@ -282,8 +282,7 @@ function mayores(per, moneda) {
     .slice(0, 5);
   if (tx.length < 2) return null;
 
-  return h('section',
-    h('div.ghead', 'Los más grandes del mes'),
+  return plegable('Los más grandes del mes',
     h('div.grp', tx.map(t => {
       const cat = t.category_id ? buscar('categories', t.category_id) : null;
       return h('div.li',
@@ -293,7 +292,9 @@ function mayores(per, moneda) {
                       t.fecha.slice(8, 10) + '/' + t.fecha.slice(5, 7)]
             .filter(Boolean).join(' · '))),
         h('div.v', plata(Math.round(t.monto), moneda)));
-    })));
+    })),
+    { recordar: 'masGrandes',
+      resumen: `el mayor, ${plata(Math.round(tx[0].monto), moneda)}` });
 }
 
 /**
@@ -315,11 +316,7 @@ function loQueViene(hoy) {
   const aprieta = F.mesQueAprieta(proy);
   const conCuotas = proy.filter(m => m.cuotas > 0);
 
-  return h('section',
-    h('div.ghead', 'Lo que viene',
-      h('span', { style: { textTransform: 'none', letterSpacing: '0', fontWeight: '500' } },
-        `entran ${plata(Math.round(proy[0].entra))} por mes`)),
-
+  return plegable('Lo que viene', [
     aprieta ? h('div.grp.pad', { style: { marginBottom: '10px' } },
       h('div', { style: { fontSize: '15px', lineHeight: '1.5' } },
         'En ', h('b', MES_LARGO[Number(aprieta.periodo.slice(5, 7)) - 1].toLowerCase()),
@@ -345,7 +342,14 @@ function loQueViene(hoy) {
         : 'No hay cuotas comprometidas: lo único que ya tiene dueño son los gastos fijos.'),
 
     h('button.btn.sec', { style: { marginTop: '12px' }, onclick: () => irA('/pago') },
-      icono('tarjeta', 16), 'Probar una compra antes de hacerla'));
+      icono('tarjeta', 16), 'Probar una compra antes de hacerla')],
+    { recordar: 'loQueViene',
+      resumen: aprieta
+        ? `${MES_LARGO[Number(aprieta.periodo.slice(5, 7)) - 1].toLowerCase()} aprieta`
+        : `entran ${plata(Math.round(proy[0].entra))} por mes`,
+      // Un mes que se lleva más del 70 % de lo que entra no se pliega: es
+      // exactamente lo que hay que ver antes de firmar otra cuota.
+      atencion: !!aprieta });
 }
 
 /**
@@ -366,9 +370,7 @@ function loQueCobraElBanco(hoy) {
   const promedio = cerrados.length
     ? cerrados.reduce((s, m) => s + m.total, 0) / cerrados.length : ultimo.total;
 
-  return h('section',
-    h('div.ghead', 'Lo que te cobra el banco',
-      h('button', { onclick: () => formImportarExtracto() }, 'Subir resumen')),
+  return plegable('Lo que cobra el banco', [
     h('div.grp.pad',
       h('div', { class: 'cifra', style: { fontSize: 'var(--t-cifra2)' } },
         plata(Math.round(ultimo.total))),
@@ -386,7 +388,13 @@ function loQueCobraElBanco(hoy) {
         h('div.av', icono('banco', 15)),
         h('div.m', h('div.t', c.nombre),
           h('div.s', `${c.cuantos} ${c.cuantos === 1 ? 'cargo' : 'cargos'} este mes`)),
-        h('div.v', plata(Math.round(c.monto)))))) : null);
+        h('div.v', plata(Math.round(c.monto)))))) : null],
+    { recordar: 'cobraElBanco',
+      resumen: plata(Math.round(ultimo.total)),
+      // Un mes que se salió de lo habitual por más de un tercio no se
+      // esconde: es el cargo nuevo que apareció sin que nadie avisara.
+      atencion: promedio > 0 && ultimo.total > promedio * 1.34,
+      accion: h('button', { onclick: () => formImportarExtracto() }, 'Subir resumen') });
 }
 
 /** El cierre del último mes completo, desde acá también y todo el mes. */
@@ -419,10 +427,16 @@ function presupuesto(per, hoy) {
   const ahorro = ['ARS', 'USD']
     .map(m => F.estadoAhorro(budgets, paraAhorro, per, m, hoy)).filter(Boolean);
 
-  return h('section',
-    h('div.ghead', 'Presupuesto',
-      h('button', { onclick: () => formPresupuesto(per) },
-        budgets.length ? 'Ajustar' : 'Definir')),
+  // Lo que hay que saber sin abrirlo, y lo que obliga a abrirlo.
+  const estados = F.estadoPresupuesto(budgets, res, alertPct);
+  const pasados = [...estados, ...porCuenta].filter(b => b.estado === 'excedido');
+  const enAlerta = [...estados, ...porCuenta].filter(b => b.estado === 'alerta');
+  const resumen = !budgets.length ? 'sin topes'
+    : pasados.length ? `${pasados.length} pasado${pasados.length === 1 ? '' : 's'} de tope`
+    : enAlerta.length ? `${enAlerta.length} cerca del tope`
+    : 'todo dentro';
+
+  return plegable('Presupuesto',
     budgets.length
       ? h('div',
           h('div.grp', F.estadoPresupuesto(budgets, res, alertPct).map(b => filaPresupuesto(b))),
@@ -435,7 +449,13 @@ function presupuesto(per, hoy) {
             h('div.grp', ahorro.map(filaAhorro))) : null)
       : h('div.grp.pad', h('div.small.mut', { style: { lineHeight: '1.5' } },
           'Sin topes cargados no hay con qué comparar el gasto del mes. ',
-          'Empezá por tres categorías, no por diez.')));
+          'Empezá por tres categorías, no por diez.')),
+    { resumen, recordar: 'presupuesto',
+      // Sin topes cargados se abre: es una invitación, no un dato guardado.
+      abierto: !budgets.length,
+      atencion: pasados.length > 0,
+      accion: h('button', { onclick: () => formPresupuesto(per) },
+        budgets.length ? 'Ajustar' : 'Definir') });
 }
 
 /**

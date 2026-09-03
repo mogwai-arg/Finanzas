@@ -418,3 +418,67 @@ export function deslizable(fila, { alEditar, alBorrar } = {}) {
 
 export const esqueleto = (ancho = '60%', alto = 12) =>
   h('div.sk', { style: { width: ancho, height: alto + 'px' } });
+
+
+/**
+ * Una sección que se pliega, y se acuerda de cómo la dejaste.
+ *
+ * Números es la pantalla más larga de la app y tiene que serlo: es adonde uno
+ * va a mirar. Pero nueve secciones abiertas son casi tres pantallas de
+ * scroll, y lo que está abajo deja de existir.
+ *
+ * Dos reglas que hacen que plegar no sea esconder:
+ *
+ * - El encabezado plegado tiene que decir el número. "Presupuesto ›" no dice
+ *   nada; "Presupuesto · 2 pasados de tope" evita tener que abrirlo.
+ * - Lo que necesita atención se abre igual. Si algo se pasó del tope, plegarlo
+ *   sería justo el caso en que la app deja de servir. `atencion` gana sobre
+ *   lo que uno haya guardado.
+ */
+export function plegable(titulo, contenido, { resumen, abierto = false, atencion = false,
+                                              recordar, accion } = {}) {
+  const clave = recordar ? `bishusha.plegado.${recordar}` : null;
+  const guardado = () => { try { return clave && localStorage.getItem(clave); }
+                           catch { return null; } };
+  // Con algo que mirar se abre igual, aunque estuviera plegada: esconder un
+  // tope pasado es lo contrario de para qué está la pantalla.
+  let abierta = atencion || (guardado() ? guardado() === '1' : abierto);
+
+  const cuerpo = h('div');
+  const chev = icono('chev', 15);
+  chev.style.transition = 'transform .18s';
+
+  // El título no se parte y el resumen se corta con puntos suspensivos: con
+  // el botón de acción al lado, un encabezado de dos renglones se lee como
+  // dos secciones distintas.
+  chev.style.flexShrink = '0';
+  const boton = h('button', {
+    'aria-expanded': String(abierta),
+    style: { display: 'flex', alignItems: 'center', gap: '5px', flex: '1',
+             minWidth: '0', textAlign: 'left',
+             color: 'var(--tx2)', letterSpacing: '.06em', textTransform: 'uppercase',
+             fontSize: 'inherit' }
+  }, h('span', { style: { flexShrink: '0' } }, titulo),
+     h('span.small', { style: { letterSpacing: '0', textTransform: 'none',
+                                fontWeight: '500', color: 'var(--tx3)',
+                                overflow: 'hidden', textOverflow: 'ellipsis',
+                                whiteSpace: 'nowrap' } }, resumen || ''), chev);
+
+  const pintar = () => {
+    cuerpo.hidden = !abierta;
+    chev.style.transform = abierta ? 'rotate(90deg)' : 'none';
+    boton.setAttribute('aria-expanded', String(abierta));
+  };
+  boton.onclick = () => {
+    abierta = !abierta;
+    if (clave) { try { localStorage.setItem(clave, abierta ? '1' : '0'); } catch { /* privado */ } }
+    pintar();
+  };
+
+  cuerpo.append(...[contenido].flat().filter(Boolean));
+  pintar();
+
+  return h('section',
+    h('div.ghead', boton, accion || null),
+    cuerpo);
+}
