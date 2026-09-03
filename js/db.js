@@ -53,7 +53,7 @@ export const sb = DEMO ? stub
     });
 
 export const TABLAS = ['accounts', 'categories', 'transactions', 'recurrings',
-  'recurring_payments', 'budgets', 'promos', 'promo_usos', 'promo_sucursales', 'reglas',
+  'recurring_payments', 'budgets', 'promos', 'promo_usos', 'reglas',
   'integrations', 'notificaciones', 'recibos', 'paritarias', 'sumas_nr',
   'push_subscriptions', 'settings'];
 
@@ -65,7 +65,7 @@ const MAX_INTENTOS = 5;
 export const state = {
   user: null,
   accounts: [], categories: [], transactions: [], recurrings: [],
-  recurring_payments: [], budgets: [], promos: [], promo_usos: [], promo_sucursales: [],
+  recurring_payments: [], budgets: [], promos: [], promo_usos: [],
   reglas: [], integrations: [], notificaciones: [], recibos: [],
   paritarias: [], sumas_nr: [], push_subscriptions: [], settings: {},
   online: navigator.onLine, sincronizando: false, ultimaSync: null,

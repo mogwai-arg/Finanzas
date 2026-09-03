@@ -245,3 +245,24 @@ faltar una hoja se ve igual que un mes barato.
 `015_bishu_memoria.sql` — una columna `bishu jsonb` en `settings`. Sin ella,
 Bishu vuelve a empezar de cero cada vez: la escritura se rechaza y el cambio
 queda en el cajón de fallidas (que ahora avisa en Hoy, así que se nota).
+
+---
+
+## Sacada: "Ver las más cercanas" (3/9)
+
+Buscaba en OpenStreetMap, por Overpass, las sucursales de tus promos a menos
+de 3 km. Se sacó después de dos rondas de arreglos y una prueba en el
+teléfono que volvió a fallar: Overpass —comunitario y gratuito— no contestó
+en diez segundos, y eso no se arregla del lado de la app.
+
+Contra qué se decidió: no valía lo que costaba. Uno ya sabe dónde queda su
+supermercado; lo que no sabía era con qué tarjeta pagar, y eso lo contesta la
+promo agrupada por comercio. Encima OpenStreetMap tiene cobertura despareja
+para sucursales en Argentina, así que la función podía andar perfecto y
+encontrar cero.
+
+Se fue `js/geo.js`, el botón, la fila de distancia en cada promo, el campo
+"Buscar sucursales cerca" del formulario y la tabla `promo_sucursales` del
+estado. Las columnas `osm_filtro` y la tabla siguen en la base: sacarlas
+pedía una migración y no molestan vacías. Si algún día vuelve, el historial
+tiene todo.

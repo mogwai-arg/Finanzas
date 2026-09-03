@@ -1,5 +1,5 @@
 // =====================================================================
-// vistas/promos.js — promos del dia, ordenadas por cercania.
+// vistas/promos.js — las promos que cargaste, y las que trae Clash.
 // La barra de tope consumido es lo que hace honesta la pantalla: una promo
 // de "25 %" con el tope al 62 % ya no es del 25 %.
 // =====================================================================
@@ -8,7 +8,6 @@ import { state, guardar, traerPromos } from '../db.js';
 import * as F from '../finance.js';
 import { plata, hoyISO, aNumero } from '../formato.js';
 import { formPromo } from './formularios.js';
-import { posicion, sucursalesCerca, distanciaTexto, mapsUrl } from '../geo.js';
 
 const DIAS = ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb'];
 
@@ -230,7 +229,7 @@ export function vistaPromos(root) {
         h('button.btn.sec', { style: { minHeight: '40px', fontSize: '13.5px' },
                               onclick: () => hojaUso(p, usado, uso) },
           icono('mas', 15), usado > 0 ? 'Sumar otro uso' : 'Anotar que la usé')) : null,
-      cerca(p));
+    );
   }
 
   /**
@@ -282,7 +281,6 @@ export function vistaPromos(root) {
       } }, 'Anotarlo')));
   }
 
-  // --------------------------------------------------- cercania por GPS
   // El botón dice lo que va a traer, y trae eso: en "La semana" pedir "las de
   // hoy" era prometer una cosa y hacer otra.
   const TRAER = { hoy: 'Traer las de hoy', semana: 'Traer las de la semana',
@@ -291,87 +289,8 @@ export function vistaPromos(root) {
     icono('buscar', 17), TRAER[cuando]);
   const ponerTraer = () => btnTraer.replaceChildren(icono('buscar', 17), TRAER[cuando]);
 
-  const cercania = h('div');
-  let sucursales = new Map();
-  const nota = h('div.small.mut', { style: { padding: '8px 4px 0', lineHeight: '1.45' } });
-  const btnGps = h('button.btn.sec', { onclick: async () => {
-    btnGps.disabled = true;
-    nota.textContent = '';
-    btnGps.textContent = 'Pidiendo tu ubicación…';
-
-    let centro;
-    try {
-      centro = await posicion();
-    } catch (e) {
-      btnGps.disabled = false;
-      btnGps.replaceChildren(icono('pin', 17), 'Ver las más cercanas');
-      nota.textContent = String(e?.message || e);
-      return;
-    }
-
-    // Una consulta por FILTRO y no por promo, y de a una.
-    //
-    // Antes salían todas juntas con Promise.all: con cinco promos de súper
-    // eran cinco consultas idénticas al mismo servidor y al mismo tiempo.
-    // Overpass es gratis y limita por IP: ante una andanada así deja la
-    // conexión abierta sin contestar, y el botón se quedaba en "Buscando…"
-    // para siempre.
-    const activas = state.promos.filter(p => p.activa !== false && p.osm_filtro);
-    const filtros = [...new Set(activas.map(p => p.osm_filtro))];
-    const porFiltro = new Map();
-    let fallo = null;
-
-    for (let i = 0; i < filtros.length; i++) {
-      btnGps.textContent = `Buscando… ${i + 1} de ${filtros.length}`;
-      const una = activas.find(p => p.osm_filtro === filtros[i]);
-      try { porFiltro.set(filtros[i], await sucursalesCerca({ ...una, marcas: [] }, centro)); }
-      catch (e) {
-        // Si el servicio no contesta una, no va a contestar las otras: seguir
-        // sería multiplicar la espera por la cantidad de rubros. Con cuatro
-        // filtros y dos servidores eso es un minuto y medio de "Buscando…",
-        // que desde afuera no se distingue de un botón colgado.
-        fallo = e;
-        porFiltro.set(filtros[i], null);
-        break;
-      }
-    }
-
-    // El filtro por marca se aplica acá, sobre lo que ya vino: es lo que
-    // permite una sola consulta para todas las promos del mismo rubro.
-    sucursales = new Map(activas.map(p => {
-      const todos = porFiltro.get(p.osm_filtro);
-      if (!todos) return [p.id, []];
-      const marcas = (p.marcas || []).map(m => m.toLowerCase());
-      return [p.id, marcas.length
-        ? todos.filter(s => marcas.some(m => `${s.nombre} ${s.marca}`.toLowerCase().includes(m)))
-        : todos];
-    }));
-
-    const conAlgo = [...sucursales.values()].filter(l => l.length).length;
-    btnGps.disabled = false;
-    btnGps.replaceChildren(icono('pin', 17), 'Actualizar ubicación');
-    nota.textContent = fallo
-      ? `El buscador de mapas no contestó (${fallo.message}). Probá de nuevo en un rato.`
-      : conAlgo ? '' : 'No encontré sucursales de tus promos a menos de 3 km.';
-    pintar();
-  } }, icono('pin', 17), 'Ver las más cercanas');
-  cercania.append(btnGps, nota);
-
-  /** La sucursal mas cercana, si ya pedimos la ubicacion. */
-  function cerca(p) {
-    const l = sucursales.get(p.id);
-    if (!l || !l.length) return null;
-    const s0 = l[0];
-    return h('a', { href: mapsUrl(s0), target: '_blank', rel: 'noopener',
-                    style: { display: 'flex', alignItems: 'center', gap: '5px',
-                             fontSize: '12.5px', color: 'var(--tx2)', marginTop: '9px' } },
-      icono('pin', 13),
-      h('b', { style: { color: 'var(--tx)', fontWeight: '600' } }, distanciaTexto(s0.metros)),
-      s0.nombre ? ` · ${s0.nombre}` : '', h('span.chev', icono('chev', 12)));
-  }
-
   pintar();
-  root.append(h('div.flow', seg, cercania, lista,
+  root.append(h('div.flow', seg, lista,
     h('div.small.mut', { style: { padding: '0 4px', lineHeight: '1.45' } },
       'El tope consumido es lo que hace honesta la promo: "25 % de reintegro" con el tope lleno es 0 %.'),
     btnTraer,
@@ -434,14 +353,6 @@ const RUBROS = [
   ['salud', 'Farmacia'], ['transporte', 'Transporte']
 ];
 
-// Con qué se buscan las sucursales cerca en OpenStreetMap. Se guarda al traer
-// la promo para que "Ver las más cercanas" funcione sin tener que editarla:
-// Clash no dice dónde está cada comercio, y muchas promos son de una sola
-// ciudad.
-const OSM = {
-  supermercado: 'shop=supermarket', combustible: 'amenity=fuel',
-  gastronomia: 'amenity=restaurant', salud: 'amenity=pharmacy', transporte: ''
-};
 
 /**
  * Las promos vigentes del rubro, filtradas por los medios que tenés.
@@ -670,9 +581,6 @@ function fila(p, rubro, { porBanco = false } = {}) {
         tope: p.tope || null, tope_periodo: p.topePeriodo || 'mensual',
         dias: p.dias || [], medio_pago: (p.medios || []).join(', ') || p.emisor,
         rubro: rubro || 'otros', canal: 'ambos',
-        // Con esto "Ver las más cercanas" ya funciona: Clash no dice dónde
-        // está cada comercio y muchas promos son de una sola ciudad.
-        osm_filtro: OSM[rubro] || null,
         // Una promo con fecha propia —"Jueves 10/09"— es de un solo día, no
         // de todos los jueves: guardarla como semanal la haría aparecer
         // cuatro veces al mes y ninguna sería cierta.

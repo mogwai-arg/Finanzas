@@ -230,7 +230,7 @@ export const DEMO = {
     { id: id('p1'), titulo: 'Coto', comercio: 'Coto', rubro: 'supermercado', emisor: 'galicia',
       tipo: 'reintegro', valor: 25, tope: 20000, tope_periodo: 'mensual', dias: [3, 6],
       medio_pago: 'Galicia Visa', canal: 'presencial', activa: true, favorita: true,
-      recordar: true, osm_filtro: 'shop=supermarket', marcas: ['Coto'] },
+      recordar: true, marcas: ['Coto'] },
     // El mismo comercio con varios medios de pago: asi vienen de Clash, y es
     // lo que hacia que la lista dijera "Coto" cinco veces seguidas.
     { id: id('p1b'), titulo: 'Coto', comercio: 'Coto', rubro: 'supermercado', emisor: 'macro',
@@ -244,20 +244,17 @@ export const DEMO = {
       medio_pago: 'Ualá', canal: 'presencial', activa: true, marcas: ['Coto'] },
     { id: id('p2'), titulo: 'Shell', comercio: 'Shell', rubro: 'combustible', emisor: 'modo',
       tipo: 'reintegro', valor: 15, tope: 8000, tope_periodo: 'mensual', dias: [],
-      medio_pago: 'MODO', canal: 'presencial', activa: true, favorita: false,
-      osm_filtro: 'amenity=fuel', marcas: ['Shell'] },
+      medio_pago: 'MODO', canal: 'presencial', activa: true, favorita: false, marcas: ['Shell'] },
     { id: id('p3'), titulo: 'Farmacity', comercio: 'Farmacity', rubro: 'salud', emisor: 'modo',
       tipo: 'reintegro', valor: 20, tope: 15000, tope_periodo: 'mensual', dias: [4],
-      medio_pago: 'MODO', canal: 'presencial', activa: true, favorita: false,
-      osm_filtro: 'amenity=pharmacy', marcas: ['Farmacity'] },
+      medio_pago: 'MODO', canal: 'presencial', activa: true, favorita: false, marcas: ['Farmacity'] },
     // Una de una vez al mes, como la de combustible de Galicia: cae un solo
     // día y por eso está marcada para que aparezca en Hoy desde antes.
     { id: id('p4'), titulo: 'YPF 25%', comercio: 'YPF', rubro: 'combustible', emisor: 'galicia',
       tipo: 'descuento', valor: 25, tope: 20000, tope_periodo: 'mensual', dias: [4],
       vigencia_desde: '2026-09-10', vigencia_hasta: '2026-09-10',
       medio_pago: 'MODO, Mastercard Platinum', canal: 'presencial', activa: true,
-      favorita: false, recordar: true, notas: 'Cuenta Sueldo · Jueves 10/09',
-      osm_filtro: 'amenity=fuel', marcas: ['YPF'] }
+      favorita: false, recordar: true, notas: 'Cuenta Sueldo · Jueves 10/09', marcas: ['YPF'] }
   ],
 
   promo_usos: [
@@ -318,8 +315,7 @@ export const DEMO = {
   ],
 
   integrations: [],
-  promo_sucursales: [],
-
+  
   settings: {
     usd_ref: 1485, alert_pct: 80, dia_cobro: 1, sobre_estimado: 1532000,
     sumas_fijas_nr: 120000, ocultar_montos: false
