@@ -26,6 +26,8 @@ export function monto(s) {
   return Number.isFinite(n) ? n : null;
 }
 
+const round2 = n => Math.round((Number(n) || 0) * 100) / 100;
+
 const MESES = { ene: 1, feb: 2, mar: 3, abr: 4, may: 5, jun: 6,
                 jul: 7, ago: 8, sep: 9, set: 9, oct: 10, nov: 11, dic: 12 };
 
@@ -99,7 +101,9 @@ export function parseExtracto(texto) {
   const nro = todo.match(/(?:cuenta|cta)\.?\s*(?:n[°º]?\s*)?([\d-/]{6,})/i)?.[1] || null;
 
   // El período: sale del encabezado, y si no hay, de las fechas que se lean.
-  const rango = todo.match(/(\d{1,2}[-/.]\d{1,2}[-/.]\d{2,4})\s*(?:al|a|-|hasta)\s*(\d{1,2}[-/.]\d{1,2}[-/.]\d{2,4})/i);
+  // "del 01/09 al 30/09", y tambien dos fechas sueltas en la misma linea, que
+  // es como las imprime Galicia debajo del rotulo "Periodo de movimientos".
+  const rango = todo.match(/(\d{1,2}[-/.]\d{1,2}[-/.]\d{2,4})\s*(?:al|a|-|hasta|\s)\s*(\d{1,2}[-/.]\d{1,2}[-/.]\d{2,4})/i);
   const desde = rango ? fecha(rango[1]) : null;
   const hasta = rango ? fecha(rango[2]) : null;
   const anio = desde ? Number(desde.slice(0, 4)) : null;
@@ -115,7 +119,11 @@ export function parseExtracto(texto) {
   const crudos = [];
   for (const l of lineas) {
     const f = l.match(FILA);
-    if (!f) continue;
+    // Debajo de cada movimiento vienen renglones sueltos con el comercio y
+    // los numeros de la operacion. Son la unica forma de distinguir un
+    // "PAGO DE SERVICIOS" de otro: sin ellos, Aysa, el gas y el municipio son
+    // la misma fila repetida.
+    if (!f) { if (crudos.length) crudos[crudos.length - 1].extra.push(l); continue; }
     const iso = fecha(f[1], anio, mesRef);
     if (!iso) continue;
 
@@ -132,26 +140,91 @@ export function parseExtracto(texto) {
     // descripcion: sacarla evita que el comercio quede como "02/09 EDESUR".
     const descripcion = f[2].slice(0, f[2].indexOf(nums[0]))
       .replace(/^\s*\d{1,2}[-/.]\d{1,2}(?:[-/.]\d{2,4})?\s+/, '')
-      .trim().replace(/\s{2,}/g, ' ').replace(/[.\s]+$/, '');
+      // La columna "Origen" es un codigo de cuatro digitos entre la
+      // descripcion y el importe: no es parte del nombre.
+      .replace(/\s+\d{4}\s*$/, '')
+      .trim().replace(/\s{2,}/g, ' ').replace(/[.:\s]+$/, '');
     if (!descripcion) continue;
 
+    // El signo escrito. Galicia pone el menos ADELANTE del importe; otros
+    // formatos lo ponen atras. Cuando esta, no hay nada que inferir.
+    const bruto = nums[nums.length > 1 ? nums.length - 2 : 0];
     crudos.push({ fecha: iso, descripcion, importe, saldo,
-                  // Un guion al final es el signo en varios formatos.
-                  negativo: /-$/.test(nums[nums.length > 1 ? nums.length - 2 : 0]) });
+                  signo: /^-/.test(bruto) ? -1 : /-$/.test(bruto) ? -1 : null,
+                  extra: [] });
   }
   if (!crudos.length) return null;
 
+  for (const c of crudos) c.comercio = comercioDe(c);
   const movimientos = darSigno(crudos, saldoInicial);
+
+  // Los saldos, cuando el encabezado no los dio con todas las letras. El
+  // ultimo movimiento trae el saldo final, y del primero se deduce con que
+  // arrancaba: son datos de las mismas filas, no de un rotulo que cada banco
+  // escribe distinto.
+  const primero = movimientos[0], ultimo = movimientos[movimientos.length - 1];
+  const inicial = saldoInicial != null ? saldoInicial
+    : (primero && primero.saldo != null
+        ? round2(primero.saldo - (primero.entra ? primero.importe : -primero.importe))
+        : null);
+  const final = saldoFinal != null ? saldoFinal
+    : (ultimo && ultimo.saldo != null ? ultimo.saldo : null);
   return {
     banco, cuenta: nro, cbu,
-    periodo: { desde, hasta },
-    saldoInicial, saldoFinal,
+    // Sin encabezado que lo diga, el periodo son las fechas que se leyeron.
+    periodo: { desde: desde || (primero && primero.fecha) || null,
+               hasta: hasta || (ultimo && ultimo.fecha) || null },
+    saldoInicial: inicial, saldoFinal: final,
     movimientos,
-    // Si la suma de los movimientos lleva del saldo inicial al final, se leyó
-    // todo. Es la única forma de saber que no faltó una hoja, y sin eso el
-    // "gasto del banco" del mes puede estar incompleto y nadie se entera.
-    cuadra: cuadra(saldoInicial, saldoFinal, movimientos)
+    // Si la suma de los movimientos da los totales que imprime el banco, se
+    // leyó todo. Es la única forma de saber que no faltó una hoja, y sin eso
+    // el "gasto del banco" del mes puede estar incompleto y nadie se entera.
+    //
+    // Contra los TOTALES del banco y no contra los saldos: los saldos se
+    // deducen de las mismas filas que estamos comprobando, así que cuadrarían
+    // siempre y no comprobarían nada.
+    cuadra: cuadra(totalesDe(lineas), movimientos, inicial, final)
   };
+}
+
+/**
+ * Lo que NO es un gasto aunque salga plata de la cuenta.
+ *
+ * Pagar la tarjeta, pasar plata a otra cuenta tuya o comprar dolares mueven
+ * el saldo pero no son gasto: lo que se compro con la tarjeta ya conto el dia
+ * de la compra, y la plata que va de un bolsillo tuyo a otro sigue siendo
+ * tuya. Importarlas como gasto seria contar 1,2 millones dos veces y romper
+ * el mes entero.
+ */
+const CLASES = [
+  { clase: 'transferencia', re: /pago (de )?tarjeta|pago visa|pago master|transf\.? ?ctas?\.? propias|compra ?(y|-)? ?venta de dolares|compra moneda extran|entre cuentas propias/i }
+];
+export function queClase(descripcion = '') {
+  for (const c of CLASES) if (c.re.test(descripcion)) return c.clase;
+  return null;
+}
+
+/**
+ * El comercio de verdad, de los renglones que cuelgan del movimiento.
+ *
+ * "PAGO DE SERVICIOS" no dice nada: abajo dice AYSA, o NATURGY, o el
+ * municipio. Se descartan los renglones que son solo numeros —CUIT, cuenta,
+ * numero de operacion— y los rotulos del banco.
+ */
+function comercioDe(c) {
+  const RUIDO = /^(operacion|varios|cotizacion|acred|banco de|reintegros?\b|compra moneda|pago con transf|p[aá]gina|resumen de|fecha descripci)/i;
+  for (const l of c.extra) {
+    const t = l.trim();
+    if (t.length < 3 || t.length > 40) continue;
+    if (RUIDO.test(t)) continue;
+    if (/^ticket/i.test(t)) continue;
+    // Casi todo numeros: es un CUIT, una cuenta, o el codigo que el banco
+    // imprime al pie de cada hoja. Nunca es el nombre de nadie.
+    const digitos = (t.match(/\d/g) || []).length;
+    if (digitos / t.length > 0.5) continue;
+    return t;
+  }
+  return null;
 }
 
 function buscarSaldo(lineas, re) {
@@ -172,6 +245,11 @@ function buscarSaldo(lineas, re) {
  */
 function darSigno(crudos, saldoInicial) {
   const ENTRA = /acredit|dep[oó]sito|transferencia recibida|haberes|sueldo|ingreso|devoluci[oó]n|reintegro|cr[eé]dito|a favor|plazo fijo vto/i;
+  // Si ALGUNA fila trae el menos escrito, este resumen marca los débitos con
+  // signo: entonces una fila sin menos es un crédito, y eso es un hecho del
+  // documento, no una interpretación del texto. Sirve sobre todo para la
+  // primera fila, que no tiene un saldo anterior con qué compararse.
+  const usaMenos = crudos.some(c => c.signo === -1);
   let previo = saldoInicial;
   return crudos.map(c => {
     let entra = null, seguro = false;
@@ -180,17 +258,48 @@ function darSigno(crudos, saldoInicial) {
       // Con el importe justo, el signo es un hecho y no una interpretación.
       if (Math.abs(Math.abs(dif) - c.importe) < 0.05) { entra = dif > 0; seguro = true; }
     }
-    if (entra === null) entra = c.negativo ? false : ENTRA.test(c.descripcion);
+    // El signo escrito es tan cierto como el saldo, y sirve donde el saldo no
+    // llega: en la PRIMERA fila, que no tiene contra qué compararse.
+    if (entra === null && c.signo != null) { entra = c.signo > 0; seguro = true; }
+    if (entra === null && usaMenos) { entra = true; seguro = true; }
+    if (entra === null) entra = ENTRA.test(c.descripcion);
     if (c.saldo != null) previo = c.saldo;
-    return { fecha: c.fecha, descripcion: c.descripcion, importe: c.importe,
-             saldo: c.saldo, entra, seguro };
+    return { fecha: c.fecha, descripcion: c.descripcion, comercio: c.comercio || null,
+             importe: c.importe, saldo: c.saldo, entra, seguro, clase: queClase(c.descripcion) };
   });
 }
 
-function cuadra(inicial, final, movs) {
+/**
+ * Los totales que imprime el banco al pie: entró, salió, y el saldo.
+ *
+ * Se reconoce por la forma —tres importes en una línea sin fecha, con el del
+ * medio en negativo— y no por la palabra "Total", que en este resumen aparece
+ * en el renglón de ABAJO y en otros bancos ni aparece.
+ */
+function totalesDe(lineas) {
+  for (const l of lineas) {
+    if (FILA.test(l)) continue;
+    const nums = l.match(NUMERO);
+    if (!nums || nums.length !== 3) continue;
+    const [a, b, c] = nums.map(monto);
+    if (a == null || b == null || c == null) continue;
+    if (!(a > 0 && b < 0)) continue;
+    return { entro: a, salio: Math.abs(b), saldo: c };
+  }
+  return null;
+}
+
+function cuadra(totales, movs, inicial, final) {
+  const suma = (f) => round2(movs.filter(f).reduce((s, m) => s + m.importe, 0));
+  if (totales) {
+    return Math.abs(suma(m => m.entra) - totales.entro) < 1 &&
+           Math.abs(suma(m => !m.entra) - totales.salio) < 1;
+  }
+  // Sin totales impresos, la única comprobación posible es contra los saldos
+  // que el encabezado haya declarado.
   if (inicial == null || final == null) return null;
-  const suma = movs.reduce((s, m) => s + (m.entra ? m.importe : -m.importe), 0);
-  return Math.abs((inicial + suma) - final) < 1;
+  const neto = movs.reduce((s, m) => s + (m.entra ? m.importe : -m.importe), 0);
+  return Math.abs((inicial + neto) - final) < 1;
 }
 
 // ---------------------------------------------------------------------
@@ -245,7 +354,7 @@ export function cargosDelBanco(movimientos) {
   let total = 0;
   for (const m of movimientos || []) {
     if (m.entra) continue;
-    const id = queCargo(m.descripcion);
+    const id = queCargo(`${m.descripcion} ${m.comercio || ''}`);
     if (!id) continue;
     const c = por.get(id) || { id, nombre: CARGOS.find(x => x.id === id).nombre,
                                monto: 0, cuantos: 0, filas: [] };
@@ -276,20 +385,23 @@ export function aMovimientos(ext, accountId, { soloCargos = false } = {}) {
     return n === 1 ? base : `${base}#${n}`;
   };
   return (ext.movimientos || [])
-    .filter(m => !soloCargos || queCargo(m.descripcion))
+    .filter(m => !soloCargos || queCargo(`${m.descripcion} ${m.comercio || ''}`))
     .map(m => ({
       fecha: m.fecha,
       descripcion: m.descripcion,
-      comercio: m.descripcion,
+      // El comercio de verdad viene de los renglones de abajo: sin eso, todos
+      // los "PAGO DE SERVICIOS" son la misma fila repetida.
+      comercio: m.comercio || m.descripcion,
       monto: m.importe,
       moneda: 'ARS',
-      tipo: m.entra ? 'ingreso' : 'gasto',
+      tipo: m.clase === 'transferencia' ? 'transferencia'
+          : m.entra ? 'ingreso' : 'gasto',
       cuotas: 1,
       account_id: accountId,
       fuente: 'extracto',
       revisado: false,
       externo_id: clave(m),
-      cargoBanco: queCargo(m.descripcion)
+      cargoBanco: queCargo(`${m.descripcion} ${m.comercio || ''}`)
     }));
 }
 

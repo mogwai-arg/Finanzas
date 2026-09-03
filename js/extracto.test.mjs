@@ -181,5 +181,110 @@ t('cuando no puede, dice QUE vio', () => {
   assert.equal(conAlgo.muestra.length, 1);
 });
 
+// ------------------------------------------------ el formato real de Galicia
+//
+// Reconstruido de un resumen de verdad, con los nombres y los importes
+// cambiados. Es el que rompio la primera version, y esta es la razon de que
+// exista este archivo: el formato que uno imagina nunca es el que llega.
+const GALICIA_REAL = `Resumen de Caja de Ahorro en Pesos
+NOMBRE APELLIDO                              CUIT del Responsable Impositivo : 20-00000000-0
+Datos de la cuenta                   Período de movimientos           Saldos
+Número de cuenta
+N° 1234567-8 027-7
+CBU                              31/07/2026               28/08/2026
+0009999990001234567890
+Movimientos
+Fecha Descripción Origen Crédito Débito Saldo
+03/08/26 CREDITO TRANSFERENCIA                              30.000,00 30.130,49
+NOMBRE APELLIDO
+20000000000
+03/08/26 PAGO DE SERVICIOS                0001 -25.427,25 4.703,24
+AYSA
+000149501000
+4425480009683734
+04/08/26 ACREDITAMIENTO DE HABERES                        2.135.500,32 2.140.203,56
+EMPRESA SRL
+30700000000
+04/08/26 PAGO DE SERVICIOS                0001 -26.171,40 2.114.032,16
+NATURGY BAN
+02636022
+04/08/26 PAGO TARJETA VISA                              -1.214.615,20 899.416,96
+OPERACION 4114724844
+Resumen de Caja de Ahorro en Pesos                              Página 1 / 3
+20260828046352231P
+05/08/26 ING. BRUTOS S/ CRED                              -27.200,00 872.216,96
+REG.RECAU.SIRCREB
+05/08/26 TRANSF. CTAS PROPIAS                              -85.000,00 787.216,96
+Nombre Apellido
+20000000000
+VARIOS
+24/08/26 INTERES CAPITALIZADO                              0,43 787.217,39
+Agosto 2026
+$ 2.165.500,75 -$ 1.378.413,85 $ 787.217,39
+Total `;
+
+t('el formato de Galicia entra: el menos va ADELANTE del importe', () => {
+  const r = E.parseExtracto(GALICIA_REAL);
+  assert.ok(r, 'tiene que reconocerlo');
+  assert.equal(r.movimientos.length, 8);
+  // La PRIMERA fila no tiene saldo anterior con qué compararse, y sin el
+  // signo escrito habría que adivinarla por el texto.
+  assert.equal(r.movimientos[0].entra, true);
+  assert.equal(r.movimientos[0].seguro, true);
+  assert.equal(r.movimientos[1].entra, false);
+});
+
+t('el comercio sale de los renglones de abajo', () => {
+  // "PAGO DE SERVICIOS" no dice nada: sin esto, Aysa y el gas son la misma
+  // fila repetida y no hay forma de saber en qué se fue.
+  const r = E.parseExtracto(GALICIA_REAL);
+  const servicios = r.movimientos.filter(m => m.descripcion === 'PAGO DE SERVICIOS');
+  assert.equal(servicios.length, 2);
+  assert.deepEqual(servicios.map(m => m.comercio), ['AYSA', 'NATURGY BAN']);
+});
+
+t('el código del pie de página no se cuela como comercio', () => {
+  const r = E.parseExtracto(GALICIA_REAL);
+  const visa = r.movimientos.find(m => /TARJETA VISA/.test(m.descripcion));
+  assert.equal(visa.comercio, null);
+});
+
+t('pagar la tarjeta y pasar plata a otra cuenta tuya NO son gasto', () => {
+  // Importarlas como gasto sería contar 1,2 millones dos veces: lo que se
+  // compró con la tarjeta ya contó el día de la compra.
+  const r = E.parseExtracto(GALICIA_REAL);
+  const tipos = E.aMovimientos(r, 'gal').reduce((a, m) => (a[m.tipo] = (a[m.tipo] || 0) + 1, a), {});
+  assert.equal(tipos.transferencia, 2);
+  assert.equal(E.queClase('PAGO TARJETA MASTER'), 'transferencia');
+  assert.equal(E.queClase('Compra venta de dolares'), 'transferencia');
+  assert.equal(E.queClase('PAGO DE SERVICIOS'), null);
+});
+
+t('cuadra contra los totales que imprime el banco, no contra sí mismo', () => {
+  // Los saldos se deducen de las mismas filas que se están comprobando: si se
+  // comprobara contra ellos, cuadraría siempre y no comprobaría nada.
+  const r = E.parseExtracto(GALICIA_REAL);
+  assert.equal(r.cuadra, true);
+  assert.equal(r.saldoInicial, 130.49);
+  assert.equal(r.saldoFinal, 787217.39);
+
+  const faltaUna = GALICIA_REAL.split('\n')
+    .filter(l => !/^05\/08\/26 TRANSF/.test(l)).join('\n');
+  assert.equal(E.parseExtracto(faltaUna).cuadra, false);
+});
+
+t('saca el período aunque las dos fechas vengan sueltas', () => {
+  const r = E.parseExtracto(GALICIA_REAL);
+  assert.equal(r.periodo.desde, '2026-07-31');
+  assert.equal(r.periodo.hasta, '2026-08-28');
+});
+
+t('encuentra la retención de ingresos brutos, que es lo que cobra el banco', () => {
+  const r = E.parseExtracto(GALICIA_REAL);
+  const c = E.cargosDelBanco(r.movimientos);
+  assert.equal(c.total, 27200);
+  assert.equal(c.conceptos[0].nombre, 'Retención de ingresos brutos');
+});
+
 console.log(`\n${ok} pruebas OK${mal ? `, ${mal} FALLAN` : ''}\n`);
 process.exit(mal ? 1 : 0);
