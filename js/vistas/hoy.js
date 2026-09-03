@@ -19,6 +19,7 @@ import { plataPartida, plata, cuandoVence, diasHasta, hoyISO, aFecha, nombreDe,
 import { irA } from '../ruteo.js';
 import { formPago } from './mes.js';
 import { formImportarResumen } from './importar.js';
+import { formImportarExtracto } from './extracto.js';
 import { bishu, frasesDeBishu as F_frases } from '../bishu.js';
 import { nombreDelMes } from './cierre.js';
 
@@ -38,6 +39,7 @@ export function vistaHoy(root, { arranca = 0 } = {}) {
     h('div.flow',
       noSeGuardo(),
       llegoElResumen(),
+      estaElExtracto(),
       cerroElMes(hoy),
       sinRevisar(),
       conexionCaida(),
@@ -263,6 +265,37 @@ function llegoElResumen() {
         ? `${n.datos.archivo} · lo abro y te muestro qué falta cargar.`
         : 'Lo abro y te muestro qué falta cargar.'),
       btn));
+}
+
+/**
+ * El banco avisó que está el resumen de cuenta.
+ *
+ * Este no viene adjunto: el banco solo avisa, y hay que bajarlo de su app.
+ * Es el único paso del camino que la app no puede hacer sola, así que el
+ * cartel dice exactamente eso y no promete lo que no puede.
+ *
+ * Vale la pena el trámite porque adentro están los gastos hormiga del banco
+ * —mantenimiento, seguros que se renuevan solos, el impuesto al débito y al
+ * crédito—: ninguno manda aviso propio y nadie los carga a mano, así que sin
+ * este documento no existen.
+ */
+function estaElExtracto() {
+  const n = (state.notificaciones || [])
+    .filter(x => x.tipo === 'extracto' && !x.leida)
+    .sort((a, b) => (a.created_at < b.created_at ? 1 : -1))[0];
+  if (!n) return null;
+
+  return h('div.aviso',
+    h('div.av', icono('banco', 17)),
+    h('div.txt',
+      h('div.tt', n.titulo || 'Está tu resumen de cuenta'),
+      h('div.ds', 'Bajalo de la app del banco y subilo acá: adentro están las ',
+        'comisiones y los seguros que no avisa nadie.'),
+      h('div.fila', { style: { marginTop: '12px' } },
+        h('button.btn.sec', { onclick: async () => {
+          await guardar('notificaciones', { ...n, leida: true });
+        } }, 'Después'),
+        h('button.btn', { onclick: () => formImportarExtracto() }, 'Subirlo'))));
 }
 
 /**

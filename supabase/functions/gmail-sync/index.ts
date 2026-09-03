@@ -25,6 +25,15 @@ const QUERY_RESUMEN = 'has:attachment filename:pdf newer_than:45d ' +
   'bbva OR macro OR icbc OR hsbc OR patagonia OR supervielle OR comafi)';
 const ES_RESUMEN = /resumen|estado de cuenta|liquidacion|liquidación|tu cuenta|cierre/i;
 
+// El resumen de CUENTA es otra cosa que el de tarjeta, y el banco casi nunca
+// lo adjunta: avisa que esta y hay que bajarlo de su app. Asi que este aviso
+// no puede terminar en "lo abro yo" sino en "bajalo y subilo", que es el
+// unico paso que no se puede automatizar.
+const QUERY_CUENTA = 'newer_than:45d from:(bancogalicia.com.ar OR galicia.ar OR santander OR ' +
+  'bbva OR macro OR nacion OR brubank OR uala)';
+const ES_EXTRACTO = /resumen de cuenta|extracto de cuenta|resumen de tu cuenta|movimientos de tu cuenta/i;
+const ES_TARJETA = /tarjeta|visa|mastercard|amex|cr[eé]dito/i;
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS });
   const sb = admin();
@@ -194,11 +203,13 @@ async function sincronizar(sb: any, it: any) {
 
   // Los resumenes van aparte y no frenan lo demas: si esta busqueda falla,
   // los consumos ya se cargaron igual.
-  let resumenes = 0;
+  let resumenes = 0, extractos = 0;
   try { resumenes = await buscarResumenes(sb, it, token); }
   catch (e) { console.warn('resumenes', e); }
+  try { extractos = await buscarAvisosDeCuenta(sb, it, token); }
+  catch (e) { console.warn('extractos', e); }
 
-  return { user: it.user_id, cargados, ignorados, adoptados, aumentos, resumenes };
+  return { user: it.user_id, cargados, ignorados, adoptados, aumentos, resumenes, extractos };
 }
 
 // ---------------------------------------------------------------------
@@ -376,6 +387,45 @@ async function buscarResumenes(sb: any, it: any, token: string) {
       cuerpo: 'Tocá para leerlo: los consumos, las cuotas y las fechas del ciclo.',
       datos: { mensaje: m.id, adjunto: pdf.id, archivo: pdf.nombre,
                asunto, remitente, fecha, tamano: pdf.tamano }
+    });
+    nuevos++;
+  }
+  return nuevos;
+}
+
+/**
+ * Los avisos de "ya esta tu resumen de cuenta", que vienen SIN adjunto.
+ *
+ * Adentro del resumen de cuenta estan los gastos hormiga del banco:
+ * mantenimiento, seguros que se renuevan solos, el impuesto al debito y al
+ * credito, retenciones. Ninguno manda aviso propio y nadie los carga a mano,
+ * asi que sin este documento no existen para la app.
+ */
+async function buscarAvisosDeCuenta(sb: any, it: any, token: string) {
+  const lista = await api(`messages?q=${encodeURIComponent(QUERY_CUENTA)}&maxResults=15`, token);
+  let nuevos = 0;
+
+  for (const m of lista.messages ?? []) {
+    const { data: visto } = await sb.from('notificaciones').select('id')
+      .eq('user_id', it.user_id).eq('tipo', 'extracto')
+      .eq('datos->>mensaje', m.id).maybeSingle();
+    if (visto) continue;
+
+    const msg = await api(`messages/${m.id}?format=metadata&metadataHeaders=subject&metadataHeaders=from`, token);
+    const cab = (n: string) => msg.payload?.headers?.find((h: any) =>
+      h.name.toLowerCase() === n)?.value ?? '';
+    const asunto = cab('subject');
+    // Tiene que hablar de la CUENTA y no de la tarjeta: el de tarjeta ya
+    // tiene su propio camino, con el PDF adjunto.
+    if (!ES_EXTRACTO.test(asunto) || ES_TARJETA.test(asunto)) continue;
+
+    const fecha = new Date(Number(msg.internalDate || Date.now())).toISOString().slice(0, 10);
+    await sb.from('notificaciones').insert({
+      user_id: it.user_id, tipo: 'extracto',
+      titulo: 'Está tu resumen de cuenta',
+      cuerpo: 'Bajalo de la app del banco y subilo acá: adentro están las comisiones ' +
+              'y los seguros que no avisa nadie.',
+      datos: { mensaje: m.id, asunto, fecha }
     });
     nuevos++;
   }

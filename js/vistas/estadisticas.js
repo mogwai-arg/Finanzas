@@ -25,6 +25,8 @@ import { plata, plataPartida, hoyISO, buscar, nombreDe, tituloTx } from '../form
 import { barrasHorizontales, barrasPorMes, leyenda } from '../graficos.js';
 import { irA } from '../ruteo.js';
 import { formPresupuesto } from './formularios.js';
+import { formImportarExtracto } from './extracto.js';
+import { cargosPorMes } from '../extracto.js';
 import { nombreDelMes } from './cierre.js';
 
 const MES_CORTO = ['ene', 'feb', 'mar', 'abr', 'may', 'jun',
@@ -42,6 +44,7 @@ export function vistaEstadisticas(root, { moneda = 'ARS' } = {}) {
       porMes(moneda, hoy),
       categorias(per, moneda),
       presupuesto(per, hoy),
+      loQueCobraElBanco(hoy),
       puertaAlCierre(hoy),
       mayores(per, moneda),
       proximoSueldo()));
@@ -290,6 +293,47 @@ function mayores(per, moneda) {
             .filter(Boolean).join(' · '))),
         h('div.v', plata(Math.round(t.monto), moneda)));
     })));
+}
+
+/**
+ * Lo que te cobra el banco, mes a mes.
+ *
+ * Son los gastos que no manda ningún aviso y que nadie carga a mano:
+ * mantenimiento, seguros que se renuevan solos, el impuesto al débito y al
+ * crédito, retenciones. Uno de 18.500 no es nada; doce son 222.000, y esa es
+ * la única cifra con la que se puede discutir un paquete.
+ */
+function loQueCobraElBanco(hoy) {
+  const serie = cargosPorMes(state.transactions, 6, hoy);
+  const conAlgo = serie.filter(m => m.total > 0);
+  if (!conAlgo.length) return null;
+
+  const ultimo = serie[serie.length - 1];
+  const cerrados = serie.slice(0, -1).filter(m => m.total > 0);
+  const promedio = cerrados.length
+    ? cerrados.reduce((s, m) => s + m.total, 0) / cerrados.length : ultimo.total;
+
+  return h('section',
+    h('div.ghead', 'Lo que te cobra el banco',
+      h('button', { onclick: () => formImportarExtracto() }, 'Subir resumen')),
+    h('div.grp.pad',
+      h('div', { class: 'cifra', style: { fontSize: 'var(--t-cifra2)' } },
+        plata(Math.round(ultimo.total))),
+      h('div.small.mut', { style: { marginTop: '5px' } },
+        `este mes · ${ultimo.cuantos} ${ultimo.cuantos === 1 ? 'cargo' : 'cargos'}`),
+      promedio > 0 ? h('div.small.mut', {
+        style: { marginTop: '11px', paddingTop: '11px',
+                 borderTop: '1px solid var(--line)', lineHeight: '1.5' } },
+        'A este ritmo son ',
+        h('b', { style: { color: 'var(--tx)' } }, plata(Math.round(promedio * 12))),
+        ' por año. Es lo que sale el paquete, y es el número con el que se ',
+        'pide cambiarlo.') : null),
+    ultimo.conceptos.length ? h('div.grp', { style: { marginTop: '10px' } },
+      ultimo.conceptos.map(c => h('div.li',
+        h('div.av', icono('banco', 15)),
+        h('div.m', h('div.t', c.nombre),
+          h('div.s', `${c.cuantos} ${c.cuantos === 1 ? 'cargo' : 'cargos'} este mes`)),
+        h('div.v', plata(Math.round(c.monto)))))) : null);
 }
 
 /** El cierre del último mes completo, desde acá también y todo el mes. */

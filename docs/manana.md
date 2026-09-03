@@ -201,3 +201,39 @@ Anotado porque la tentación va a volver:
   ocho interruptores que no hacen nada es peor que no tenerlo.
 - **Pintar de verde o rojo el mes en curso.** Con el sueldo adentro el día 1
   y los gastos sin hacer, cualquier color miente hasta fin de mes.
+
+---
+
+## Resumen de CUENTA del banco (3/9)
+
+Otro documento que el de tarjeta, y sirve para otra cosa. Adentro están los
+gastos hormiga que no manda ningún aviso y que nadie carga a mano:
+mantenimiento de cuenta, seguros que se renuevan solos, el impuesto al débito
+y al crédito, retenciones de ingresos brutos, sellados. Cada uno chico, todos
+los meses, y sin este documento no existen para la app.
+
+El banco avisa por mail que está, pero **no lo adjunta**: hay que bajarlo de
+su app. Ese es el único paso del camino que no se puede automatizar, así que
+el cartel de Hoy dice exactamente eso y no promete lo que no puede.
+
+### Cómo se lee sin adivinar
+
+Cada banco arma las columnas distinto y el PDF las pierde: no se sabe cuál
+número es débito y cuál crédito. La salida es el **saldo**: cada fila trae el
+saldo después del movimiento, y la diferencia contra el anterior da el signo
+sin ambigüedad. Cuando el importe de la fila coincide con esa diferencia, el
+signo es un hecho y queda marcado como tal; cuando la fila no trae saldo se
+cae en el texto y se deja anotado que fue una inferencia.
+
+Y se comprueba que el extracto **cuadre de punta a punta**: si la suma de los
+movimientos no lleva del saldo inicial al final, faltó una hoja. Sin eso,
+faltar una hoja se ve igual que un mes barato.
+
+### Lo que queda pendiente acá
+
+- Probar el parser contra un extracto de Galicia de verdad. Está escrito
+  tolerante y probado contra un formato reconstruido, pero el primero real
+  seguro trae algo que no previmos: si no lo reconoce, pegar el texto y
+  ajustar las expresiones.
+- Los seguros y las comisiones que aparecen podrían proponerse como gastos
+  fijos, para que entren en la detección de aumentos.

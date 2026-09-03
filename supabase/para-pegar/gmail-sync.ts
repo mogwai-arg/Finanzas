@@ -255,6 +255,9 @@ var QUERY = `from:(${REMITENTES.join(" OR ")}) newer_than:14d`;
 var QUERY_ANCHA = "from:(galicia OR bancogalicia OR modo OR mercadopago OR mercadolibre OR personalpay OR naranja OR uala OR brubank) newer_than:30d";
 var QUERY_RESUMEN = "has:attachment filename:pdf newer_than:45d from:(bancogalicia.com.ar OR galicia.ar OR naranja OR visa OR amex OR santander OR bbva OR macro OR icbc OR hsbc OR patagonia OR supervielle OR comafi)";
 var ES_RESUMEN = /resumen|estado de cuenta|liquidacion|liquidación|tu cuenta|cierre/i;
+var QUERY_CUENTA = "newer_than:45d from:(bancogalicia.com.ar OR galicia.ar OR santander OR bbva OR macro OR nacion OR brubank OR uala)";
+var ES_EXTRACTO = /resumen de cuenta|extracto de cuenta|resumen de tu cuenta|movimientos de tu cuenta/i;
+var ES_TARJETA = /tarjeta|visa|mastercard|amex|cr[eé]dito/i;
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
   const sb = admin();
@@ -385,13 +388,18 @@ async function sincronizar(sb, it) {
       cuerpo: nuevos.slice(0, 4).join(" \xB7 ")
     });
   }
-  let resumenes = 0;
+  let resumenes = 0, extractos = 0;
   try {
     resumenes = await buscarResumenes(sb, it, token);
   } catch (e) {
     console.warn("resumenes", e);
   }
-  return { user: it.user_id, cargados, ignorados, adoptados, aumentos, resumenes };
+  try {
+    extractos = await buscarAvisosDeCuenta(sb, it, token);
+  } catch (e) {
+    console.warn("extractos", e);
+  }
+  return { user: it.user_id, cargados, ignorados, adoptados, aumentos, resumenes, extractos };
 }
 async function buscarAumentos(sb, it, token) {
   const { data: fijos } = await sb.from("recurrings").select("*").eq("user_id", it.user_id).eq("activo", true);
@@ -529,6 +537,28 @@ async function buscarResumenes(sb, it, token) {
         fecha,
         tamano: pdf.tamano
       }
+    });
+    nuevos++;
+  }
+  return nuevos;
+}
+async function buscarAvisosDeCuenta(sb, it, token) {
+  const lista = await api(`messages?q=${encodeURIComponent(QUERY_CUENTA)}&maxResults=15`, token);
+  let nuevos = 0;
+  for (const m of lista.messages ?? []) {
+    const { data: visto } = await sb.from("notificaciones").select("id").eq("user_id", it.user_id).eq("tipo", "extracto").eq("datos->>mensaje", m.id).maybeSingle();
+    if (visto) continue;
+    const msg = await api(`messages/${m.id}?format=metadata&metadataHeaders=subject&metadataHeaders=from`, token);
+    const cab = (n) => msg.payload?.headers?.find((h) => h.name.toLowerCase() === n)?.value ?? "";
+    const asunto = cab("subject");
+    if (!ES_EXTRACTO.test(asunto) || ES_TARJETA.test(asunto)) continue;
+    const fecha = new Date(Number(msg.internalDate || Date.now())).toISOString().slice(0, 10);
+    await sb.from("notificaciones").insert({
+      user_id: it.user_id,
+      tipo: "extracto",
+      titulo: "Est\xE1 tu resumen de cuenta",
+      cuerpo: "Bajalo de la app del banco y subilo ac\xE1: adentro est\xE1n las comisiones y los seguros que no avisa nadie.",
+      datos: { mensaje: m.id, asunto, fecha }
     });
     nuevos++;
   }

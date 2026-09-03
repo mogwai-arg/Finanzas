@@ -53,11 +53,33 @@ export const DEMO = {
     { id: id('c8'), nombre: 'Hogar', tipo: 'gasto', color: '#8A6B4F', orden: 8 },
     { id: id('c9'), nombre: 'Transporte', tipo: 'gasto', color: '#6B7280', orden: 9 },
     { id: id('c10'), nombre: 'Otros', tipo: 'gasto', color: '#868C9B', orden: 10 },
+    { id: id('c11'), nombre: 'Bancarios', tipo: 'gasto', color: '#5C6272', icono: 'banco', orden: 11 },
     { id: id('i1'), nombre: 'Sueldo', tipo: 'ingreso', color: '#0B7F5A', orden: 1 },
     { id: id('i2'), nombre: 'Extras', tipo: 'ingreso', color: '#0D5470', orden: 2 }
   ],
 
   transactions: [
+    // ---- lo que cobra el banco, que sale del resumen de cuenta y de ningun
+    // otro lado: nadie manda un aviso por una comision de mantenimiento.
+    { id: id('cb1'), fecha: '2026-09-05', descripcion: 'COMISION MANTENIMIENTO PAQUETE',
+      comercio: 'COMISION MANTENIMIENTO PAQUETE', monto: 18500, moneda: 'ARS', tipo: 'gasto',
+      account_id: id('gal'), category_id: id('c11'), cuotas: 1, fuente: 'extracto', revisado: true },
+    { id: id('cb2'), fecha: '2026-09-06', descripcion: 'SIRCREB RETENCION IIBB',
+      comercio: 'SIRCREB RETENCION IIBB', monto: 980.15, moneda: 'ARS', tipo: 'gasto',
+      account_id: id('gal'), category_id: id('c11'), cuotas: 1, fuente: 'extracto', revisado: true },
+    { id: id('cb3'), fecha: '2026-09-02', descripcion: 'IMP LEY 25413 DEBITOS',
+      comercio: 'IMP LEY 25413 DEBITOS', monto: 1123.49, moneda: 'ARS', tipo: 'gasto',
+      account_id: id('gal'), category_id: id('c11'), cuotas: 1, fuente: 'extracto', revisado: true },
+    { id: id('cb4'), fecha: '2026-09-10', descripcion: 'SEGURO BOLSO PROTEGIDO',
+      comercio: 'SEGURO BOLSO PROTEGIDO', monto: 4200, moneda: 'ARS', tipo: 'gasto',
+      account_id: id('gal'), category_id: id('c11'), cuotas: 1, fuente: 'extracto', revisado: true },
+    { id: id('cb5'), fecha: '2026-08-05', descripcion: 'COMISION MANTENIMIENTO PAQUETE',
+      comercio: 'COMISION MANTENIMIENTO PAQUETE', monto: 17400, moneda: 'ARS', tipo: 'gasto',
+      account_id: id('gal'), category_id: id('c11'), cuotas: 1, fuente: 'extracto', revisado: true },
+    { id: id('cb6'), fecha: '2026-08-10', descripcion: 'SEGURO BOLSO PROTEGIDO',
+      comercio: 'SEGURO BOLSO PROTEGIDO', monto: 3950, moneda: 'ARS', tipo: 'gasto',
+      account_id: id('gal'), category_id: id('c11'), cuotas: 1, fuente: 'extracto', revisado: true },
+
     // ---- el dia que entro el sueldo: ingreso, transferencias y servicios
     { id: id('t1'), fecha: '2026-09-01', descripcion: 'Acreditamiento de haberes', comercio: 'Sueldo',
       monto: 2026665.38, moneda: 'ARS', tipo: 'ingreso', account_id: id('gal'),
@@ -268,7 +290,12 @@ export const DEMO = {
       cuerpo: 'Tocá para leerlo: los consumos, las cuotas y las fechas del ciclo.',
       leida: false, created_at: '2026-09-02T09:10:00Z',
       datos: { mensaje: 'demo-msg', adjunto: 'demo-att', archivo: 'resumen-visa-0926.pdf',
-               asunto: 'Tu resumen de cuenta', fecha: '2026-09-02', tamano: 184320 } }
+               asunto: 'Tu resumen de cuenta', fecha: '2026-09-02', tamano: 184320 } },
+    // El banco avisa que esta el resumen de CUENTA, pero no lo adjunta.
+    { id: id('n3'), tipo: 'extracto', titulo: 'Está tu resumen de cuenta',
+      cuerpo: 'Bajalo de la app del banco y subilo acá.',
+      leida: false, created_at: '2026-09-02T08:00:00Z',
+      datos: { mensaje: 'demo-cta', asunto: 'Ya está tu resumen de cuenta', fecha: '2026-09-02' } }
   ],
 
   integrations: [],

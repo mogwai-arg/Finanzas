@@ -11,6 +11,7 @@ import { estadoPush, prenderPush, apagarPush } from '../push.js';
 import { irA } from '../ruteo.js';
 import { formCategorias } from './formularios.js';
 import { formImportarResumen } from './importar.js';
+import { formImportarExtracto } from './extracto.js';
 
 export function vistaAjustes(root) {
   const tema = document.documentElement.getAttribute('data-tema') || 'auto';
@@ -53,6 +54,11 @@ export function vistaAjustes(root) {
           h('div.av', icono('tarjeta', 17)),
           h('div.m', h('div.t', 'Cuentas y tarjetas'),
             h('div.s', `${(state.accounts || []).length} cargadas`)),
+          h('span.chev', icono('chev', 15))),
+        h('button.li', { onclick: () => formImportarExtracto() },
+          h('div.av', icono('banco', 17)),
+          h('div.m', h('div.t', 'Subir un resumen de cuenta'),
+            h('div.s', 'El del banco: trae las comisiones que no avisa nadie')),
           h('span.chev', icono('chev', 15))),
         h('button.li', { onclick: () => formImportarResumen() },
           h('div.av', icono('recibo', 17)),
@@ -127,7 +133,8 @@ const TIPOS = [
   ['saldo',    'Saldo bajo',         'Cuando una cuenta queda por debajo del mínimo'],
   ['aumentos', 'Aumentos',           'Cuando un fijo sube más que el resto, o un correo lo dice'],
   ['bishu',    'Cómo venís',         'Bishu compara con el mes pasado, una vez por semana'],
-  ['cierre',   'Cierre del mes',     'El día 1, cómo cerró el mes que terminó']
+  ['cierre',   'Cierre del mes',     'El día 1, cómo cerró el mes que terminó'],
+  ['extracto', 'Resumen del banco',  'Cuando llega el de la cuenta, para subirlo']
 ];
 
 function seccionAvisos() {
