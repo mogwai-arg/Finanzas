@@ -132,7 +132,7 @@ En este orden, que importa: primero el SQL, después las funciones.
    |---|---|
    | `GOOGLE_CLIENT_ID` | el de la consola de Google |
    | `GOOGLE_CLIENT_SECRET` | el de la consola de Google |
-   | `MP_CLIENT_ID` | el de Mercado Pago (o vacío por ahora) |
+   | `MP_CLIENT_ID` | el de Mercado Pago (o vacío por ahora, ver [docs/mercadopago.md](docs/mercadopago.md)) |
    | `MP_CLIENT_SECRET` | el de Mercado Pago (o vacío por ahora) |
    | `FUNCTIONS_URL` | `https://<TU-PROJECT-REF>.supabase.co/functions/v1` |
    | `APP_URL` | `https://<TU-APP>.pages.dev` |
