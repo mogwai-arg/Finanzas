@@ -68,7 +68,12 @@ export function formImportarExtracto(yaBajado = null) {
         h('div', { style: { marginTop: '7px', fontFamily: 'ui-monospace, monospace',
                             fontSize: '11px', color: 'var(--tx3)', lineHeight: '1.5',
                             wordBreak: 'break-word' } },
-          `${e?.name || 'Error'}: ${String(e?.message || e).slice(0, 180)}`));
+          `${e?.name || 'Error'}: ${String(e?.message || e).slice(0, 160)}`,
+          // La primera línea del stack dice en qué archivo y en qué función
+          // pasó. Sin eso, "undefined is not a function" puede ser cualquier
+          // cosa de un archivo de medio megabyte.
+          e?.stack ? h('div', { style: { marginTop: '5px', opacity: '.75' } },
+            String(e.stack).split('\n').slice(0, 3).join(' ⏎ ').slice(0, 260)) : null));
       console.warn('pdf', e);
     }
   }

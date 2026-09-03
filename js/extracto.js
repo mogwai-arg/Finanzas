@@ -83,12 +83,12 @@ export function parseExtracto(texto) {
   // de cada movimiento, asi que casi todas sus filas traen dos importes. Un
   // resumen de tarjeta trae uno solo por consumo.
   const porPalabra = /saldo|movimientos de (la )?cuenta|resumen de cuenta|cuenta corriente|caja de ahorro|extracto/i.test(todo);
-  const filas = lineas.map(l => l.match(FILA)).filter(Boolean);
-  const conDos = filas.filter(f => (f[2].match(NUMERO) || []).length >= 2).length;
-  const porForma = filas.length >= 3 && conDos / filas.length >= 0.5;
+  const bloques = enBloques(lineas);
+  const conDos = bloques.filter(b => b.numeros.length >= 2).length;
+  const porForma = bloques.length >= 3 && conDos / bloques.length >= 0.5;
   if (!porPalabra && !porForma) return null;
   // Con palabras pero sin saldo corriendo, es casi seguro el de la tarjeta.
-  if (porPalabra && filas.length >= 3 && !porForma &&
+  if (porPalabra && bloques.length >= 3 && !porForma &&
       /visa|mastercard|amex|l[ií]mite de compra|pago m[ií]nimo/i.test(todo)) return null;
 
   const banco = /galicia/i.test(todo) ? 'galicia'
@@ -117,28 +117,20 @@ export function parseExtracto(texto) {
     /saldo\s*(final|actual|al\s+cierre|al\s+d[ií]a|disponible|total)/i);
 
   const crudos = [];
-  for (const l of lineas) {
-    const f = l.match(FILA);
-    // Debajo de cada movimiento vienen renglones sueltos con el comercio y
-    // los numeros de la operacion. Son la unica forma de distinguir un
-    // "PAGO DE SERVICIOS" de otro: sin ellos, Aysa, el gas y el municipio son
-    // la misma fila repetida.
-    if (!f) { if (crudos.length) crudos[crudos.length - 1].extra.push(l); continue; }
-    const iso = fecha(f[1], anio, mesRef);
-    if (!iso) continue;
+  for (const b of bloques) {
+    const iso = fecha(b.fecha, anio, mesRef);
+    if (!iso || b.numeros.length === 0) continue;
 
-    const nums = f[2].match(NUMERO);
-    if (!nums || !nums.length) continue;
-
-    // El último número de la fila es el saldo; el anterior, el importe. Si
-    // hay uno solo, no hay saldo con qué comparar y se resuelve más abajo.
+    const nums = b.numeros;
+    // El último número del movimiento es el saldo; el anterior, el importe.
     const saldo = nums.length > 1 ? monto(nums[nums.length - 1]) : null;
-    const importe = Math.abs(monto(nums[nums.length > 1 ? nums.length - 2 : 0]) || 0);
+    const bruto = nums[nums.length > 1 ? nums.length - 2 : 0];
+    const importe = Math.abs(monto(bruto) || 0);
     if (!importe) continue;
 
     // Muchos extractos traen una segunda fecha (fecha valor) antes de la
     // descripcion: sacarla evita que el comercio quede como "02/09 EDESUR".
-    const descripcion = f[2].slice(0, f[2].indexOf(nums[0]))
+    const descripcion = b.titulo
       .replace(/^\s*\d{1,2}[-/.]\d{1,2}(?:[-/.]\d{2,4})?\s+/, '')
       // La columna "Origen" es un codigo de cuatro digitos entre la
       // descripcion y el importe: no es parte del nombre.
@@ -148,10 +140,9 @@ export function parseExtracto(texto) {
 
     // El signo escrito. Galicia pone el menos ADELANTE del importe; otros
     // formatos lo ponen atras. Cuando esta, no hay nada que inferir.
-    const bruto = nums[nums.length > 1 ? nums.length - 2 : 0];
     crudos.push({ fecha: iso, descripcion, importe, saldo,
                   signo: /^-/.test(bruto) ? -1 : /-$/.test(bruto) ? -1 : null,
-                  extra: [] });
+                  extra: b.extra });
   }
   if (!crudos.length) return null;
 
@@ -225,6 +216,59 @@ function comercioDe(c) {
     return t;
   }
   return null;
+}
+
+/**
+ * Cada movimiento con TODO lo suyo: el renglon de la fecha y los que le
+ * cuelgan hasta el proximo.
+ *
+ * Existe porque el mismo resumen se lee de dos formas distintas segun de
+ * donde salga el texto:
+ *
+ *   Del lector de la app, que rearma las columnas por posicion:
+ *     03/08/26 PAGO DE SERVICIOS   0001  -25.427,25  4.703,24
+ *     AYSA
+ *
+ *   De copiar y pegar desde un visor de PDF, que respeta el orden del
+ *   archivo y no las columnas:
+ *     03/08/26   PAGO DE SERVICIOS
+ *     AYSA
+ *     000149501000
+ *     0001   -25.427,25   4.703,24
+ *
+ * Es el MISMO resumen. Leyendo linea por linea, el segundo no tiene ningun
+ * renglon con fecha e importes juntos, y la app decia "esto parece el de la
+ * tarjeta". Mirando el bloque entero, los dos dicen lo mismo.
+ */
+function enBloques(lineas) {
+  const out = [];
+  for (const l of lineas) {
+    const f = l.match(FILA);
+    if (f) {
+      out.push({ fecha: f[1], titulo: f[2], numeros: [], extra: [], propios: [] });
+      const nums = f[2].match(NUMERO);
+      if (nums) {
+        out[out.length - 1].numeros = nums;
+        // Lo que va antes del primer numero es la descripcion.
+        out[out.length - 1].titulo = f[2].slice(0, f[2].indexOf(nums[0]));
+      }
+      continue;
+    }
+    const b = out[out.length - 1];
+    if (!b) continue;
+    const nums = l.match(NUMERO);
+    // El renglon de los importes: el PRIMERO del bloque con dos o mas, y solo
+    // si es una fila de numeros y no prosa.
+    //
+    // La distincion importa: al pie del resumen hay un parrafo legal que
+    // menciona "Ley 24.485, Decreto N' 540/95", y esos dos numeros colgaban
+    // del ultimo movimiento y le cambiaban el saldo. Un renglon de importes
+    // tiene a lo sumo un par de palabras; un parrafo tiene veinte.
+    const palabras = l.replace(NUMERO, ' ').match(/[A-Za-zÁÉÍÓÚÜÑáéíóúüñ]{2,}/g) || [];
+    if (!b.numeros.length && nums && nums.length >= 2 && palabras.length <= 3) b.numeros = nums;
+    else b.extra.push(l);
+  }
+  return out.filter(b => b.titulo.trim());
 }
 
 function buscarSaldo(lineas, re) {

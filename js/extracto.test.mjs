@@ -286,5 +286,63 @@ t('encuentra la retención de ingresos brutos, que es lo que cobra el banco', ()
   assert.equal(c.conceptos[0].nombre, 'Retención de ingresos brutos');
 });
 
+// ------------------------------------- el mismo resumen, copiado del visor
+//
+// Es el MISMO documento leido de otra forma. El lector de la app rearma las
+// columnas por posicion y deja fecha, importe y saldo en un renglon; copiar
+// y pegar desde un visor de PDF respeta el orden del archivo y no las
+// columnas, asi que los importes caen DESPUES del comercio, en otra linea.
+//
+// Leyendo linea por linea, este texto no tiene ningun renglon con fecha e
+// importes juntos, y la app contestaba "esto parece el resumen de la
+// tarjeta" sobre un extracto de cuenta perfectamente valido.
+const COPIADO_DEL_VISOR = `Resumen de Caja de Ahorro en Pesos
+CBU
+0009999990001234567890
+28/08/2026 31/07/2026
+Período de movimientos
+$868,85
+$130,49
+Saldos
+Movimientos
+Fecha   Descripción   Origen   Crédito   Débito   Saldo
+03/08/26   CREDITO TRANSFERENCIA
+NOMBRE APELLIDO
+20000000000
+30.000,00   30.130,49
+03/08/26   PAGO DE SERVICIOS
+AYSA
+000149501000
+0001   -25.427,25   4.703,24
+05/08/26   ING. BRUTOS S/ CRED
+REG.RECAU.SIRCREB
+-27.200,00   -22.496,76
+Los depósitos en pesos cuentan con la garantía de hasta $25.000.000. Ley 24.485, Decreto N' 540/95
+y sus modificatorias y complementarias.`;
+
+t('el mismo resumen copiado del visor da lo mismo', () => {
+  const r = E.parseExtracto(COPIADO_DEL_VISOR);
+  assert.ok(r, 'tiene que reconocerlo');
+  assert.equal(r.movimientos.length, 3);
+  assert.equal(r.movimientos[0].entra, true);
+  assert.equal(r.movimientos[1].entra, false);
+  assert.equal(r.movimientos[1].comercio, 'AYSA');
+  assert.equal(r.movimientos[1].importe, 25427.25);
+});
+
+t('el párrafo legal del pie no le cambia el saldo al último movimiento', () => {
+  // "Ley 24.485, Decreto N' 540/95" son dos números en una línea, y colgaban
+  // del último movimiento como si fueran su importe y su saldo.
+  const r = E.parseExtracto(COPIADO_DEL_VISOR);
+  const ultimo = r.movimientos[r.movimientos.length - 1];
+  assert.equal(ultimo.importe, 27200);
+  assert.equal(ultimo.saldo, -22496.76);
+});
+
+t('encuentra la retención también en el texto copiado', () => {
+  const c = E.cargosDelBanco(E.parseExtracto(COPIADO_DEL_VISOR).movimientos);
+  assert.equal(c.total, 27200);
+});
+
 console.log(`\n${ok} pruebas OK${mal ? `, ${mal} FALLAN` : ''}\n`);
 process.exit(mal ? 1 : 0);
