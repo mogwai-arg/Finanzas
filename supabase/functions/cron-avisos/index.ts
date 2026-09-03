@@ -115,7 +115,8 @@ Deno.serve(async (req) => {
   const mesPasado = mesAntesDe(per);
   const hastaHoy = (p: string) => `${p}-${String(hoy.getDate()).padStart(2, '0')}`;
 
-  const { data: users } = await sb.from('settings').select('user_id, avisos, saldo_minimo');
+  const { data: users } = await sb.from('settings')
+    .select('user_id, avisos, saldo_minimo, proyeccion');
   const salida: unknown[] = [];
 
   for (const u of users ?? []) {
@@ -160,7 +161,9 @@ Deno.serve(async (req) => {
       pagosViejos: pagos.data ?? [],
       gastadoEsteMes: gastado(per), gastadoMesPasado: gastado(mesPasado),
       salioMesCerrado: salioEnTodo(mesPasado), salioMesAnterior: salioEnTodo(dosAtras),
-      movimientosMesCerrado: cuantosEn(mesPasado)
+      movimientosMesCerrado: cuantosEn(mesPasado),
+      // La calculó la app: acá solo se lee. Ver js/proyeccion.js.
+      proyeccion: u.proyeccion ?? null
     }, hoy);
     if (!mensajes.length) continue;
 

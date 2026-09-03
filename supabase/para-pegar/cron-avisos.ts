@@ -168,7 +168,28 @@ function avisosDelDia(d, ref = /* @__PURE__ */ new Date()) {
       ));
     }
   }
+  if (on("viene") && dia === 10) {
+    const a = mesApretado(d.proyeccion, hoy);
+    if (a) {
+      out.push(msg(
+        "viene",
+        `En ${nombreDeMes(a.periodo)} te queda poco aire`,
+        `Lo que ya est\xE1 comprometido se lleva el ${a.pct} % de lo que entra: te quedar\xEDan ${plata(a.libre)} para todo el mes.`,
+        `viene-${a.periodo}`,
+        "./#/estadisticas"
+      ));
+    }
+  }
   return out;
+}
+function mesApretado(proy, ref, { umbral = 70, vigencia = 20 } = {}) {
+  const meses = proy?.meses;
+  if (!Array.isArray(meses) || !meses.length) return null;
+  if (!proy.calculada) return null;
+  const edad = (ref.getTime() - new Date(proy.calculada).getTime()) / 864e5;
+  if (!(edad >= 0) || edad > vigencia) return null;
+  const per = `${ref.getFullYear()}-${String(ref.getMonth() + 1).padStart(2, "0")}`;
+  return meses.filter((m) => m.periodo > per && Number(m.entra) > 0 && Number(m.pct) >= umbral).sort((a, b) => String(a.periodo).localeCompare(String(b.periodo)))[0] ?? null;
 }
 function seDespegoDelResto(recurrings, pagos, per, referencia = null, meses = 3, margen = 10) {
   let desdePer = per;
@@ -459,7 +480,7 @@ Deno.serve(async (req) => {
   };
   const mesPasado = mesAntesDe(per);
   const hastaHoy = (p) => `${p}-${String(hoy.getDate()).padStart(2, "0")}`;
-  const { data: users } = await sb.from("settings").select("user_id, avisos, saldo_minimo");
+  const { data: users } = await sb.from("settings").select("user_id, avisos, saldo_minimo, proyeccion");
   const salida = [];
   for (const u of users ?? []) {
     const de = (t) => sb.from(t).select("*").eq("user_id", u.user_id);
@@ -493,7 +514,9 @@ Deno.serve(async (req) => {
       gastadoMesPasado: gastado(mesPasado),
       salioMesCerrado: salioEnTodo(mesPasado),
       salioMesAnterior: salioEnTodo(dosAtras),
-      movimientosMesCerrado: cuantosEn(mesPasado)
+      movimientosMesCerrado: cuantosEn(mesPasado),
+      // La calculó la app: acá solo se lee. Ver js/proyeccion.js.
+      proyeccion: u.proyeccion ?? null
     }, hoy);
     if (!mensajes.length) continue;
     await sb.from("notificaciones").insert({

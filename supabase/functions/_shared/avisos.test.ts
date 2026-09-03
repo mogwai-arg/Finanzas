@@ -1,6 +1,6 @@
 // node --experimental-strip-types supabase/functions/_shared/avisos.test.ts
 import assert from 'node:assert/strict';
-import { avisosDelDia, saldoDeCuenta, seDespegoDelResto } from './avisos.ts';
+import { avisosDelDia, saldoDeCuenta, seDespegoDelResto, mesApretado } from './avisos.ts';
 
 let ok = 0, mal = 0;
 const t = (n: string, fn: () => void) => { try { fn(); console.log('  ok  ' + n); ok++; }
@@ -205,6 +205,75 @@ t('y no sale ningún otro día', () => {
     const m = avisosDelDia({ recurrings: FIJOS, pagosViejos: PAGOS }, new Date(2026, 8, dia));
     assert.ok(!m.some(x => x.tipo === 'aumentos'), 'no debería avisar el ' + dia);
   }
+});
+
+
+// ---------------------------------------------------------------------
+// Lo que ya viene
+// ---------------------------------------------------------------------
+const DIA10 = new Date(2026, 8, 10); // 10 de septiembre de 2026
+
+const foto = (calculada: string, meses: any[]) => ({ calculada, meses });
+const mes = (periodo: string, pct: number, libre = 400000) =>
+  ({ periodo, entra: 3000000, comprometido: 3000000 * pct / 100, libre, pct });
+
+t('avisa del PRIMER mes apretado, no del peor', () => {
+  // Es el que todavia se puede evitar: en el que ya no se puede, avisar es
+  // contar una desgracia.
+  const p = foto('2026-09-08T12:00:00Z',
+    [mes('2026-10', 78), mes('2026-11', 91), mes('2026-12', 60)]);
+  assert.equal(mesApretado(p, DIA10)!.periodo, '2026-10');
+});
+
+t('un mes holgado no se avisa', () => {
+  const p = foto('2026-09-08T12:00:00Z', [mes('2026-10', 55), mes('2026-11', 62)]);
+  assert.equal(mesApretado(p, DIA10), null);
+});
+
+t('una foto vieja no se usa: un numero de hace dos meses se cree igual', () => {
+  const p = foto('2026-06-01T12:00:00Z', [mes('2026-10', 78)]);
+  assert.equal(mesApretado(p, DIA10), null);
+});
+
+t('sin fecha de calculo tampoco: no hay forma de saber si sirve', () => {
+  assert.equal(mesApretado({ meses: [mes('2026-10', 78)] } as any, DIA10), null);
+  assert.equal(mesApretado(null, DIA10), null);
+  assert.equal(mesApretado({ calculada: '2026-09-08T12:00:00Z', meses: [] }, DIA10), null);
+});
+
+t('el mes en curso no cuenta: ya no se puede evitar', () => {
+  const p = foto('2026-09-08T12:00:00Z', [mes('2026-09', 95), mes('2026-10', 50)]);
+  assert.equal(mesApretado(p, DIA10), null);
+});
+
+t('sin ingreso conocido no se opina: el porcentaje seria de la nada', () => {
+  const p = foto('2026-09-08T12:00:00Z', [{ periodo: '2026-10', entra: 0, pct: 0, libre: 0 }]);
+  assert.equal(mesApretado(p, DIA10), null);
+});
+
+t('el aviso sale el dia 10 y dice el porcentaje y lo que queda', () => {
+  const p = foto('2026-09-08T12:00:00Z', [mes('2026-11', 78, 660000)]);
+  const m = avisosDelDia({ proyeccion: p }, DIA10);
+  const a = m.find(x => x.tipo === 'viene')!;
+  assert.ok(a, 'tiene que haber aviso');
+  assert.ok(a.titulo.includes('noviembre'), a.titulo);
+  assert.ok(a.cuerpo.includes('78 %'), a.cuerpo);
+  assert.ok(a.cuerpo.includes('660.000'), a.cuerpo);
+  assert.equal(a.url, './#/estadisticas');
+});
+
+t('y ningun otro dia del mes', () => {
+  const p = foto('2026-09-08T12:00:00Z', [mes('2026-11', 78)]);
+  for (const dia of [1, 5, 9, 11, 25]) {
+    const m = avisosDelDia({ proyeccion: p }, new Date(2026, 8, dia));
+    assert.ok(!m.some(x => x.tipo === 'viene'), 'no deberia avisar el ' + dia);
+  }
+});
+
+t('se puede apagar como cualquier otro', () => {
+  const p = foto('2026-09-08T12:00:00Z', [mes('2026-11', 78)]);
+  const m = avisosDelDia({ proyeccion: p, prefs: { viene: false } }, DIA10);
+  assert.ok(!m.some(x => x.tipo === 'viene'));
 });
 
 console.log(`\n${ok} pruebas OK${mal ? `, ${mal} FALLAN` : ''}\n`);

@@ -91,6 +91,8 @@ export type Datos = {
   salioMesCerrado?: number;
   salioMesAnterior?: number;
   movimientosMesCerrado?: number;
+  // La foto de los meses que vienen, calculada por la app. Ver proyeccion.js.
+  proyeccion?: { calculada?: string; meses?: any[] } | null;
 };
 
 /**
@@ -226,7 +228,49 @@ export function avisosDelDia(d: Datos, ref = new Date()): Mensaje[] {
     }
   }
 
+  // -------------------------------------------------------- lo que ya viene
+  //
+  // El dia 10 y una vez por mes: lejos del sueldo, lejos de los vencimientos y
+  // lejos del cierre, que es cuando uno tiene la cabeza en el mes que corre.
+  // El dato es sobre meses futuros y no cambia de un dia para el otro; lo que
+  // hace util avisarlo es que llegue ANTES de firmar la proxima compra en
+  // cuotas, no despues.
+  if (on('viene') && dia === 10) {
+    const a = mesApretado(d.proyeccion, hoy);
+    if (a) {
+      out.push(msg('viene', `En ${nombreDeMes(a.periodo)} te queda poco aire`,
+        `Lo que ya está comprometido se lleva el ${a.pct} % de lo que entra: ` +
+        `te quedarían ${plata(a.libre)} para todo el mes.`,
+        `viene-${a.periodo}`, './#/estadisticas'));
+    }
+  }
+
   return out;
+}
+
+/**
+ * El primer mes que viene con poco aire, segun la foto que dejo la app.
+ *
+ * La foto la calcula el navegador —ahi vive el cronograma de cuotas y los
+ * ciclos de cada tarjeta— y este lado solo la lee. Si esta vieja no se avisa:
+ * un numero de hace dos meses es peor que ningun aviso, porque se cree.
+ *
+ * El umbral es 70 %: arriba de ahi es el mes en que se vuelve a usar la
+ * tarjeta para llegar a fin de mes, que es justo el circulo que hay que
+ * cortar. Y se avisa del primero, no del peor: es el que todavia se puede
+ * evitar.
+ */
+export function mesApretado(proy: any, ref: Date, { umbral = 70, vigencia = 20 } = {}) {
+  const meses = proy?.meses;
+  if (!Array.isArray(meses) || !meses.length) return null;
+  if (!proy.calculada) return null;
+  const edad = (ref.getTime() - new Date(proy.calculada).getTime()) / 86400000;
+  if (!(edad >= 0) || edad > vigencia) return null;
+
+  const per = `${ref.getFullYear()}-${String(ref.getMonth() + 1).padStart(2, '0')}`;
+  return meses
+    .filter((m: any) => m.periodo > per && Number(m.entra) > 0 && Number(m.pct) >= umbral)
+    .sort((a: any, b: any) => String(a.periodo).localeCompare(String(b.periodo)))[0] ?? null;
 }
 
 /**

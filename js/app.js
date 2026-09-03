@@ -126,6 +126,15 @@ async function iniciar() {
     sincronizar().catch(e => console.warn('sync', e));
   }
 
+  // La foto de los meses que vienen, para el aviso al teléfono. Se calcula acá
+  // y no en el cron porque el cronograma de cuotas vive acá: una tercera copia
+  // en Deno se separaría de esta, y el día que se separa el aviso miente.
+  // Va después de todo y sin await: si falla, no pasa nada visible.
+  if (!DEMO) {
+    import('./proyeccion.js')
+      .then(m => m.guardarProyeccion())
+      .catch(e => console.warn('proyeccion', e));
+  }
 }
 
 // Se registra siempre, aun sin sesión: si sólo corriera después del login,
