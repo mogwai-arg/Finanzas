@@ -10,7 +10,7 @@
 // "estoy en el super, ¿con que pago?".
 // =====================================================================
 import { json, CORS } from '../_shared/comun.ts';
-import { leerPromosClash, leerDatosClash } from '../_shared/clash.ts';
+import { leerPromosClash, leerDatosClash, revisarDatosClash } from '../_shared/clash.ts';
 
 const RUBROS: Record<string, string> = {
   supermercado: 'supermercados',
@@ -45,7 +45,9 @@ Deno.serve(async (req) => {
       const js = await datos.text();
       const promos = leerDatosClash(js, rubro);
       if (promos.length) return json({ rubro, promos, fuente: 'data.js', cuando: new Date().toISOString() });
-      var revisionDatos = { bytes: js.length, muestra: js.slice(0, 200) };
+      // Las claves y los largos, no los primeros 200 caracteres: el
+      // encabezado es igual en todos los rubros y no dice nada.
+      var revisionDatos = revisarDatosClash(js);
     }
 
     // Si no salio nada, la pagina armada: hubo una epoca en que venia asi.

@@ -420,24 +420,26 @@ function hojaTraer() {
     lista.replaceChildren(h('div.small.mut', 'Buscando…'));
     try {
       const { promos: todas, revision } = await traerPromos(rubro);
-      const mias = F.promosQueTePuedenServir(todas, state.accounts);
-      const resto = todas.filter(p => !mias.includes(p)).sort(F.ordenPromo);
-
       if (!todas.length) { lista.replaceChildren(nadaQueMostrar(revision)); return; }
 
-      const conLoQueTengo = porComercio(mias);
-      const lasDemas = porComercio(resto);
+      // Se agrupa por comercio ANTES de separar. Agrupando después, Coto
+      // aparecía dos veces —una en "con lo que tenés" y otra en "las demás"—
+      // y todo lo de Coto tiene que estar en un solo lugar.
+      const mias = new Set(F.promosQueTePuedenServir(todas, state.accounts));
+      const grupos = porComercio(todas, mias);
+      const conLoQueTengo = grupos.filter(g => g.tuya);
+      const lasDemas = grupos.filter(g => !g.tuya);
 
       lista.replaceChildren(
         conLoQueTengo.length
           ? h('div', h('div.ghead', 'Con lo que tenés'),
-              h('div.grp', conLoQueTengo.map(x => fila(x, rubro))))
+              h('div.grp', conLoQueTengo.map(x => filaGrupo(x, rubro))))
           : h('div.grp.pad', h('div.small.mut', { style: { lineHeight: '1.5' } },
               'Ninguna de las vigentes es para tus tarjetas o billeteras. ',
               'Abajo están todas por si te sirve alguna.')),
         lasDemas.length ? h('div', { style: { marginTop: '18px' } },
           h('div.ghead', `Las demás · ${lasDemas.length}`),
-          h('div.grp', lasDemas.slice(0, 25).map(x => fila(x, rubro)))) : null);
+          h('div.grp', lasDemas.slice(0, 25).map(x => filaGrupo(x, rubro)))) : null);
     } catch (e) {
       lista.replaceChildren(h('div.small.mut', { style: { lineHeight: '1.5' } },
         String(e.message || e)));
@@ -475,21 +477,68 @@ function hojaTraer() {
  * volvía ilegible justo donde hay que decidir rápido. Las otras no se pierden:
  * van en una línea, que es todo lo que hace falta para saber que están.
  */
-function porComercio(promos) {
+function porComercio(promos, mias = new Set()) {
   const grupos = new Map();
-  for (const p of promos.slice().sort(F.ordenPromo)) {
+  // Las que servís vos primero: la que encabeza el grupo tiene que ser una
+  // que puedas usar, no la de mayor porcentaje de un banco que no tenés.
+  const orden = promos.slice().sort((a, b) =>
+    (mias.has(b) - mias.has(a)) || F.ordenPromo(a, b));
+  for (const p of orden) {
     const k = String(p.comercio || p.emisor || '').toLowerCase();
-    if (!grupos.has(k)) grupos.set(k, { ...p, otras: [] });
+    if (!grupos.has(k)) grupos.set(k, { ...p, otras: [], tuya: mias.has(p) });
     else grupos.get(k).otras.push(p);
   }
   return [...grupos.values()];
 }
 
+/**
+ * Un comercio traído de Clash, en una línea.
+ *
+ * Antes cada fila mostraba cinco renglones grises —tipo, emisor, días,
+ * medios, "también con...", la letra chica y el tope— y treinta comercios así
+ * son una pared de texto que nadie lee. Lo único que hace falta para decidir
+ * si entrar es el comercio y hasta cuánto llega; con cuál pagar se mira
+ * adentro, cuando ya te interesó.
+ */
+function filaGrupo(p, rubro) {
+  const cuantas = 1 + (p.otras?.length || 0);
+  const titulo = String(p.comercio || p.emisor || 'Promo').replace(/\b\w/g, c => c.toUpperCase());
+  const valor = Number(p.valor);
+  const cifra = Number.isFinite(valor) && valor > 0
+    ? (p.tipo === 'cuotas' ? `${valor}×` : `${valor}%`) : '—';
+  if (cuantas === 1) return fila(p, rubro);
+
+  const bancos = [p, ...(p.otras || [])]
+    .map(x => x.emisorNombre || x.emisor).filter(Boolean);
+  return h('button.li', { onclick: () => hojaComercio(p, rubro) },
+    h('div', { class: 'cifra' + (p.tipo === 'reintegro' ? ' pos' : ''),
+               style: { fontSize: '19px', flex: 'none', minWidth: '48px' } }, cifra),
+    h('div.m',
+      h('div.t', titulo),
+      h('div.s', `hasta ${cifra} · ${cuantas} opciones · ${[...new Set(bancos)].slice(0, 3).join(', ')}`)),
+    h('span.chev', icono('chev', 15)));
+}
+
+/** Todas las de un comercio, cada una con su banco y su botón de guardar. */
+function hojaComercio(p, rubro) {
+  const titulo = String(p.comercio || p.emisor || 'Promo').replace(/\b\w/g, c => c.toUpperCase());
+  const todas = [p, ...(p.otras || [])];
+  return hoja(titulo, h('div',
+    h('div.small.mut', { style: { lineHeight: '1.55', marginBottom: '14px' } },
+      `${todas.length} promos en ${titulo}, de mayor a menor. `,
+      'Guardá la que uses: te la recuerdo el día que aplica y te llevo la ',
+      'cuenta del tope.'),
+    h('div.grp', todas.map(x => fila(x, rubro, { porBanco: true })))));
+}
+
 /** Una promo traída, con el botón para guardarla como propia. */
-function fila(p, rubro) {
+function fila(p, rubro, { porBanco = false } = {}) {
   const dias = p.fechas?.length ? p.fechas.map(f => `el ${Number(f.slice(8))}/${Number(f.slice(5, 7))}`).join(' y ')
              : p.dias?.length ? p.dias.map(d => DIAS[d]).join(' y ') : 'todos los días';
   const titulo = String(p.comercio || p.emisor || 'Promo').replace(/\b\w/g, c => c.toUpperCase());
+  // Adentro de la hoja de un comercio, todas las filas son de ese comercio:
+  // lo que las distingue es el banco.
+  const encabeza = porBanco ? (p.emisorNombre || p.emisor || titulo) : titulo;
   // Number() y no p.valor a secas: un campo vacío escribía "null%" en la
   // cifra más grande de la fila.
   const valor = Number(p.valor);
@@ -500,14 +549,13 @@ function fila(p, rubro) {
     h('div', { class: 'cifra' + (p.tipo === 'reintegro' ? ' pos' : ''),
                style: { fontSize: '19px', flex: 'none', minWidth: '48px' } }, cifra),
     h('div.m',
-      h('div.t', titulo),
-      h('div.s', [p.tipo, p.emisorNombre || p.emisor, dias].filter(Boolean).join(' · ')),
+      h('div.t', encabeza),
+      h('div.s', [p.tipo, porBanco ? null : (p.emisorNombre || p.emisor), dias]
+        .filter(Boolean).join(' · ')),
       p.medios?.length ? h('div.s', { style: { color: 'var(--tx3)' } },
         p.medios.join(' · ').toLowerCase()) : null,
-      p.otras?.length ? h('div.s', { style: { color: 'var(--tx3)' } },
-        'también ' + p.otras.slice(0, 3).map(o =>
-          `${o.emisorNombre || o.emisor} ${Number(o.valor) || 0}%`).join(', ')) : null,
-      p.nota ? h('div.s', { style: { color: 'var(--tx3)' } }, p.nota) : null,
+      p.nota ? h('div.s', { style: { whiteSpace: 'normal', lineHeight: '1.4',
+                                     color: 'var(--tx3)' } }, p.nota) : null,
       p.tope ? h('div.s', { style: { color: 'var(--tx3)' } },
         `tope ${plata(p.tope)}${p.topePeriodo === 'semanal' ? ' por semana'
                               : p.topePeriodo ? ' por mes' : ''}`) : null),

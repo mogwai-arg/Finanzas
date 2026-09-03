@@ -185,6 +185,42 @@ const slug = (t: string) => t.toLowerCase().normalize('NFD').replace(/[\u0300-\u
   .replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 
 /**
+ * Que forma tiene el data.js, cuando no se pudo leer ninguna promo.
+ *
+ * Los primeros 200 caracteres solo muestran el encabezado, que es igual en
+ * todos los rubros: no sirve para saber por que uno anda y otro no. Lo que
+ * hace falta son las CLAVES y cuantos elementos tiene cada lista, que es en
+ * una linea la diferencia entre "hoy no hay" y "esta pagina viene distinta".
+ */
+export function revisarDatosClash(js: string) {
+  const i = js.indexOf('__clashData');
+  const crudo = i < 0 ? null : recorteJSON(js, i);
+  if (!crudo) return { bytes: js.length, hay__clashData: i >= 0, error: 'no pude recortar el JSON' };
+  let datos: any;
+  try { datos = JSON.parse(crudo); }
+  catch (e) { return { bytes: js.length, error: 'JSON invalido: ' + String(e).slice(0, 80) }; }
+
+  const forma = (v: any): string =>
+    Array.isArray(v) ? `[${v.length}]`
+    : v && typeof v === 'object' ? `{${Object.keys(v).slice(0, 8).join(',')}}`
+    : typeof v;
+  const claves: Record<string, string> = {};
+  for (const k of Object.keys(datos)) claves[k] = forma(datos[k]);
+
+  // El primer elemento de la lista mas larga: es donde estan las promos, se
+  // llame como se llame.
+  let mayor: any[] = [], nombre = '';
+  for (const [k, v] of Object.entries(datos)) {
+    if (Array.isArray(v) && v.length > mayor.length) { mayor = v; nombre = k; }
+  }
+  return {
+    bytes: js.length, claves,
+    listaMasLarga: nombre ? { clave: nombre, largo: mayor.length,
+                              primero: JSON.stringify(mayor[0]).slice(0, 300) } : null
+  };
+}
+
+/**
  * Las promos de un data.js. `rubro` solo se usa para armar el link.
  */
 export function leerDatosClash(js: string, rubro = '', ref = new Date()): PromoClash[] {
@@ -201,7 +237,15 @@ export function leerDatosClash(js: string, rubro = '', ref = new Date()): PromoC
   const out: PromoClash[] = [];
   const vistos = new Set<string>();
 
-  for (const p of datos.P ?? []) {
+  // La lista de promos se llamo siempre 'P', pero eso es una decision del
+  // sitio y no un contrato: si un dia cambia de nombre, se toma la lista mas
+  // larga que tenga la forma de una promo. Vale lo mismo y no se rompe.
+  const lista = Array.isArray(datos.P) ? datos.P
+    : Object.values(datos).filter(Array.isArray)
+        .filter((v: any) => v.some((x: any) => x && x.id && x.bk && x.mc))
+        .sort((a: any, b: any) => b.length - a.length)[0] ?? [];
+
+  for (const p of lista as any[]) {
     if (!p || !p.id || !p.bk || !p.mc || vistos.has(p.id)) continue;
 
     const cuotas = typeof p.inst === 'string' ? p.inst.match(/(\d+)\s*cuotas?/i) : null;

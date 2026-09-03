@@ -107,6 +107,36 @@ function diasDeArreglo(days) {
   return out.length === 7 ? [] : out.sort();
 }
 var slug = (t) => t.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+function revisarDatosClash(js) {
+  const i = js.indexOf("__clashData");
+  const crudo = i < 0 ? null : recorteJSON(js, i);
+  if (!crudo) return { bytes: js.length, hay__clashData: i >= 0, error: "no pude recortar el JSON" };
+  let datos;
+  try {
+    datos = JSON.parse(crudo);
+  } catch (e) {
+    return { bytes: js.length, error: "JSON invalido: " + String(e).slice(0, 80) };
+  }
+  const forma = (v) => Array.isArray(v) ? `[${v.length}]` : v && typeof v === "object" ? `{${Object.keys(v).slice(0, 8).join(",")}}` : typeof v;
+  const claves = {};
+  for (const k of Object.keys(datos)) claves[k] = forma(datos[k]);
+  let mayor = [], nombre = "";
+  for (const [k, v] of Object.entries(datos)) {
+    if (Array.isArray(v) && v.length > mayor.length) {
+      mayor = v;
+      nombre = k;
+    }
+  }
+  return {
+    bytes: js.length,
+    claves,
+    listaMasLarga: nombre ? {
+      clave: nombre,
+      largo: mayor.length,
+      primero: JSON.stringify(mayor[0]).slice(0, 300)
+    } : null
+  };
+}
 function leerDatosClash(js, rubro = "", ref = /* @__PURE__ */ new Date()) {
   const i = js.indexOf("__clashData");
   const crudo = i < 0 ? null : recorteJSON(js, i);
@@ -117,10 +147,11 @@ function leerDatosClash(js, rubro = "", ref = /* @__PURE__ */ new Date()) {
   } catch {
     return [];
   }
-  const nombre = (lista, id) => (lista || []).find((x) => x.id === id)?.name || null;
+  const nombre = (lista2, id) => (lista2 || []).find((x) => x.id === id)?.name || null;
   const out = [];
   const vistos = /* @__PURE__ */ new Set();
-  for (const p of datos.P ?? []) {
+  const lista = Array.isArray(datos.P) ? datos.P : Object.values(datos).filter(Array.isArray).filter((v) => v.some((x) => x && x.id && x.bk && x.mc)).sort((a, b) => b.length - a.length)[0] ?? [];
+  for (const p of lista) {
     if (!p || !p.id || !p.bk || !p.mc || vistos.has(p.id)) continue;
     const cuotas = typeof p.inst === "string" ? p.inst.match(/(\d+)\s*cuotas?/i) : null;
     const valor = Number(p.d);
@@ -231,7 +262,7 @@ Deno.serve(async (req) => {
       const js = await datos.text();
       const promos2 = leerDatosClash(js, rubro);
       if (promos2.length) return json({ rubro, promos: promos2, fuente: "data.js", cuando: (/* @__PURE__ */ new Date()).toISOString() });
-      var revisionDatos = { bytes: js.length, muestra: js.slice(0, 200) };
+      var revisionDatos = revisarDatosClash(js);
     }
     const r = await fetch(
       `https://promos.clash.com.ar/${rubro}/`,
