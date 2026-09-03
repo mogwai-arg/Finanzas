@@ -11,13 +11,41 @@
 // =====================================================================
 
 let motor = null;
+let sinWorker = false;
 
-async function cargar() {
-  if (motor) return motor;
-  motor = await import('../vendor/pdf.mjs');
-  motor.GlobalWorkerOptions.workerSrc = new URL('../vendor/pdf.worker.mjs', import.meta.url).href;
-  return motor;
+/**
+ * Arranca pdf.js. El Worker se intenta, pero no se depende de él.
+ *
+ * pdf.js hace el trabajo pesado en un Worker de módulo. Cuando ese Worker no
+ * arranca —pasa en iOS dentro de una PWA, y con cualquier servidor que no
+ * mande el .mjs con el tipo correcto— la librería falla con un error que
+ * desde afuera se ve igual que "el PDF está roto", y no lo está.
+ *
+ * No se comprueba de antemano si el Worker anda: eso obligaría a esperar
+ * antes de cada lectura, siempre, para un problema que casi nunca pasa. Se
+ * intenta con Worker y, si la lectura falla, se reintenta sin él. Sin Worker
+ * tarda unos segundos más y traba la pantalla mientras lee, pero lee: un
+ * resumen que tarda cinco segundos es infinitamente mejor que uno que no se
+ * puede abrir.
+ */
+async function cargar({ conWorker = true } = {}) {
+  const pdfjs = motor || (motor = await import('../vendor/pdf.mjs'));
+  const url = new URL('../vendor/pdf.worker.mjs', import.meta.url).href;
+  if (conWorker) {
+    pdfjs.GlobalWorkerOptions.workerSrc = url;
+    sinWorker = false;
+  } else {
+    // Con el Worker apagado, pdf.js carga el mismo módulo en el hilo
+    // principal. Necesita poder importarlo, no evaluarlo como texto.
+    pdfjs.GlobalWorkerOptions.workerPort = null;
+    pdfjs.GlobalWorkerOptions.workerSrc = url;
+    sinWorker = true;
+  }
+  return pdfjs;
 }
+
+/** Si la última lectura tuvo que hacerse sin worker. */
+export const leyoSinWorker = () => sinWorker;
 
 /**
  * Cuántos espacios separan dos pedazos de texto.
@@ -47,11 +75,25 @@ export class PideClave extends Error {
 
 /** Texto de un PDF, con las líneas rearmadas por posición vertical. */
 export async function textoDePDF(archivo, { alAvanzar, clave } = {}) {
-  const pdfjs = await cargar();
   const datos = archivo instanceof Uint8Array ? archivo
     : new Uint8Array(await archivo.arrayBuffer());
-  const tarea = pdfjs.getDocument({ data: datos, isEvalSupported: false,
-                                    password: clave || undefined });
+  try {
+    return await leer(datos, { alAvanzar, clave, conWorker: true });
+  } catch (e) {
+    // La clave no se arregla apagando el worker.
+    if (e?.name === 'PideClave') throw e;
+    console.warn('pdf: falló con worker, reintento sin él', e);
+    return await leer(datos, { alAvanzar, clave, conWorker: false });
+  }
+}
+
+async function leer(datos, { alAvanzar, clave, conWorker }) {
+  const pdfjs = await cargar({ conWorker });
+  // Los bytes se consumen al abrir: si hay que reintentar, hace falta una
+  // copia propia o el segundo intento recibe un buffer vacío.
+  const tarea = pdfjs.getDocument({ data: datos.slice(), isEvalSupported: false,
+                                    password: clave || undefined,
+                                    disableWorker: !conWorker });
   let doc;
   try {
     doc = await tarea.promise;

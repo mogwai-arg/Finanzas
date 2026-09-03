@@ -69,8 +69,15 @@ export function formImportarResumen(yaBajado = null) {
       leer();
     } catch (e) {
       if (e?.name === 'PideClave') { pedirClave(f); return; }
-      estado.textContent = 'No pude abrir el PDF. Podés abrirlo vos, copiar el texto y ' +
-                           'pegarlo acá abajo.';
+      // El error de verdad, no "no pude": puede ser el archivo, puede ser el
+      // navegador, y desde afuera se ven igual. Sin decirlo no hay forma de
+      // arreglarlo, ni de que me lo cuenten.
+      estado.replaceChildren(
+        h('div', 'No pude abrir el PDF. Podés abrirlo vos, copiar el texto y pegarlo acá.'),
+        h('div', { style: { marginTop: '7px', fontFamily: 'ui-monospace, monospace',
+                            fontSize: '11px', color: 'var(--tx3)', lineHeight: '1.5',
+                            wordBreak: 'break-word' } },
+          `${e?.name || 'Error'}: ${String(e?.message || e).slice(0, 180)}`));
       console.warn('pdf', e);
     }
   }
