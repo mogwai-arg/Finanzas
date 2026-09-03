@@ -2,6 +2,7 @@
 import assert from 'node:assert/strict';
 import * as F from './frase.js';
 import * as R from './reglas.js';
+import * as C from './correccion.js';
 
 let ok = 0, mal = 0;
 const t = (n, fn) => { try { fn(); console.log('  ok  ' + n); ok++; }
@@ -201,6 +202,122 @@ t('y corrige la que había en vez de sumar otra que diga lo contrario', () => {
   assert.equal(nueva.id, 'r1');
   assert.equal(nueva.category_id, 'c1');
   assert.equal(nueva.veces_usada, 4);
+});
+
+
+console.log('\nQUÉ COMPRÉ Y DÓNDE');
+
+t('el "en" separa qué compraste de dónde lo compraste', () => {
+  const r = leer('comí empanadas por 7000 en la YPF');
+  assert.equal(r.descripcion, 'Empanadas');
+  assert.equal(r.comercio, 'YPF');
+  assert.equal(r.monto, 7000);
+});
+
+t('sin "en", el nombre es las dos cosas', () => {
+  const r = leer('coto 47310');
+  assert.equal(r.descripcion, 'Coto');
+  assert.equal(r.comercio, 'Coto');
+});
+
+t('no parte si de un lado no queda nada', () => {
+  // "en el chino": el chino es el comercio y no hay un "qué" que separar.
+  const r = leer('gasté 1200 en el chino');
+  assert.equal(r.comercio, 'Chino');
+});
+
+t('el "en" de las cuotas y el de la cuenta no confunden', () => {
+  const r = leer('zapatillas 120000 en 6 cuotas en efectivo');
+  assert.equal(r.comercio, 'Zapatillas');
+  assert.equal(r.cuotas, 6);
+  assert.equal(r.account_id, 'efvo');
+});
+
+t('los verbos de hablar no quedan pegados', () => {
+  // Dictando sale "comí empanadas", nunca "empanadas".
+  assert.equal(leer('comí empanadas 7000').comercio, 'Empanadas');
+  assert.equal(leer('cargué nafta 45 lucas').comercio, 'Nafta');
+  assert.equal(leer('tomé un café 800').comercio, 'Café');
+});
+
+t('la categoría se adivina por lo que compraste, no por dónde parás', () => {
+  // "comí empanadas en la YPF" es gastronomía, no combustible.
+  const cats = [{ id: 'g', nombre: 'Gastronomía' }, { id: 'n', nombre: 'Combustible' }];
+  const m = leer('comí empanadas por 7000 en la YPF');
+  assert.equal(R.categoriaPara(m.comercio, { categories: cats, descripcion: m.descripcion }).category_id, 'g');
+  const n = leer('cargué nafta 45 lucas en la YPF');
+  assert.equal(R.categoriaPara(n.comercio, { categories: cats, descripcion: n.descripcion }).category_id, 'n');
+});
+
+console.log('\nCORREGIR LO ÚLTIMO');
+
+const CATS2 = [{ id: 'g', nombre: 'Gastronomía' }, { id: 'n', nombre: 'Combustible / Transporte' }];
+const corr = s => C.leerCorreccion(s, { cuentas: CUENTAS, categorias: CATS2, hoy: HOY });
+
+t('"ay, la pagué con efectivo" cambia la cuenta y nada más', () => {
+  const c = corr('Ay la pagué con efectivo');
+  assert.deepEqual(c.campos, { account_id: 'efvo' });
+});
+
+t('nombrar una categoría alcanza, entera o por una palabra', () => {
+  assert.equal(corr('gastronomía').campos.category_id, 'g');
+  assert.equal(corr('es combustible').campos.category_id, 'n');
+  assert.equal(corr('transporte').campos.category_id, 'n');
+  assert.equal(corr('ponelo en combustible / transporte').campos.category_id, 'n');
+});
+
+t('la fecha solo si la nombró', () => {
+  assert.equal(corr('fue ayer').campos.fecha, '2026-09-02');
+  // Sin fecha nombrada no se toca: "hoy" por omisión movería un gasto de la
+  // semana pasada sin que nadie lo pidiera.
+  assert.equal(corr('con efectivo').campos.fecha, undefined);
+});
+
+t('el monto solo con permiso explícito', () => {
+  assert.equal(corr('no, eran 8500').campos.monto, 8500);
+  assert.equal(corr('son 8500').campos.monto, 8500);
+  // Un número suelto no alcanza: cambiar la plata por las dudas es el error
+  // que no se perdona.
+  assert.equal(corr('8500'), null);
+});
+
+t('borrar', () => {
+  for (const s of ['borralo', 'borrá', 'eliminalo', 'deshacelo', 'sacalo', 'olvidalo'])
+    assert.equal(corr(s)?.borrar, true, s);
+});
+
+t('lo que no entiende devuelve null en vez de inventar un cambio', () => {
+  assert.equal(corr('cualquier cosa'), null);
+  assert.equal(corr(''), null);
+});
+
+t('varias cosas de una', () => {
+  const c = corr('no, eran 8500 con efectivo ayer');
+  assert.equal(c.campos.monto, 8500);
+  assert.equal(c.campos.account_id, 'efvo');
+  assert.equal(c.campos.fecha, '2026-09-02');
+});
+
+console.log('\nUNA CORRECCIÓN NO QUIERE DECIR SIEMPRE');
+
+const ANCHA = [{ id: 'g2', patron: 'ypf|shell|axion', category_id: 'n', prioridad: 10, veces_usada: 9 }];
+
+t('encuentra la regla que aplica aunque sea una expresión, no un nombre', () => {
+  // Compararlas por igualdad no encuentra ninguna y hace creer que el
+  // comercio está libre cuando ya tiene dueño.
+  assert.equal(R.reglaQueAplica('YPF', ANCHA)?.id, 'g2');
+  assert.equal(R.reglaQueChoca('YPF', 'g', ANCHA)?.id, 'g2');
+  assert.equal(R.reglaQueChoca('YPF', 'n', ANCHA), null);
+});
+
+t('la regla nueva le gana a la ancha sin tocarla', () => {
+  // Cambiar "ypf|shell|axion" movería también Shell y Axion, que nadie nombró.
+  const nueva = R.comoRegla('YPF', 'g', ANCHA);
+  assert.equal(nueva.patron, 'ypf');
+  assert.ok(nueva.prioridad > ANCHA[0].prioridad);
+  const todas = [...ANCHA, { ...nueva, id: 'n1' }];
+  assert.equal(R.categoriaPara('YPF', { reglas: todas, categories: CATS2 }).category_id, 'g');
+  assert.equal(R.categoriaPara('Shell Gral Paz', { reglas: todas, categories: CATS2 }).category_id, 'n');
 });
 
 console.log(`\n${ok} pruebas OK${mal ? `, ${mal} FALLAN` : ''}\n`);

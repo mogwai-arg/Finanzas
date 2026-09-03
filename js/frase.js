@@ -37,6 +37,11 @@ const RELLENO = new RegExp('(?<![\\p{L}])(' + [
   'gaste', 'gasté', 'pague', 'pagué', 'compre', 'compré', 'me', 'salio', 'salió',
   'costo', 'costó', 'cobre', 'cobré', 'cobraron', 'pagaron', 'entro', 'entró',
   'puse', 'pase', 'pasé', 'transferi', 'transferí', 'movi', 'moví', 'mande', 'mandé',
+  // Lo que uno hizo con eso. Escribiendo no aparecen tanto, pero dictando sí:
+  // hablando sale "comí empanadas", nunca "empanadas".
+  'comi', 'comí', 'tome', 'tomé', 'cargue', 'cargué', 'fui', 'almorce', 'almorcé',
+  'cene', 'cené', 'desayune', 'desayuné', 'merende', 'merendé', 'saque', 'saqué',
+  'ay', 'uy', 'ah', 'eh', 'perdon', 'perdón', 'bueno', 'che',
   'en', 'de', 'del', 'con', 'el', 'la', 'los', 'las', 'un', 'una', 'unos', 'unas',
   'por', 'para', 'al', 'a', 'y', 'lo', 'que', 'plata', 'guita'
 ].join('|') + ')(?![\\p{L}])', 'giu');
@@ -91,14 +96,20 @@ export function leerFrase(texto, { cuentas = [], hoy = new Date() } = {}) {
     : /\b(pas[eé]|transfer[ií]|mov[ií]|mand[eé])\b/.test(sinTildes(original.toLowerCase()))
       ? 'transferencia' : 'gasto';
 
-  const comercio = limpiar(resto, original);
+  // "comí empanadas en la YPF" son dos datos distintos y la app los tiene
+  // separados: QUÉ compraste y DÓNDE. El "en" es lo que los separa cuando uno
+  // habla, y guardarlos aparte hace que la categoría se adivine por lo que
+  // comiste y no por dónde parás.
+  const { que, donde } = partir(resto);
+  const comercio = limpiar(donde || que, original);
+  const descripcion = donde ? limpiar(que, original) || comercio : comercio;
 
   return {
     tipo,
     monto: m.monto,
     moneda: enDolares ? 'USD' : 'ARS',
     comercio,
-    descripcion: comercio,
+    descripcion,
     fecha: f.fecha,
     cuotas,
     account_id: c.cuenta?.id || null,
@@ -256,6 +267,23 @@ function limpiar(resto, original = '') {
     return p.charAt(0).toUpperCase() + p.slice(1);
   }).join(' ');
 }
+
+/**
+ * Parte "empanadas en la YPF" en qué y dónde.
+ *
+ * Solo si de los dos lados queda algo: "en el chino" partido dejaría el qué
+ * vacío, y ahí el chino es el comercio y punto. El "en" de "en 6 cuotas" y el
+ * de "en efectivo" ya se fueron antes, así que acá no molestan.
+ */
+function partir(resto) {
+  const m = resto.match(/^(.*?)(?<![\p{L}])en(?![\p{L}])\s+(?:la|el|los|las)?\s*(.+)$/iu);
+  if (!m) return { que: resto, donde: '' };
+  const que = m[1].trim(), donde = m[2].trim();
+  if (!que || !donde) return { que: resto, donde: '' };
+  return { que, donde };
+}
+
+export { sacarCuenta, sacarFecha, sacarMonto, limpiar, sinTildes };
 
 const escapar = s => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const quitar = (texto, trozo) => texto.replace(new RegExp(escapar(trozo), 'i'), ' ');

@@ -18,10 +18,11 @@
 //   "¿de qué fue?" y con la respuesta completa el mismo movimiento, en vez de
 //   abrir un formulario y hacerte empezar de nuevo.
 // =====================================================================
-import { h, icono, aviso } from '../ui.js';
+import { h, frag, icono, aviso } from '../ui.js';
 import { state, guardar, borrar } from '../db.js';
 import { leerFrase } from '../frase.js';
-import { categoriaPara, comoRegla } from '../reglas.js';
+import { categoriaPara, comoRegla, reglaQueChoca } from '../reglas.js';
+import { leerCorreccion, MARCA_CORRECCION } from '../correccion.js';
 import { bishu } from '../bishu.js';
 import { plata, nombreDe, hoyISO } from '../formato.js';
 import { dictado } from '../voz.js';
@@ -40,6 +41,11 @@ const MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun',
  */
 const hilo = h('div.flow', { style: { paddingBottom: '8px' } });
 let pendiente = null;
+// El último movimiento anotado, para que "ay, la pagué con efectivo" tenga a
+// qué referirse. Es lo que hace que esto sea una conversación y no una
+// ventanita de comandos: sin memoria, corregir obliga a deshacer y escribir
+// todo de nuevo, y ahí conviene el formulario.
+let ultimo = null;
 
 export function vistaChat(root) {
   const entrada = h('input', {
@@ -74,7 +80,7 @@ export function vistaChat(root) {
 
   /** Guarda, y deja el renglón con lo que entendió y cómo deshacerlo. */
   async function anotar(m) {
-    const cat = categoriaPara(m.comercio, state);
+    const cat = categoriaPara(m.comercio, { ...state, descripcion: m.descripcion });
     const cuenta = m.account_id || porDefecto(m.moneda);
     const tx = await guardar('transactions', {
       fecha: m.fecha, descripcion: m.descripcion, comercio: m.comercio,
@@ -85,8 +91,11 @@ export function vistaChat(root) {
       revisado: true
     });
 
+    ultimo = { tx, burbuja: null, comercio: m.comercio };
+
     const partes = [
       h('b', plata(m.monto, m.moneda)),
+      m.descripcion && m.descripcion !== m.comercio ? ` · ${m.descripcion}` : '',
       m.comercio ? ` en ${m.comercio}` : '',
       cat.category_id ? ` · ${nombreDe('categories', cat.category_id)}` : '',
       cuenta ? ` · ${nombreDe('accounts', cuenta)}` : '',
@@ -115,6 +124,39 @@ export function vistaChat(root) {
     return tx;
   }
 
+  /**
+   * Que la próxima vez ya lo sepa —salvo que eso rompa algo.
+   *
+   * Corregir UN movimiento no quiere decir "siempre". Si ya había una regla
+   * para ese comercio y decía otra cosa, cambiar la regla en silencio manda
+   * toda la nafta de YPF a Gastronomía por haber comido unas empanadas ahí.
+   * Así que en ese caso se cambia solo este movimiento, y "siempre" se ofrece
+   * como un botón aparte: es una afirmación distinta y la tiene que hacer una
+   * persona.
+   */
+  async function aprender(comercio, category_id) {
+    if (!comercio || !category_id) return null;
+    const choca = reglaQueChoca(comercio, category_id, state.reglas);
+    const nombre = nombreDe('categories', category_id);
+
+    if (!choca) {
+      const r = comoRegla(comercio, category_id, state.reglas);
+      if (r) await guardar('reglas', r);
+      return { nota: h('div.small.mut', { style: { marginTop: '4px' } },
+        `${comercio} va a ${nombre}. La próxima ya lo sé.`) };
+    }
+
+    const caja = h('div.small.mut', { style: { marginTop: '6px' } },
+      `Solo este. ${comercio} sigue yendo a ${nombreDe('categories', choca.category_id)}.`,
+      ' ',
+      enlace(`Siempre que sea ${comercio}`, async () => {
+        const r = comoRegla(comercio, category_id, state.reglas);
+        if (r) await guardar('reglas', r);
+        caja.replaceChildren(`Listo: ${comercio} ahora va a ${nombre}.`);
+      }));
+    return { nota: caja };
+  }
+
   /** Los botones de categoría, que además dejan la regla aprendida. */
   function botonesCategoria(tx, comercio) {
     const cats = (state.categories || []).filter(c => c.tipo !== 'ingreso').slice(0, 8);
@@ -122,13 +164,12 @@ export function vistaChat(root) {
     caja.append(...cats.map(c => h('button.chip', {
       onclick: async () => {
         await guardar('transactions', { ...tx, category_id: c.id });
+        if (ultimo?.tx?.id === tx.id) ultimo.tx = { ...tx, category_id: c.id };
         // Y que no vuelva a preguntar: la próxima vez que aparezca este
         // comercio ya sabe. Es lo que hace que la app mejore con el uso en vez
         // de preguntar lo mismo para siempre.
-        const r = comoRegla(comercio, c.id, state.reglas);
-        if (r) await guardar('reglas', r);
-        caja.replaceChildren(h('span.small.mut',
-          `${c.nombre}. La próxima ya lo sé.`));
+        const ap = await aprender(comercio, c.id);
+        caja.replaceChildren(h('span.small.mut', `${c.nombre}. `), ap?.nota || null);
       }
     }, c.nombre)));
     return caja;
@@ -137,6 +178,40 @@ export function vistaChat(root) {
   function elegirCategoria(tx, burbuja) {
     burbuja.append(h('div', { style: { marginTop: '9px' } },
       botonesCategoria(tx, tx.comercio)));
+  }
+
+  /**
+   * Cambiar lo último que se anotó.
+   *
+   * No pisa la categoría con una adivinanza nueva: si decís "con efectivo",
+   * lo único que cambia es la cuenta. Y si nombrás una categoría, además
+   * queda aprendida para ese comercio, igual que tocando el botón.
+   */
+  async function corregir(c) {
+    const tx = ultimo.tx;
+    if (c.borrar) {
+      await borrar('transactions', tx.id);
+      ultimo = null;
+      decir('bishu', 'Listo, lo borré.');
+      return;
+    }
+    const nueva = { ...tx, ...c.campos };
+    await guardar('transactions', nueva);
+    ultimo.tx = nueva;
+
+    const aprendio = c.campos.category_id
+      ? await aprender(ultimo.comercio, c.campos.category_id) : null;
+
+    // Se repite el movimiento entero, no solo lo que cambió: después de dos o
+    // tres correcciones, "listo" no alcanza para saber cómo quedó.
+    decir('bishu', h('div',
+      h('div', 'Corregido: ', h('b', plata(nueva.monto, nueva.moneda)),
+        nueva.comercio ? ` en ${nueva.comercio}` : '',
+        nueva.category_id ? ` · ${nombreDe('categories', nueva.category_id)}` : '',
+        nueva.account_id ? ` · ${nombreDe('accounts', nueva.account_id)}` : '',
+        String(nueva.fecha).slice(0, 10) !== hoyISO() ? ` · ${dia(String(nueva.fecha).slice(0, 10))}` : '',
+        nueva.cuotas > 1 ? ` · ${nueva.cuotas} cuotas` : ''),
+      aprendio ? aprendio.nota : null));
   }
 
   async function mandar() {
@@ -154,10 +229,27 @@ export function vistaChat(root) {
     }
 
     const m = leerFrase(dicho, { cuentas: state.accounts });
+
+    // Con monto es un movimiento nuevo, salvo que arranque avisando que es una
+    // corrección ("no, eran 8000"). Sin monto solo puede ser una corrección,
+    // porque un movimiento sin monto no existe.
+    const corrige = ultimo && (!m || MARCA_CORRECCION.test(dicho));
+    if (corrige) {
+      const c = leerCorreccion(dicho, {
+        cuentas: state.accounts,
+        categorias: (state.categories || []).filter(x => x.tipo !== 'ingreso')
+      });
+      if (c) { await corregir(c); return; }
+    }
+
     if (!m) {
       decir('bishu', h('div',
-        'No encontré el monto. Escribime algo como ',
-        h('b', 'coto 47310'), ' o ', h('b', '45 lucas de nafta'), '.'),
+        ultimo
+          ? frag('Eso no lo entendí. Podés decirme ', h('b', 'con efectivo'), ', ',
+                 h('b', 'gastronomía'), ', ', h('b', 'fue ayer'), ' o ', h('b', 'borralo'),
+                 ' para cambiar lo último, o contarme otro gasto.')
+          : frag('No encontré el monto. Escribime algo como ',
+                 h('b', 'coto 47310'), ' o ', h('b', '45 lucas de nafta'), '.')),
         { animo: 'pensando' });
       return;
     }

@@ -23,6 +23,8 @@ const SUENA_A = [
   [/coto|carrefour|jumbo|dia\b|chino|super|verduler|almac[eé]n|disco|vea|changomas/i, 'supermercado'],
   [/ypf|shell|axion|puma|gnc|nafta|combustible/i, 'combustible'],
   [/pedidosya|rappi|mostaza|mcdonald|burger|caf[eé]|resto|pizz|helad|starbucks|bar\b/i, 'gastronom'],
+  // Lo que uno come, que dictando aparece más que el nombre del lugar.
+  [/empanada|milanesa|asado|choripan|sandwich|s[aá]ngu|almuerzo|cena|desayuno|merienda|hamburguesa|sushi|parrilla|panader|cerveza|vino|medialuna|factura de/i, 'gastronom'],
   [/farmacia|farmacity|dr\.?\s|cl[ií]nica|hospital|osde|swiss|medic|dentista|[oó]ptica/i, 'salud'],
   [/edesur|edenor|metrogas|naturgy|aysa|agua|luz|gas\b|telecom|fibertel|personal|movistar|claro|flow/i, 'servicio'],
   [/netflix|spotify|disney|hbo|max\b|prime|youtube|icloud|dropbox|chatgpt|claude/i, 'suscripci'],
@@ -38,15 +40,14 @@ const SUENA_A = [
  * `seguro` distingue lo que se sabe de lo que se sospecha: con lo seguro se
  * puede guardar sin preguntar, con lo otro hay que mostrarlo.
  */
-export function categoriaPara(comercio, { reglas = [], transactions = [], categories = [] } = {}) {
+export function categoriaPara(comercio, { reglas = [], transactions = [], categories = [],
+                                         descripcion = '' } = {}) {
   const nombre = String(comercio || '').trim();
   if (!nombre) return { category_id: null, porQue: null, seguro: false };
   const existe = id => categories.some(c => c.id === id);
 
   // 1. La regla escrita a propósito.
-  const ordenadas = [...reglas].sort((a, b) =>
-    (b.prioridad || 0) - (a.prioridad || 0) || (b.veces_usada || 0) - (a.veces_usada || 0));
-  for (const r of ordenadas) {
+  for (const r of porFuerza(reglas)) {
     if (!r.patron || !existe(r.category_id)) continue;
     let re; try { re = new RegExp(r.patron, 'i'); } catch { continue; }
     if (re.test(nombre)) {
@@ -70,10 +71,18 @@ export function categoriaPara(comercio, { reglas = [], transactions = [], catego
   }
 
   // 3. La adivinanza por el nombre. Es la más floja y se dice que lo es.
-  for (const [re, pista] of SUENA_A) {
-    if (!re.test(nombre)) continue;
-    const cat = categories.find(c => new RegExp(pista, 'i').test(c.nombre || ''));
-    if (cat) return { category_id: cat.id, seguro: false, porQue: 'por el nombre' };
+  //
+  // Primero por QUÉ compraste y después por DÓNDE: "comí empanadas en la YPF"
+  // es gastronomía, no combustible. El lugar donde parás dice menos que la
+  // cosa que compraste, y confundirlos manda la comida a la categoría de la
+  // nafta todos los meses.
+  for (const texto of [String(descripcion || '').trim(), nombre]) {
+    if (!texto) continue;
+    for (const [re, pista] of SUENA_A) {
+      if (!re.test(texto)) continue;
+      const cat = categories.find(c => new RegExp(pista, 'i').test(c.nombre || ''));
+      if (cat) return { category_id: cat.id, seguro: false, porQue: 'por el nombre' };
+    }
   }
 
   return { category_id: null, porQue: null, seguro: false };
@@ -102,14 +111,58 @@ export function mismoComercio(a, b) {
  * nada. Si ya había una regla para esa marca, se corrige en vez de sumar otra:
  * dos reglas que dicen cosas distintas del mismo comercio es peor que ninguna.
  */
-export function comoRegla(comercio, category_id, reglas = []) {
-  const marca = String(comercio || '').toLowerCase()
+/**
+ * La regla que le toca a este comercio, si hay alguna.
+ *
+ * Las reglas son expresiones, no nombres: una sola dice "ypf|shell|axion".
+ * Compararlas por igualdad —"¿hay una regla que se llame ypf?"— no encuentra
+ * ninguna y hace creer que el comercio está libre, cuando en realidad ya
+ * tiene dueño.
+ */
+export function reglaQueAplica(comercio, reglas = []) {
+  const nombre = String(comercio || '').trim();
+  if (!nombre) return null;
+  for (const r of porFuerza(reglas)) {
+    if (!r.patron) continue;
+    let re; try { re = new RegExp(r.patron, 'i'); } catch { continue; }
+    if (re.test(nombre)) return r;
+  }
+  return null;
+}
+
+/** La regla que ya manda sobre este comercio y dice otra cosa. */
+export function reglaQueChoca(comercio, category_id, reglas = []) {
+  const r = reglaQueAplica(comercio, reglas);
+  return r && r.category_id !== category_id ? r : null;
+}
+
+/** La marca: la primera palabra larga, que es donde vive el nombre del lugar. */
+export function marcaDe(comercio) {
+  return String(comercio || '').toLowerCase()
     .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(p => p.length >= 3)[0];
+    .replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(p => p.length >= 3)[0] || '';
+}
+
+const porFuerza = reglas => [...(reglas || [])].sort((a, b) =>
+  (b.prioridad || 0) - (a.prioridad || 0) || (b.veces_usada || 0) - (a.veces_usada || 0));
+
+export function comoRegla(comercio, category_id, reglas = []) {
+  const marca = marcaDe(comercio);
   if (!marca || !category_id) return null;
 
-  const vieja = reglas.find(r => (r.patron || '').toLowerCase() === marca);
-  return { ...(vieja || {}), patron: marca, category_id,
-           prioridad: vieja?.prioridad ?? 10,
-           veces_usada: (vieja?.veces_usada || 0) + 1 };
+  // Si ya había una regla escrita para esta misma marca, se corrige: dos
+  // reglas que dicen cosas distintas del mismo comercio es peor que ninguna.
+  const propia = (reglas || []).find(r => (r.patron || '').toLowerCase() === marca);
+  if (propia) {
+    return { ...propia, patron: marca, category_id,
+             prioridad: propia.prioridad ?? 10,
+             veces_usada: (propia.veces_usada || 0) + 1 };
+  }
+
+  // Si la que manda es más ancha —"ypf|shell|axion"— no se la toca: cambiarla
+  // movería también Shell y Axion, que nadie nombró. Se le gana con una más
+  // específica y de mayor prioridad, y las otras siguen como estaban.
+  const ancha = reglaQueAplica(comercio, reglas);
+  return { patron: marca, category_id, veces_usada: 1,
+           prioridad: ancha ? (ancha.prioridad || 0) + 1 : 10 };
 }
