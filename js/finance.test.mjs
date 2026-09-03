@@ -1179,4 +1179,73 @@ t('sabe con quien se puede discutir y con quien no', () => {
   assert.equal(F.queServicio('Colegio Juan Bautista'), null);
 });
 
+// ------------------------------------------- los meses que no llegaron
+const TJ = { id: 'v', nombre: 'Visa', tipo: 'credito', activo: true, moneda: 'ARS',
+             cierre_dia: 27, vencimiento_dia: 4 };
+const INGRESOS = [
+  { id: 'i1', fecha: '2026-08-01', tipo: 'ingreso', monto: 3000000, moneda: 'ARS' },
+  { id: 'i2', fecha: '2026-07-01', tipo: 'ingreso', monto: 2900000, moneda: 'ARS' }
+];
+
+t('una compra en cuotas compromete meses que todavia no llegaron', () => {
+  const txs = [...INGRESOS,
+    { id: 'c', fecha: '2026-08-15', tipo: 'gasto', monto: 1200000, moneda: 'ARS',
+      account_id: 'v', cuotas: 12 }];
+  const p = F.proyeccionMeses({ cuentas: [TJ], txs, recurrings: [] },
+                              { meses: 3 }, new Date(2026, 8, 3));
+  assert.equal(p.length, 3);
+  assert.ok(p.every(m => m.cuotas === 100000), 'cada mes lleva su cuota');
+  assert.equal(p[0].entra, 2950000);           // mediana, no promedio
+});
+
+t('los fijos tambien tienen dueno todos los meses', () => {
+  const rec = [{ id: 'r', nombre: 'Colegio', monto_estimado: 500000, moneda: 'ARS', activo: true }];
+  const p = F.proyeccionMeses({ cuentas: [], txs: INGRESOS, recurrings: rec },
+                              { meses: 2 }, new Date(2026, 8, 3));
+  assert.equal(p[0].fijos, 500000);
+  assert.equal(p[0].libre, 2450000);
+});
+
+t('simular una compra muestra el antes y el despues', () => {
+  const datos = { cuentas: [TJ], txs: INGRESOS, recurrings: [] };
+  const ref = new Date(2026, 8, 3);
+  const sin = F.proyeccionMeses(datos, { meses: 6 }, ref);
+  const con = F.proyeccionMeses(datos, { meses: 6, extra: { monto: 900000, cuotas: 6 } }, ref);
+  assert.equal(sin[0].libre - con[0].libre, 150000);
+  // La septima proyeccion ya no tiene cuota: seis cuotas son seis meses.
+  const largo = F.proyeccionMeses(datos, { meses: 7, extra: { monto: 900000, cuotas: 6 } }, ref);
+  assert.equal(largo[6].extra, 0);
+});
+
+t('solo avisa cuando un mes queda de verdad apretado', () => {
+  // Avisar por cada compra en cuotas seria avisar por todo. Lo que importa es
+  // el mes en que lo comprometido se come una parte grande de lo que entra.
+  const datos = { cuentas: [TJ], txs: INGRESOS, recurrings: [] };
+  const ref = new Date(2026, 8, 3);
+  const chica = F.proyeccionMeses(datos, { meses: 6, extra: { monto: 300000, cuotas: 6 } }, ref);
+  assert.equal(F.mesQueAprieta(chica), null);
+  const grande = F.proyeccionMeses(datos, { meses: 6, extra: { monto: 15000000, cuotas: 6 } }, ref);
+  const m = F.mesQueAprieta(grande);
+  assert.ok(m && m.pct >= 70, 'con 2,5 millones por mes tiene que apretar');
+});
+
+t('sin ingresos cargados no se opina sobre el futuro', () => {
+  const p = F.proyeccionMeses({ cuentas: [], txs: [], recurrings: [] },
+                              { meses: 3 }, new Date(2026, 8, 3));
+  assert.equal(p[0].entra, 0);
+  assert.equal(p[0].pct, null);
+  assert.equal(F.mesQueAprieta(p), null);
+});
+
+t('lo que suele entrar es la mediana, no el promedio', () => {
+  // Un mes con aguinaldo levanta el promedio y hace parecer que entra mas de
+  // lo que entra todos los meses.
+  const txs = [
+    { id: '1', fecha: '2026-08-01', tipo: 'ingreso', monto: 3000000, moneda: 'ARS' },
+    { id: '2', fecha: '2026-07-01', tipo: 'ingreso', monto: 3000000, moneda: 'ARS' },
+    { id: '3', fecha: '2026-06-01', tipo: 'ingreso', monto: 6000000, moneda: 'ARS' }
+  ];
+  assert.equal(F.ingresoTipico(txs, new Date(2026, 8, 3)), 3000000);
+});
+
 console.log(`\n${ok} pruebas OK`);

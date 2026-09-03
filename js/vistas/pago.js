@@ -5,10 +5,14 @@
 // cuotas ni los topes de reintegro. Una compra tiene DOS costos: cuanto sale
 // y cuando lo pagas. Casi todas muestran solo el primero.
 // =====================================================================
-import { h, icono, iconoDe } from '../ui.js';
+import { h, frag, icono, iconoDe } from '../ui.js';
 import { state } from '../db.js';
 import * as F from '../finance.js';
 import { plata, plataPartida, diasHasta, fechaISO, aNumero } from '../formato.js';
+
+const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio',
+               'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+const mesLargo = per => MESES[Number(per.slice(5, 7)) - 1];
 
 const RUBROS = [
   { id: 'supermercado', nombre: 'Súper', icono: 'carro' },
@@ -21,6 +25,7 @@ const RUBROS = [
 export function vistaPago(root) {
   let monto = 0;
   let rubro = RUBROS[0].id;
+  let enCuotas = 1;
 
   const campo = h('input', {
     type: 'text', inputmode: 'decimal', placeholder: '0',
@@ -61,7 +66,8 @@ export function vistaPago(root) {
     const ops = opciones(monto, rubro);
     salida.append(
       h('div.ghead', 'Lo que te sale de verdad'),
-      h('div', ops.map((o, i) => fila(o, i === 0)))
+      h('div', ops.map((o, i) => fila(o, i === 0))),
+      enCuotasQueda(monto)
     );
     const conTope = ops.find(o => o.promo && o.promo.usado > 0);
     if (conTope) {
@@ -69,6 +75,88 @@ export function vistaPago(root) {
         + `${plata(conTope.promo.usado)} de los ${plata(conTope.promo.tope)} de tope del mes.`;
     }
   };
+
+  /**
+   * En cuántas cuotas, y qué te deja eso.
+   *
+   * Es la otra mitad de la pregunta. "¿Con qué pago?" contesta cuánto sale y
+   * cuándo lo pagás; esto contesta qué te queda DESPUÉS, que es lo que uno no
+   * ve al firmar. Una cuota de 80.000 a doce meses no son 80.000: son 80.000
+   * de un mes que todavía no llegó, doce veces, y esos doce meses ya están
+   * comprometidos antes de empezar.
+   *
+   * Va una sola línea con la respuesta y abajo el detalle. Una tabla de seis
+   * meses no se lee parado en la caja.
+   */
+  function enCuotasQueda(monto) {
+    if (!monto) return null;
+    const hoy = new Date();
+    const datos = { cuentas: state.accounts, txs: state.transactions,
+                    recurrings: state.recurrings };
+    const sin = F.proyeccionMeses(datos, { meses: 6 }, hoy);
+    if (!sin.length || sin[0].entra <= 0) return null;
+
+    const cuadro = h('div');
+    const opciones = [1, 3, 6, 12];
+
+    const pintarCuotas = () => {
+      const con = F.proyeccionMeses(datos, { meses: 6, extra: { monto, cuotas: enCuotas } }, hoy);
+      const cuota = Math.round(monto / enCuotas);
+      const peor = con.reduce((a, b) => (b.libre < a.libre ? b : a));
+      const antes = sin.find(m => m.periodo === peor.periodo);
+      const aprieta = F.mesQueAprieta(con);
+
+      cuadro.replaceChildren(
+        h('div.grp.pad',
+          h('div', { style: { fontSize: '15px', lineHeight: '1.5' } },
+            enCuotas === 1
+              ? frag('Pagándolo de una, el mes que viene te quedan ',
+                  h('b', plata(Math.round(con[0].libre))), ' libres después de los fijos.')
+              : frag(h('b', `${enCuotas} cuotas de ${plata(cuota)}`), '. Hasta ',
+                  mesLargo(con[Math.min(enCuotas, 6) - 1].periodo), ' te quedan ',
+                  h('b', { style: { color: aprieta ? 'var(--amb)' : 'var(--tx)' } },
+                    plata(Math.round(peor.libre))),
+                  ' libres por mes en vez de ', plata(Math.round(antes.libre)), '.')),
+          aprieta ? h('div.small', { style: { marginTop: '11px', paddingTop: '11px',
+                                              borderTop: '1px solid var(--line)',
+                                              color: 'var(--amb)', lineHeight: '1.5',
+                                              fontWeight: '600' } },
+            `En ${mesLargo(aprieta.periodo)} lo comprometido se te lleva el ${aprieta.pct} % ` +
+            'de lo que entra. Ese es el mes en que se vuelve a usar la tarjeta para llegar.')
+            : h('div.small.mut', { style: { marginTop: '11px', paddingTop: '11px',
+                                            borderTop: '1px solid var(--line)', lineHeight: '1.5' } },
+              'Ningún mes queda apretado: lo comprometido no pasa del 70 % de lo que entra.')),
+
+        h('div.grp', { style: { marginTop: '10px' } },
+          con.slice(0, Math.max(3, Math.min(6, enCuotas))).map(m => {
+            const s = sin.find(x => x.periodo === m.periodo);
+            return h('div.li',
+              h('div.m', h('div.t', mesLargo(m.periodo)),
+                h('div.s', `comprometido ${plata(Math.round(m.comprometido))} de ${plata(Math.round(m.entra))}`)),
+              h('div.v', { style: { color: m.pct >= 70 ? 'var(--amb)' : 'var(--tx)' } },
+                plata(Math.round(m.libre)),
+                s && s.libre !== m.libre
+                  ? h('small', `antes ${plata(Math.round(s.libre))}`) : null));
+          })));
+    };
+
+    const botones = h('div.seg', { role: 'tablist', 'aria-label': 'En cuántas cuotas',
+                                   style: { marginTop: '10px' } },
+      ...opciones.map(n => h('button', {
+        role: 'tab', 'aria-selected': String(n === enCuotas),
+        onclick: () => {
+          enCuotas = n;
+          botones.querySelectorAll('button').forEach((b, i) =>
+            b.setAttribute('aria-selected', String(opciones[i] === n)));
+          pintarCuotas();
+        }
+      }, n === 1 ? 'De una' : `${n} cuotas`)));
+
+    pintarCuotas();
+    return h('section', { style: { marginTop: '22px' } },
+      h('div.ghead', 'Y después, qué te queda'),
+      botones, h('div', { style: { marginTop: '10px' } }, cuadro));
+  }
 
   pintarChips(); pintar();
 

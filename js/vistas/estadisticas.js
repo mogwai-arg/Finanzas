@@ -44,6 +44,7 @@ export function vistaEstadisticas(root, { moneda = 'ARS' } = {}) {
       porMes(moneda, hoy),
       categorias(per, moneda),
       presupuesto(per, hoy),
+      loQueViene(hoy),
       loQueCobraElBanco(hoy),
       puertaAlCierre(hoy),
       mayores(per, moneda),
@@ -293,6 +294,58 @@ function mayores(per, moneda) {
             .filter(Boolean).join(' · '))),
         h('div.v', plata(Math.round(t.monto), moneda)));
     })));
+}
+
+/**
+ * Los meses que todavía no llegaron.
+ *
+ * La app sabía decir cuánto debés AHORA. Lo que no decía —y es el problema de
+ * fondo— es que una compra en cuotas no se paga hoy: se paga con plata de un
+ * mes que todavía no llegó. Doce cuotas de 80.000 no son 80.000: son doce
+ * meses que ya están comprometidos antes de empezar.
+ *
+ * El número que importa no es cuánto debés sino qué PARTE de lo que entra ya
+ * tiene dueño. Arriba del 70 % es el mes en que se vuelve a usar la tarjeta
+ * para llegar a fin de mes, que es justo el círculo que hay que cortar.
+ */
+function loQueViene(hoy) {
+  const proy = F.proyeccionMeses({ cuentas: state.accounts, txs: state.transactions,
+                                   recurrings: state.recurrings }, { meses: 6 }, hoy);
+  if (!proy.length || proy[0].entra <= 0) return null;
+  const aprieta = F.mesQueAprieta(proy);
+  const conCuotas = proy.filter(m => m.cuotas > 0);
+
+  return h('section',
+    h('div.ghead', 'Lo que viene',
+      h('span', { style: { textTransform: 'none', letterSpacing: '0', fontWeight: '500' } },
+        `entran ${plata(Math.round(proy[0].entra))} por mes`)),
+
+    aprieta ? h('div.grp.pad', { style: { marginBottom: '10px' } },
+      h('div', { style: { fontSize: '15px', lineHeight: '1.5' } },
+        'En ', h('b', MES_LARGO[Number(aprieta.periodo.slice(5, 7)) - 1].toLowerCase()),
+        ' lo que ya está comprometido se lleva el ',
+        h('b', { style: { color: 'var(--amb)' } }, `${aprieta.pct} %`),
+        ' de lo que entra. Te quedarían ',
+        h('b', plata(Math.round(aprieta.libre))), ' para todo el mes.')) : null,
+
+    h('div.grp', proy.map(m => h('div.li',
+      h('div.m', h('div.t', MES_LARGO[Number(m.periodo.slice(5, 7)) - 1]),
+        h('div.s', [m.cuotas > 0 ? `cuotas ${plata(Math.round(m.cuotas))}` : null,
+                    m.fijos > 0 ? `fijos ${plata(Math.round(m.fijos))}` : null]
+          .filter(Boolean).join(' · '))),
+      h('div.v', { style: { color: m.pct >= 70 ? 'var(--amb)' : 'var(--tx)' } },
+        plata(Math.round(m.libre)),
+        m.pct != null ? h('small', `${m.pct} % comprometido`) : null)))),
+
+    h('div.small.mut', { style: { padding: '10px 4px 0', lineHeight: '1.5' } },
+      conCuotas.length
+        ? frag('Las cuotas que ya firmaste se descuentan solas de cada mes. ',
+            'Lo que entra es lo que suele entrar, así que estos números se ',
+            'mueven si cambia el sueldo.')
+        : 'No hay cuotas comprometidas: lo único que ya tiene dueño son los gastos fijos.'),
+
+    h('button.btn.sec', { style: { marginTop: '12px' }, onclick: () => irA('/pago') },
+      icono('tarjeta', 16), 'Probar una compra antes de hacerla'));
 }
 
 /**

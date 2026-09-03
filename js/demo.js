@@ -80,6 +80,14 @@ export const DEMO = {
       comercio: 'SEGURO BOLSO PROTEGIDO', monto: 3950, moneda: 'ARS', tipo: 'gasto',
       account_id: id('gal'), category_id: id('c11'), cuotas: 1, fuente: 'extracto', revisado: true },
 
+    // ---- agosto: el sueldo del mes anterior, para que haya con que comparar
+    { id: id('t0a'), fecha: '2026-08-01', descripcion: 'Acreditamiento de haberes',
+      comercio: 'Sueldo', monto: 1943200, moneda: 'ARS', tipo: 'ingreso',
+      account_id: id('gal'), category_id: id('i1'), cuotas: 1, fuente: 'banco', revisado: true },
+    { id: id('t0b'), fecha: '2026-08-01', descripcion: 'Sueldo en sobre', comercio: 'Sueldo',
+      monto: 1450000, moneda: 'ARS', tipo: 'ingreso', account_id: id('efe'),
+      category_id: id('i1'), cuotas: 1, fuente: 'manual', revisado: true },
+
     // ---- el dia que entro el sueldo: ingreso, transferencias y servicios
     { id: id('t1'), fecha: '2026-09-01', descripcion: 'Acreditamiento de haberes', comercio: 'Sueldo',
       monto: 2026665.38, moneda: 'ARS', tipo: 'ingreso', account_id: id('gal'),

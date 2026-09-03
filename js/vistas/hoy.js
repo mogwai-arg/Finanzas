@@ -514,6 +514,8 @@ function loQueSeViene(hoy) {
 
 /** 'hoy', 'mañana', 'el jueves 10', y de ahí en más los días que faltan. */
 const DIAS_LARGOS = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
+const MESES_LARGOS = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio',
+                      'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
 function cuandoCae(d, fecha) {
   if (d <= 0) return 'hoy';
   if (d === 1) return 'mañana';
@@ -550,6 +552,14 @@ function tiraBishu(hoy) {
                valor: promo.valor, tipo: promo.tipo, medio: promo.medio_pago };
     }),
     diasSinCargar: F.diasSinCargar(state.transactions, hoy),
+    // El mes que ya está comprometido de más, si hay uno.
+    aprieta: (() => {
+      const m = F.mesQueAprieta(F.proyeccionMeses(
+        { cuentas: state.accounts, txs: state.transactions, recurrings: state.recurrings },
+        { meses: 6 }, hoy));
+      return m ? { mes: MESES_LARGOS[Number(m.periodo.slice(5, 7)) - 1],
+                   pct: m.pct, libre: Math.round(m.libre) } : null;
+    })(),
     // El fijo que se despegó del resto, si hay uno: el de más plata.
     aumento: (() => {
       const r = F.aumentosSospechosos(state.recurrings, state.recurring_payments, p, {

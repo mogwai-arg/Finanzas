@@ -1277,3 +1277,109 @@ export function queServicio(nombre = '') {
   if (/netflix|spotify|disney|hbo|max|prime|youtube|apple|suscrip/.test(t)) return 'suscripcion';
   return null;
 }
+
+// ---------------------------------------------------------------------
+// LO QUE VIENE: LOS MESES QUE TODAVIA NO LLEGARON
+// ---------------------------------------------------------------------
+
+/**
+ * Como queda cada uno de los proximos meses, mes por mes.
+ *
+ * La app sabe decir cuanto debes AHORA. Lo que no decia —y es el problema de
+ * fondo— es que una compra en cuotas no se paga hoy: se paga con plata de un
+ * mes que todavia no llego. Una cuota de 80.000 a doce meses no son 80.000,
+ * son 80.000 de agosto, de septiembre y de otros diez meses que ya estan
+ * comprometidos antes de empezar.
+ *
+ * Para cada mes: lo que se espera que entre, lo que ya esta comprometido
+ * —cuotas de compras viejas y gastos fijos— y lo que queda. `pct` es que
+ * parte de lo que entra ya tiene dueno.
+ *
+ * `entra` se pasa de afuera porque la proyeccion del sueldo vive en
+ * sueldo.js, que sabe de paritarias y de meses atipicos. Sin ese dato se usa
+ * el promedio de lo que entro, que es peor pero no miente sobre si mismo.
+ */
+export function proyeccionMeses(datos, { meses = 6, entra = null, extra = null } = {},
+                                ref = hoy()) {
+  const { cuentas = [], txs = [], recurrings = [] } = datos || {};
+  const tarjetas = cuentas.filter(a => a.tipo === 'credito' && a.activo !== false);
+  const esperado = entra != null ? Number(entra) : ingresoTipico(txs, ref);
+
+  const out = [];
+  for (let i = 1; i <= meses; i++) {
+    const d = new Date(ref.getFullYear(), ref.getMonth() + i, 1);
+    const per = periodo(d);
+
+    // Cuotas de compras ya hechas que vencen ese mes, tarjeta por tarjeta.
+    let cuotas = 0;
+    const detalle = [];
+    for (const t of tarjetas) {
+      if ((t.moneda || 'ARS') !== 'ARS') continue;
+      for (const c of cuotasComprometidas(txs, t, per, 'ARS')) {
+        cuotas = round2(cuotas + c.monto);
+        detalle.push({ nombre: c.tx.comercio || c.tx.descripcion || 'una compra',
+                       monto: c.monto, nro: c.nro, total: c.total, tarjeta: t.nombre });
+      }
+    }
+
+    // Los gastos fijos se repiten: es plata que ya tiene dueno todos los meses.
+    const fijos = round2((recurrings || [])
+      .filter(r => r.activo !== false && (r.moneda || 'ARS') === 'ARS')
+      .reduce((s, r) => s + (Number(r.monto_estimado) || 0), 0));
+
+    // Lo que sumaria una compra que todavia no hiciste.
+    const dela = extra ? cuotaDe(extra, i) : 0;
+
+    const comprometido = round2(cuotas + fijos + dela);
+    out.push({
+      periodo: per, entra: esperado, cuotas, fijos, extra: dela, comprometido,
+      libre: round2(esperado - comprometido),
+      pct: esperado > 0 ? Math.round((comprometido / esperado) * 100) : null,
+      detalle: detalle.sort((a, b) => b.monto - a.monto)
+    });
+  }
+  return out;
+}
+
+/** Lo que aporta al mes `i` una compra de `monto` en `cuotas`. */
+function cuotaDe({ monto = 0, cuotas = 1 } = {}, i) {
+  const n = Math.max(1, Number(cuotas) || 1);
+  // La primera cuota cae el mes que viene: lo que se compra hoy entra en el
+  // resumen que se paga despues.
+  return i <= n ? round2(Number(monto) / n) : 0;
+}
+
+/**
+ * Lo que suele entrar por mes, cuando no hay proyeccion de sueldo.
+ *
+ * La mediana de los ultimos meses cerrados y no el promedio: un mes con
+ * aguinaldo levanta el promedio y hace parecer que entra mas de lo que entra
+ * todos los meses.
+ */
+export function ingresoTipico(txs, ref = hoy(), meses = 6) {
+  const valores = [];
+  // Desde 0 y no desde 1: el sueldo cae el 1, asi que el mes en curso ya
+  // suele tener el dato. Los meses sin ingresos quedan afuera igual, asi que
+  // un mes en curso todavia vacio no arrastra la mediana para abajo.
+  for (let i = 0; i <= meses; i++) {
+    const p = periodo(new Date(ref.getFullYear(), ref.getMonth() - i, 1));
+    const r = resumenMes(txs, p, 'ARS');
+    if (r.ingresos > 0) valores.push(r.ingresos);
+  }
+  return valores.length ? (mediana(valores) || 0) : 0;
+}
+
+/**
+ * El mes que aprieta, si hay uno.
+ *
+ * Avisar por cada compra en cuotas seria avisar por todo. Lo que importa es
+ * el mes en que lo comprometido se come una parte grande de lo que entra: ese
+ * es el mes en el que uno vuelve a usar la tarjeta para llegar, que es
+ * justamente el circulo que hay que cortar.
+ */
+export function mesQueAprieta(proyeccion, umbral = 70) {
+  const conDato = (proyeccion || []).filter(m => m.pct != null);
+  if (!conDato.length) return null;
+  const peor = conDato.reduce((a, b) => (b.pct > a.pct ? b : a));
+  return peor.pct >= umbral ? peor : null;
+}
