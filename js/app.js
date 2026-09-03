@@ -5,12 +5,13 @@ import { h, icono, marca, aviso } from './ui.js';
 import { state, sesion, sincronizar, cargarCache, onChange, DEMO,
          entrar, crearCuenta, recuperarPassword } from './db.js';
 import { rutaActual, irA, alCambiarRuta, calzar } from './ruteo.js';
-import { fechaLarga, hoyISO } from './formato.js';
+import { fechaLarga, hoyISO, nombreDe } from './formato.js';
 
 import { vistaHoy } from './vistas/hoy.js';
 import { vistaRevisar } from './vistas/revisar.js';
 import { vistaPago } from './vistas/pago.js';
 import { vistaDonde } from './vistas/donde.js';
+import { vistaCuenta } from './vistas/cuenta.js';
 import { vistaGastos } from './vistas/gastos.js';
 import { vistaEstadisticas } from './vistas/estadisticas.js';
 import { vistaTarjetas, vistaTarjeta } from './vistas/tarjetas.js';
@@ -32,6 +33,7 @@ const RUTAS = [
   ['/revisar',        { tab: 'hoy',      titulo: 'Revisar',    vista: vistaRevisar, atras: true }],
   ['/pago',           { tab: 'hoy',      titulo: '¿Con qué pago?', vista: vistaPago, atras: true }],
   ['/donde',          { tab: 'hoy',      titulo: 'Dónde está', vista: vistaDonde, atras: true, acciones: ['ojo'] }],
+  ['/cuenta/:id',     { tab: 'hoy',      titulo: p => nombreDe('accounts', p.id, 'Cuenta'), vista: vistaCuenta, atras: true, acciones: ['ojo'] }],
   ['/mes',            { tab: 'pagar',    titulo: 'Pagar',      sub: 'Resúmenes y gastos fijos del mes', vista: vistaMes }],
   ['/sueldo',         { tab: 'hoy',      titulo: 'Sueldo',     sub: 'Recibos, paritarias y proyección', vista: vistaSueldo, atras: true }],
   ['/gastos',         { tab: 'gastos',   titulo: 'Gastos',     vista: vistaGastos, acciones: ['buscar'] }],

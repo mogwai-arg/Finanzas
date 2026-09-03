@@ -37,13 +37,19 @@ export function vistaDonde(root) {
 
   const grupo = (rot, lista) => !lista.length ? null : h('section',
     h('div.ghead', rot),
-    h('div.grp', lista.map(c => h('button.li', { onclick: () => formCuenta(c) },
+    // Tocar una cuenta abre su extracto, no el formulario para editarla: lo
+    // que uno quiere saber es de dónde salió lo que tiene adentro, no cómo se
+    // llama. Editarla es un botón adentro.
+    h('div.grp', lista.map(c => h('button.li', { onclick: () => irA(`/cuenta/${c.id}`) },
       h('div.av', icono(iconoCuenta(c), 17)),
       h('div.m', h('div.t', c.nombre),
-        h('div.s', c.saldo_al ? `actualizado ${fechaRelativa(c.saldo_al)}` : c.tipo)),
-      h('div', { class: 'v' + (state.ocultarMontos ? ' oculto' : '') },
+        h('div.s', c.saldo < 0 ? 'falta de dónde salió esta plata'
+          : c.saldo_al ? `actualizado ${fechaRelativa(c.saldo_al)}` : c.tipo)),
+      h('div', { class: 'v' + (state.ocultarMontos ? ' oculto' : '') +
+                        (c.saldo < 0 ? ' neg' : '') },
         plata(c.moneda === 'USD' ? c.saldo : Math.round(c.saldo), c.moneda),
-        c.moneda === 'USD' && ref > 0 && h('small', plata(Math.round(c.saldo * ref))))))));
+        c.moneda === 'USD' && ref > 0 && h('small', plata(Math.round(c.saldo * ref)))),
+      h('span.chev', icono('chev', 15))))));
 
   const cierre = ref > 0 && totalUsd > 0
     ? h('div.small.mut', { style: { padding: '0 4px', lineHeight: '1.45' } },

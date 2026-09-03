@@ -1020,3 +1020,58 @@ export function repetidos(txs) {
                  cuantos: g.length, txs: g }))
     .sort((a, b) => (b.monto * b.cuantos) - (a.monto * a.cuantos));
 }
+
+/**
+ * El extracto de una cuenta: de donde salio cada peso que tiene adentro.
+ *
+ * "Eso estaba en efectivo antes, en algun momento ingreso ese monto y no lo
+ * veo": una movida entre cuentas propias no es un ingreso —la plata solo
+ * cambia de bolsillo— asi que no aparece en lo que entro en el mes. Entonces
+ * la pregunta es de donde salio, y la contesta esta cuenta: arranco en tanto,
+ * entro tanto, salio tanto.
+ *
+ * Y si la cuenta queda en negativo sin ser una tarjeta, falta algo cargado: o
+ * el saldo con el que arranco, o un ingreso que nunca se anoto. Eso no es un
+ * detalle: es plata que la app cree que no existe.
+ */
+export function extractoDeCuenta(cuenta, txs, ref = hoy()) {
+  const inicial = Number(cuenta.saldo_inicial) || 0;
+  const corte = cuenta.saldo_al ? parseFecha(cuenta.saldo_al) : null;
+  const filas = [];
+  let entradas = 0, salidas = 0;
+
+  for (const tx of txs) {
+    const f = parseFecha(tx.fecha);
+    if (f > ref) continue;
+    if (corte && f < corte) continue;
+    const propio = tx.account_id === cuenta.id;
+    const destino = tx.destino_account_id === cuenta.id;
+    if (!propio && !destino) continue;
+
+    if (tx.tipo === 'transferencia') {
+      if (propio) { const m = Number(tx.monto) || 0; salidas += m; filas.push({ tx, entra: false, monto: m }); }
+      if (destino) {
+        const m = Number(tx.monto_destino != null ? tx.monto_destino : tx.monto) || 0;
+        entradas += m; filas.push({ tx, entra: true, monto: m });
+      }
+      continue;
+    }
+    if (!propio) continue;
+    // En una tarjeta de credito la compra no mueve saldo: sale cuando se paga
+    // el resumen. Su extracto son los pagos, no los consumos.
+    if (cuenta.tipo === 'credito') continue;
+    const m = Number(tx.monto) || 0;
+    if (tx.tipo === 'ingreso') { entradas += m; filas.push({ tx, entra: true, monto: m }); }
+    else { salidas += m; filas.push({ tx, entra: false, monto: m }); }
+  }
+
+  filas.sort((a, b) => (a.tx.fecha < b.tx.fecha ? 1 : a.tx.fecha > b.tx.fecha ? -1 : 0));
+  const saldo = round2(inicial + entradas - salidas);
+  return {
+    inicial: round2(inicial), desde: cuenta.saldo_al || null,
+    entradas: round2(entradas), salidas: round2(salidas), saldo, filas,
+    // Sin saldo inicial y sin ingresos, todo lo que salio es plata que la app
+    // no sabe de donde vino.
+    faltaOrigen: cuenta.tipo !== 'credito' && saldo < 0
+  };
+}

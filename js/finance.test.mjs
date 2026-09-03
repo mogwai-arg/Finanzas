@@ -1007,4 +1007,51 @@ t('una transferencia nunca se marca como repetida', () => {
   assert.equal(F.repetidos(txs).length, 0);
 });
 
+// ------------------------------------------------- extracto de una cuenta
+t('una cuenta sin saldo inicial de la que sale plata queda marcada', () => {
+  // "Eso estaba en efectivo antes, en algun momento ingreso y no lo veo": una
+  // movida entre cuentas propias no es un ingreso, asi que si el efectivo
+  // nunca tuvo saldo inicial ni ingresos cargados, la plata que sale de ahi
+  // no vino de ningun lado que la app conozca.
+  const c = { id: 'ef', tipo: 'efectivo', moneda: 'ARS' };
+  const txs = [{ id: '1', fecha: '2026-09-02', tipo: 'transferencia', monto: 1480000,
+                 moneda: 'ARS', account_id: 'ef', destino_account_id: 'ga' }];
+  const e = F.extractoDeCuenta(c, txs, new Date(2026, 8, 3));
+  assert.equal(e.saldo, -1480000);
+  assert.equal(e.faltaOrigen, true);
+});
+
+t('con el saldo inicial cargado, la cuenta cierra y no se marca', () => {
+  const c = { id: 'ef', tipo: 'efectivo', moneda: 'ARS',
+              saldo_inicial: 1600000, saldo_al: '2026-08-01' };
+  const txs = [{ id: '1', fecha: '2026-09-02', tipo: 'transferencia', monto: 1480000,
+                 moneda: 'ARS', account_id: 'ef', destino_account_id: 'ga' }];
+  const e = F.extractoDeCuenta(c, txs, new Date(2026, 8, 3));
+  assert.equal(e.saldo, 120000);
+  assert.equal(e.faltaOrigen, false);
+  assert.equal(e.salidas, 1480000);
+});
+
+t('la cuenta que recibe la movida la ve entrar', () => {
+  const c = { id: 'ga', tipo: 'cuenta', moneda: 'ARS' };
+  const txs = [{ id: '1', fecha: '2026-09-02', tipo: 'transferencia', monto: 1480000,
+                 moneda: 'ARS', account_id: 'ef', destino_account_id: 'ga' }];
+  const e = F.extractoDeCuenta(c, txs, new Date(2026, 8, 3));
+  assert.equal(e.entradas, 1480000);
+  assert.equal(e.filas.length, 1);
+  assert.equal(e.filas[0].entra, true);
+});
+
+t('lo anterior al saldo declarado no se cuenta dos veces', () => {
+  const c = { id: 'ga', tipo: 'cuenta', moneda: 'ARS',
+              saldo_inicial: 500000, saldo_al: '2026-09-01' };
+  const txs = [{ id: 'viejo', fecha: '2026-08-15', tipo: 'ingreso', monto: 999999,
+                 moneda: 'ARS', account_id: 'ga' },
+               { id: 'nuevo', fecha: '2026-09-02', tipo: 'gasto', monto: 100000,
+                 moneda: 'ARS', account_id: 'ga' }];
+  const e = F.extractoDeCuenta(c, txs, new Date(2026, 8, 3));
+  assert.equal(e.saldo, 400000);
+  assert.equal(e.filas.length, 1);
+});
+
 console.log(`\n${ok} pruebas OK`);

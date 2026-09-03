@@ -14,7 +14,8 @@ export function plata(n, moneda = 'ARS', { signo = false } = {}) {
   const num = new Intl.NumberFormat('es-AR', { minimumFractionDigits: dec,
                                                maximumFractionDigits: dec }).format(Math.abs(v));
   const sim = moneda === 'USD' ? 'US$' : '$';
-  const sg = signo ? (v < 0 ? '−' : '+') + ' ' : (v < 0 ? '−' : '');
+  // Cero no sube ni baja: "+ $ 0" se lee como si hubiera entrado algo.
+  const sg = signo && v !== 0 ? (v < 0 ? '−' : '+') + ' ' : (v < 0 ? '−' : '');
   return `${sg}${sim} ${num}`;
 }
 
