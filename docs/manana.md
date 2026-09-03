@@ -5,8 +5,25 @@ desbloquea más.
 
 ## 1. Terminar los avisos al teléfono
 
-Está todo el código; falta configuración. El aviso de prueba dice qué falta
-por nombre, así que el camino es corto:
+Está todo el código; falta configuración. **"Mandarme uno de prueba" ahora
+abre un diagnóstico**, no un cartelito: contesta las seis cosas que pueden
+estar fallando, una por una, y hasta ahora todas se veían igual desde afuera.
+
+- si VAPID_PUBLIC, VAPID_PRIVATE y VAPID_SUBJECT están en Supabase;
+- si la pública y la privada son **el mismo par** (se comprueba firmando algo
+  con una y verificándolo con la otra: si el par se generó dos veces, puede
+  haber quedado la pública de una y la privada de la otra, y el aviso sale
+  firmado igual pero nadie lo acepta);
+- si la clave que tiene el navegador —la de Cloudflare— es la misma que la
+  del servidor —la de Supabase—, que es el error más silencioso de todos;
+- si este teléfono está suscripto;
+- y **qué contestó el servicio de push**, con el código. Antes un `try/catch`
+  se lo tragaba: un 401 o un 403 de FCM se veía igual que "no hay teléfonos".
+
+Para que eso ande hay que volver a pegar `cron-avisos` en Supabase (está en
+`supabase/para-pegar/cron-avisos.ts`).
+
+El resto sigue igual:
 
 - `VAPID_PUBLIC` **también** en Supabase → Edge Functions → Secrets. Va en la
   cabecera de cada aviso para que el servicio de push verifique la firma; que
