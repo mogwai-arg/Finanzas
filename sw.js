@@ -107,6 +107,13 @@ self.addEventListener('fetch', e => {
   })());
 });
 
+// Desde Ajustes se puede pedir que un worker nuevo tome el mando ya, sin
+// esperar a que se cierren todas las pestañas. En un telefono, "cerrar todas
+// las pestañas" de una app instalada no es algo que se pueda explicar.
+self.addEventListener('message', e => {
+  if (e.data && e.data.tipo === 'tomar-el-mando') self.skipWaiting();
+});
+
 self.addEventListener('push', e => {
   let d = { title: 'BISHUSHA', body: '' };
   try { d = e.data.json(); } catch { d.body = e.data && e.data.text(); }

@@ -56,7 +56,11 @@ export async function sucursalesCerca(promo, centro, radio = 3000) {
       ( node["${k}"="${v}"](around:${radio},${centro.lat},${centro.lng});
         way["${k}"="${v}"](around:${radio},${centro.lat},${centro.lng}); );
       out center tags 120;`;
-    elementos = await consultar(q);
+    const r = await consultar(q);
+    // Un error NO se cachea: guardar una lista vacía porque el servidor
+    // estaba caído dejaría "no hay nada cerca" durante seis horas.
+    if (r.error) throw r.error;
+    elementos = r.elementos;
     cache[key] = { t: Date.now(), d: elementos };
     guardarCache(cache);
   }
@@ -84,19 +88,40 @@ export async function sucursalesCerca(promo, centro, radio = 3000) {
     .slice(0, 12);
 }
 
+/**
+ * Una consulta a Overpass, con tiempo limite.
+ *
+ * Overpass es gratuito y a veces esta saturado: la conexion queda abierta sin
+ * contestar nunca. Sin un limite propio, el boton se quedaba en "Buscando…"
+ * para siempre, que es la peor forma de fallar: no se sabe si hay que
+ * esperar, tocar de nuevo, o que no hay nada.
+ *
+ * Devuelve { elementos, error }: cuando no hay respuesta hay que poder
+ * DECIRLO, y una lista vacia se lee igual que "no hay nada cerca".
+ */
 async function consultar(q) {
-  let ultimo;
+  let ultimo = null;
   for (const url of OVERPASS) {
+    const corte = new AbortController();
+    const reloj = setTimeout(() => corte.abort(), 10000);
     try {
-      const r = await fetch(url, { method: 'POST', body: 'data=' + encodeURIComponent(q),
+      const r = await fetch(url, { method: 'POST', signal: corte.signal,
+        body: 'data=' + encodeURIComponent(q),
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' } });
-      if (!r.ok) { ultimo = new Error('Overpass ' + r.status); continue; }
+      if (!r.ok) {
+        // 429 y 504 son "estoy saturado": con el otro servidor suele salir.
+        ultimo = new Error(`Overpass contestó ${r.status}`);
+        continue;
+      }
       const j = await r.json();
-      return j.elements || [];
-    } catch (e) { ultimo = e; }
+      return { elementos: j.elements || [], error: null };
+    } catch (e) {
+      ultimo = e?.name === 'AbortError'
+        ? new Error('Overpass tardó más de 10 segundos') : e;
+    } finally { clearTimeout(reloj); }
   }
   console.warn('Overpass sin respuesta', ultimo);
-  return [];
+  return { elementos: [], error: ultimo || new Error('sin respuesta') };
 }
 
 export const mapsUrl = s => `https://www.google.com/maps/search/?api=1&query=${s.lat},${s.lng}`;

@@ -112,8 +112,41 @@ export function vistaAjustes(root) {
           if (await confirmar('¿Cerrar sesión en este aparato?', 'Salir')) { await salir(); location.reload(); }
         } },
           h('div.av.neg', icono('cerrar', 17)),
-          h('div.m', h('div.t', { style: { color: 'var(--neg)' } }, 'Cerrar sesión')))))
+          h('div.m', h('div.t', { style: { color: 'var(--neg)' } }, 'Cerrar sesión')))),
+      version())
   ));
+}
+
+/**
+ * Qué versión está corriendo este teléfono, y forzar la nueva.
+ *
+ * Sin poder verlo, cada arreglo es una adivinanza: no hay forma de saber si
+ * el problema sigue o si el service worker está sirviendo la versión de ayer,
+ * y las dos cosas se ven exactamente igual. Con el número, una captura
+ * alcanza para saberlo.
+ */
+function version() {
+  const v = window.CONFIG?.VERSION || (DEMO ? 'demo' : 'desconocida');
+  const btn = h('button', { style: { background: 'none', border: '0', padding: '0',
+                                     color: 'var(--brand)', fontSize: '12.5px',
+                                     minHeight: '44px', cursor: 'pointer' } },
+    'Buscar una versión nueva');
+  btn.onclick = async () => {
+    btn.disabled = true; btn.textContent = 'Buscando…';
+    try {
+      const reg = await navigator.serviceWorker?.getRegistration();
+      await reg?.update();
+      // Un worker nuevo esperando: se le dice que tome el mando ahora, sin
+      // esperar a que se cierren todas las pestañas.
+      if (reg?.waiting) { reg.waiting.postMessage({ tipo: 'tomar-el-mando' }); }
+      aviso(reg?.waiting || reg?.installing ? 'Hay una nueva, recargando…' : 'Ya tenés la última');
+      if (reg?.waiting || reg?.installing) setTimeout(() => location.reload(true), 900);
+    } catch (e) { aviso('No pude comprobarlo'); }
+    btn.disabled = false; btn.textContent = 'Buscar una versión nueva';
+  };
+  return h('div.small.mut', { style: { padding: '10px 4px 0', lineHeight: '1.5' } },
+    'Versión ', h('b', { style: { fontFamily: 'ui-monospace, monospace' } }, String(v)), '. ',
+    btn);
 }
 
 // =====================================================================

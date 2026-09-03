@@ -22,6 +22,7 @@ export function vistaPromos(root) {
           cuando = id;
           seg.querySelectorAll('button').forEach((b, i) =>
             b.setAttribute('aria-selected', String(['hoy', 'semana', 'todas'][i] === id)));
+          ponerTraer();
           pintar();
         } }, txt)));
 
@@ -282,26 +283,79 @@ export function vistaPromos(root) {
   }
 
   // --------------------------------------------------- cercania por GPS
+  // El botón dice lo que va a traer, y trae eso: en "La semana" pedir "las de
+  // hoy" era prometer una cosa y hacer otra.
+  const TRAER = { hoy: 'Traer las de hoy', semana: 'Traer las de la semana',
+                  todas: 'Traer todas' };
+  const btnTraer = h('button.btn', { onclick: () => hojaTraer(cuando) },
+    icono('buscar', 17), TRAER[cuando]);
+  const ponerTraer = () => btnTraer.replaceChildren(icono('buscar', 17), TRAER[cuando]);
+
   const cercania = h('div');
   let sucursales = new Map();
+  const nota = h('div.small.mut', { style: { padding: '8px 4px 0', lineHeight: '1.45' } });
   const btnGps = h('button.btn.sec', { onclick: async () => {
-    btnGps.disabled = true; btnGps.textContent = 'Buscando…';
+    btnGps.disabled = true;
+    nota.textContent = '';
+    btnGps.textContent = 'Pidiendo tu ubicación…';
+
+    let centro;
     try {
-      const centro = await posicion();
-      const activas = state.promos.filter(p => p.activa !== false && p.osm_filtro);
-      const res = await Promise.all(activas.map(p =>
-        sucursalesCerca(p, centro).then(l => [p.id, l]).catch(() => [p.id, []])));
-      sucursales = new Map(res);
-      btnGps.textContent = 'Actualizar ubicación';
-      pintar();
+      centro = await posicion();
     } catch (e) {
-      aviso(e && e.code === 1 ? 'Hace falta permiso de ubicación'
-                              : 'No pude ubicarte. Probá de nuevo.');
-      btnGps.textContent = 'Ver las más cercanas';
+      btnGps.disabled = false;
+      btnGps.replaceChildren(icono('pin', 17), 'Ver las más cercanas');
+      nota.textContent = String(e?.message || e);
+      return;
     }
+
+    // Una consulta por FILTRO y no por promo, y de a una.
+    //
+    // Antes salían todas juntas con Promise.all: con cinco promos de súper
+    // eran cinco consultas idénticas al mismo servidor y al mismo tiempo.
+    // Overpass es gratis y limita por IP: ante una andanada así deja la
+    // conexión abierta sin contestar, y el botón se quedaba en "Buscando…"
+    // para siempre.
+    const activas = state.promos.filter(p => p.activa !== false && p.osm_filtro);
+    const filtros = [...new Set(activas.map(p => p.osm_filtro))];
+    const porFiltro = new Map();
+    let fallo = null;
+
+    for (let i = 0; i < filtros.length; i++) {
+      btnGps.textContent = `Buscando… ${i + 1} de ${filtros.length}`;
+      const una = activas.find(p => p.osm_filtro === filtros[i]);
+      try { porFiltro.set(filtros[i], await sucursalesCerca({ ...una, marcas: [] }, centro)); }
+      catch (e) {
+        // Si el servicio no contesta una, no va a contestar las otras: seguir
+        // sería multiplicar la espera por la cantidad de rubros. Con cuatro
+        // filtros y dos servidores eso es un minuto y medio de "Buscando…",
+        // que desde afuera no se distingue de un botón colgado.
+        fallo = e;
+        porFiltro.set(filtros[i], null);
+        break;
+      }
+    }
+
+    // El filtro por marca se aplica acá, sobre lo que ya vino: es lo que
+    // permite una sola consulta para todas las promos del mismo rubro.
+    sucursales = new Map(activas.map(p => {
+      const todos = porFiltro.get(p.osm_filtro);
+      if (!todos) return [p.id, []];
+      const marcas = (p.marcas || []).map(m => m.toLowerCase());
+      return [p.id, marcas.length
+        ? todos.filter(s => marcas.some(m => `${s.nombre} ${s.marca}`.toLowerCase().includes(m)))
+        : todos];
+    }));
+
+    const conAlgo = [...sucursales.values()].filter(l => l.length).length;
     btnGps.disabled = false;
+    btnGps.replaceChildren(icono('pin', 17), 'Actualizar ubicación');
+    nota.textContent = fallo
+      ? `El buscador de mapas no contestó (${fallo.message}). Probá de nuevo en un rato.`
+      : conAlgo ? '' : 'No encontré sucursales de tus promos a menos de 3 km.';
+    pintar();
   } }, icono('pin', 17), 'Ver las más cercanas');
-  cercania.append(btnGps);
+  cercania.append(btnGps, nota);
 
   /** La sucursal mas cercana, si ya pedimos la ubicacion. */
   function cerca(p) {
@@ -320,7 +374,7 @@ export function vistaPromos(root) {
   root.append(h('div.flow', seg, cercania, lista,
     h('div.small.mut', { style: { padding: '0 4px', lineHeight: '1.45' } },
       'El tope consumido es lo que hace honesta la promo: "25 % de reintegro" con el tope lleno es 0 %.'),
-    h('button.btn', { onclick: () => hojaTraer() }, icono('buscar', 17), 'Traer las de hoy'),
+    btnTraer,
     h('button.btn.sec', { onclick: () => formPromo() }, icono('mas', 17), 'Agregar a mano'),
     buscadores()));
 }
@@ -396,7 +450,14 @@ const OSM = {
  * bancos ajenos: mostrarlas todas sería ruido. Se puede ver el resto igual,
  * pero atrás.
  */
-function hojaTraer() {
+/**
+ * Traer de Clash, filtrando por el mismo período que la pestaña de atrás.
+ *
+ * Clash devuelve todas las vigentes; el recorte es nuestro. Pedir "las de
+ * hoy" y mostrar las de la semana que viene es prometer una cosa y hacer
+ * otra, y después uno no sabe si la que ve aplica ahora o no.
+ */
+function hojaTraer(cuando = 'hoy') {
   let rubro = 'supermercado';
   const lista = h('div');
   const seg = h('div.seg', { role: 'tablist', style: { marginBottom: '16px' } },
@@ -410,17 +471,29 @@ function hojaTraer() {
       }
     }, txt)));
 
-  hoja('Promos de hoy', h('div',
+  const TITULO = { hoy: 'Promos de hoy', semana: 'Promos de la semana',
+                   todas: 'Todas las promos' };
+  const QUE = { hoy: 'Las que aplican hoy', semana: 'Las que aplican en los próximos siete días',
+                todas: 'Todas las vigentes' };
+  hoja(TITULO[cuando] || TITULO.hoy, h('div',
     h('div.small.mut', { style: { lineHeight: '1.5', marginBottom: '14px' } },
-      'Las que están vigentes ahora, de Clash. Primero las de tus tarjetas y ',
+      `${QUE[cuando] || QUE.hoy}, de Clash. Primero las de tus tarjetas y `,
       'billeteras, y los reintegros antes que los descuentos.'),
     seg, lista));
 
   async function cargar() {
     lista.replaceChildren(h('div.small.mut', 'Buscando…'));
     try {
-      const { promos: todas, revision } = await traerPromos(rubro);
-      if (!todas.length) { lista.replaceChildren(nadaQueMostrar(revision)); return; }
+      const { promos: traidas, revision } = await traerPromos(rubro);
+      const todas = recortar(traidas, cuando);
+      if (!traidas.length) { lista.replaceChildren(nadaQueMostrar(revision)); return; }
+      if (!todas.length) {
+        lista.replaceChildren(h('div.grp.pad', h('div.small.mut',
+          { style: { lineHeight: '1.55' } },
+          cuando === 'hoy' ? 'Hay promos en este rubro, pero ninguna aplica hoy. Mirá "La semana".'
+                           : 'Hay promos en este rubro, pero ninguna en ese período.')));
+        return;
+      }
 
       // Se agrupa por comercio ANTES de separar. Agrupando después, Coto
       // aparecía dos veces —una en "con lo que tenés" y otra en "las demás"—
@@ -481,6 +554,28 @@ function hojaTraer() {
  * volvía ilegible justo donde hay que decidir rápido. Las otras no se pierden:
  * van en una línea, que es todo lo que hace falta para saber que están.
  */
+/** Las que aplican en el período elegido. Clash manda todas las vigentes. */
+function recortar(promos, cuando) {
+  if (cuando === 'todas') return promos;
+  const hoy = new Date();
+  const dia = hoy.getDay();
+  const hasta = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate() + 7);
+  return promos.filter(p => {
+    // Con fecha propia manda la fecha; sin ella, los días de la semana.
+    if (p.fechas?.length) {
+      return p.fechas.some(f => {
+        const d = new Date(`${f}T00:00:00`);
+        return cuando === 'hoy'
+          ? f === `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}-${String(hoy.getDate()).padStart(2, '0')}`
+          : d >= new Date(hoy.toDateString()) && d <= hasta;
+      });
+    }
+    // Sin días marcados, aplica todos los días: entra en cualquier período.
+    if (!p.dias?.length) return true;
+    return cuando === 'hoy' ? p.dias.includes(dia) : true;
+  });
+}
+
 function porComercio(promos, mias = new Set()) {
   const grupos = new Map();
   // Las que servís vos primero: la que encabeza el grupo tiene que ser una

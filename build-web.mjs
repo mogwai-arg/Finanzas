@@ -46,6 +46,9 @@ for (const f of ['index.html', 'manifest.webmanifest', 'privacidad.html']) {
 // a instalar y sigue sirviendo el JS viejo del cache para siempre: se publica
 // una funcion y en el telefono no aparece nunca.
 const version = (process.env.CF_PAGES_COMMIT_SHA || '').slice(0, 8) || String(Date.now());
+// La version tambien va a la configuracion del navegador. Sin poder verla no
+// hay forma de saber si un arreglo llego al telefono o si el service worker
+// sigue sirviendo lo viejo, y eso convierte cada prueba en una adivinanza.
 writeFileSync(join(OUT, 'sw.js'),
   readFileSync('sw.js', 'utf8').replace(/const V = '[^']*'/, `const V = 'bishusha-${version}'`));
 
@@ -66,7 +69,8 @@ window.CONFIG = {
   SUPABASE_URL:      ${JSON.stringify(SUPABASE_URL)},
   SUPABASE_ANON_KEY: ${JSON.stringify(SUPABASE_ANON_KEY)},
   FUNCTIONS_URL:     ${JSON.stringify(SUPABASE_URL.replace(/\/$/, '') + '/functions/v1')},
-  VAPID_PUBLIC:      ${JSON.stringify(VAPID_PUBLIC)}
+  VAPID_PUBLIC:      ${JSON.stringify(VAPID_PUBLIC)},
+  VERSION:           ${JSON.stringify(version)}
 };
 `);
 
