@@ -305,11 +305,15 @@ generar un movimiento y cuáles no.
 
 ---
 
+Lo que quedó abierto en la última sesión, con el detalle de cada cosa, está
+en [`docs/manana.md`](docs/manana.md).
+
 ## Lo que todavía no hace
 
-- **Objetivos de ahorro.** "Quiero gastar 200.000 menos este mes": Bishu ya
-  compara contra el mes pasado, falta poder ponerle un número y que la app
-  lleve la cuenta.
+- **Avisar cuando un servicio aumenta más de lo normal.** La app ya tiene el
+  historial de cada gasto fijo y lee los aumentos del correo; falta la regla
+  que separa un aumento común de uno que conviene reclamar, y el texto que
+  diga cómo reclamarlo.
 - **Leer el resumen que llega por mail, solo.** Hoy el PDF se elige a mano en
   Importar; falta que `gmail-sync` lo baje del adjunto y lo cruce con lo ya
   cargado.
