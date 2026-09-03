@@ -533,14 +533,20 @@ export function revisarExtracto(texto) {
  * Y la fecha se compara con holgura: el banco anota cuando le llega, uno
  * anota cuando compra, y entre las dos cosas hay uno o dos dias.
  */
-export function conciliar(ext, txs, cuentaId, { dias = 3, cerca = 0.05 } = {}) {
+export function conciliar(ext, txs, cuentaId, { dias = 3, cerca = 0.05, tarjeta = false } = {}) {
   const desde = ext.periodo?.desde, hasta = ext.periodo?.hasta;
   const dentro = f => (!desde || f >= desde) && (!hasta || f <= hasta);
 
   const banco = (ext.movimientos || []).map((m, i) => ({
     i, fecha: m.fecha, importe: m.importe, comercio: m.comercio || m.descripcion,
     descripcion: m.descripcion,
-    tipo: m.clase === 'transferencia' ? 'transferencia' : m.entra ? 'ingreso' : 'gasto',
+    // En una TARJETA, la plata que entra es el pago del resumen: sale de una
+    // cuenta y la salda. En la app eso es una movida, no un ingreso —nadie te
+    // deposita en la Visa— y buscarlo entre los ingresos diria que falta un
+    // pago que esta perfectamente anotado.
+    tipo: tarjeta && m.entra ? 'transferencia'
+        : m.clase === 'transferencia' ? 'transferencia'
+        : m.entra ? 'ingreso' : 'gasto',
     cargo: queCargo(`${m.descripcion} ${m.comercio || ''}`)
   }));
 

@@ -581,5 +581,22 @@ t('lo viejo queda afuera de la ventana', () => {
   assert.equal(r.length, 0);
 });
 
+
+t('en una tarjeta, lo que entra es el pago del resumen y no un ingreso', () => {
+  // Nadie te deposita en la Visa. Buscarlo entre los ingresos diria que falta
+  // un pago que esta perfectamente anotado, y ademas que la movida sobra.
+  const tj = E.parseExtracto(`BANCO GALICIA
+Cuenta 4001234-5 001-9
+Periodo 01/09/2026 al 30/09/2026
+SALDO ANTERIOR                                        -500.000,00
+04/09  SU PAGO EN PESOS                     500.000,00          0,00
+SALDO FINAL                                                  0,00`);
+  const pago = [{ id: 'p', fecha: '2026-09-04', tipo: 'transferencia', monto: 500000,
+                  account_id: 'gal', destino_account_id: 'visa' }];
+  assert.equal(E.conciliar(tj, pago, 'visa', { tarjeta: true }).coinciden, 1);
+  // Sin la opcion, el mismo pago no se encuentra.
+  assert.equal(E.conciliar(tj, pago, 'visa').coinciden, 0);
+});
+
 console.log(`\n${ok} pruebas OK${mal ? `, ${mal} FALLAN` : ''}\n`);
 process.exit(mal ? 1 : 0);

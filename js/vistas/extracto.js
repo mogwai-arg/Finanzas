@@ -16,6 +16,8 @@ import { state, guardar, guardarVarios } from '../db.js';
 import { parseExtracto, revisarExtracto, aMovimientos, cargosDelBanco,
          queCargo, conciliar, cargosRepetidos } from '../extracto.js';
 import { plata } from '../formato.js';
+import { parseLista, revisarLista, aMovimientos as listaAMovimientos,
+         pagosDeResumen } from '../lista.js';
 
 // El formulario se pide recién cuando se toca la fila. Cargarlo arriba deja
 // dos módulos esperándose entre sí y la pantalla queda en blanco.
@@ -31,7 +33,8 @@ export function formImportarExtracto(yaBajado = null) {
   const salida = h('div');
   const pie = h('div.fila', { style: { marginTop: '4px' } });
   const estado = h('div.small.mut', { style: { marginTop: '10px', lineHeight: '1.45' } });
-  const archivo = h('input', { type: 'file', accept: 'application/pdf,.pdf,.txt',
+  const archivo = h('input', { type: 'file',
+                               accept: 'application/pdf,.pdf,.txt,image/*',
                                style: { display: 'none' },
                                onchange: e => leerArchivo(e.target.files[0]) });
 
@@ -44,6 +47,23 @@ export function formImportarExtracto(yaBajado = null) {
     salida.replaceChildren(); pie.replaceChildren();
     if (f.name && /\.txt$/i.test(f.name)) {
       texto.value = await f.text(); leer(); return;
+    }
+    // Una captura. Leerla acá sería meter un motor de OCR de varios megas en
+    // la app para hacer peor lo que el teléfono ya hace muy bien: iOS y
+    // Android leen el texto de una imagen desde la galería, y de ahí sale
+    // perfecto y sin inventar un cero. Así que se explica el camino corto en
+    // vez de bajar el camino largo.
+    if (/^image\//.test(f.type || '') || /\.(png|jpe?g|heic|webp)$/i.test(f.name || '')) {
+      estado.replaceChildren(
+        h('div', { style: { lineHeight: '1.55' } },
+          h('b', 'Es una captura.'), ' Tu teléfono la lee mejor que la app:'),
+        h('div', { style: { marginTop: '8px', lineHeight: '1.7' } },
+          h('div', '1. Abrila en Fotos.'),
+          h('div', '2. Mantené el dedo sobre el texto y elegí "Seleccionar todo".'),
+          h('div', '3. Copiá y pegá acá abajo.')),
+        h('div', { style: { marginTop: '8px' } },
+          'Sale exacto y sin inventar ningún número, que con plata es lo que importa.'));
+      return;
     }
     estado.textContent = 'Abriendo el PDF…';
     try {
@@ -95,16 +115,22 @@ export function formImportarExtracto(yaBajado = null) {
     estado.textContent = 'El PDF tiene contraseña.';
   }
 
-  const cerrar = hoja('Subir el resumen de cuenta', h('div',
+  const cerrar = hoja('Traer movimientos del banco', h('div',
     h('div.small.mut', { style: { lineHeight: '1.5', marginBottom: '12px' } },
-      'Es el de la CUENTA, no el de la tarjeta. Bajalo de la app del banco y ',
-      'elegilo acá: la app separa lo que gastaste vos de lo que te cobró el ',
-      'banco, que es lo que nunca se ve.'),
+      'El resumen de la CUENTA en PDF —ahí están las comisiones y los seguros ',
+      'que no avisa nadie— o la lista de movimientos de la app del banco, que ',
+      'está al día y sirve igual para la cuenta y para la tarjeta.'),
     h('button.btn', { onclick: () => archivo.click() },
       icono('banco', 17), 'Elegir el PDF del resumen'),
     archivo, estado,
-    h('div.small.mut', { style: { margin: '18px 0 8px', textAlign: 'center' } }, 'o pegalo a mano'),
+    h('div.small.mut', { style: { margin: '18px 0 8px', textAlign: 'center' } }, 'o pegá el texto'),
     texto,
+    // Cómo sacar el texto de una captura sin escribirlo a mano. Es lo que
+    // convierte "sacale una foto a la pantalla" en algo que funciona hoy.
+    h('div.small.mut', { style: { margin: '9px 2px 0', lineHeight: '1.5' } },
+      'De una captura: abrila en Fotos, mantené el dedo sobre el texto, ',
+      '"Seleccionar todo" y copiá. El teléfono lo lee mejor que cualquier cosa ',
+      'que pueda hacer la app.'),
     h('button.btn.sec', { style: { marginTop: '10px' }, onclick: () => leer() },
       icono('buscar', 16), 'Leer lo pegado'),
     salida, pie));
@@ -113,27 +139,49 @@ export function formImportarExtracto(yaBajado = null) {
 
   function leer() {
     salida.replaceChildren(); pie.replaceChildren();
+    // El resumen primero porque trae más —saldos con qué verificar, número de
+    // cuenta, período impreso—. La lista es el plan B y no le pide nada al
+    // formato: nombre, fecha e importe.
     const r = parseExtracto(texto.value);
-    if (!r) { salida.append(porQueNo(texto.value)); return; }
-    if (!r.movimientos.length) {
+    if (r && r.movimientos.length) { previsualizar(r); return; }
+
+    const l = parseLista(texto.value);
+    if (l) { previsualizar(l, { lista: true }); return; }
+
+    if (r) {
       salida.append(nota('Lo reconocí pero no encontré movimientos. Suele pasar cuando se ' +
         'copia solo la primera hoja.'));
       return;
     }
-    previsualizar(r);
+    salida.append(porQueNo(texto.value));
   }
 
-  function previsualizar(r) {
-    const cuentas = state.accounts.filter(a => a.tipo !== 'credito' && a.activo !== false);
+  function previsualizar(r, { lista = false } = {}) {
+    // La lista de la app del banco sirve igual para la tarjeta: se ve casi
+    // idéntica. El resumen de cuenta, no —es de una cuenta y punto—.
+    const cuentas = state.accounts.filter(a =>
+      a.activo !== false && (lista || a.tipo !== 'credito'));
     // Se propone la que coincide por número de cuenta, y si no, la primera en
     // pesos: es casi siempre la del banco que manda el resumen.
     const propuesta = cuentas.find(a => r.cuenta && a.ultimos4 &&
                                         r.cuenta.includes(a.ultimos4)) ||
-                      cuentas.find(a => (a.moneda || 'ARS') === 'ARS');
+                      cuentas.find(a => a.tipo !== 'credito' && (a.moneda || 'ARS') === 'ARS');
     const cual = select(cuentas.map(a => ({ value: a.id, label: a.nombre })),
                         { value: propuesta?.id || cuentas[0]?.id || '' });
 
-    const todos = aMovimientos(r, null);
+    // Cambiar de cuenta cambia TODO, no solo el cotejo: si es una tarjeta, la
+    // plata que entra es el pago del resumen y no un ingreso, y los pagos
+    // dejan de cargarse. Dibujar una vez y actualizar un pedazo dejaba media
+    // pantalla contando otra cosa.
+    cual.addEventListener('change', () => pintarTodo());
+    pintarTodo();
+
+    function pintarTodo() {
+    salida.replaceChildren(); pie.replaceChildren();
+    const esTarjeta = (state.accounts.find(a => a.id === cual.value) || {}).tipo === 'credito';
+    const conTarjeta = lista && esTarjeta;
+    const todos = lista ? listaAMovimientos(r, null, { tarjeta: conTarjeta })
+                        : aMovimientos(r, null);
     const yaEstan = new Set(state.transactions.map(t => t.externo_id).filter(Boolean));
     const nuevos = todos.filter(m => !yaEstan.has(m.externo_id));
     const cargos = cargosDelBanco(r.movimientos);
@@ -145,10 +193,11 @@ export function formImportarExtracto(yaBajado = null) {
       Math.abs(Number(t.monto) - m.monto) < 0.05 && t.tipo === m.tipo));
     const aCargar = nuevos.filter(m => !yaCargados.includes(m));
 
-    // El caso normal: el extracto tiene todo lo del mes, pero lo de todos los
-    // días ya entró por los avisos del banco. Lo que de verdad falta cargar
-    // son los cargos del banco, y por eso vienen elegidos por defecto.
-    const soloBanco = h('input', { type: 'checkbox', checked: true,
+    // El caso normal del RESUMEN: lo de todos los días ya entró por los avisos
+    // del banco, y lo que de verdad falta cargar son las comisiones. En una
+    // LISTA es al revés —se pega justamente para traer lo que no está— así que
+    // ahí viene destildado.
+    const soloBanco = h('input', { type: 'checkbox', checked: !lista,
                                    onchange: () => pintarBoton() });
 
     // El cotejo se rehace al cambiar de cuenta: comparar contra otra cuenta
@@ -158,15 +207,21 @@ export function formImportarExtracto(yaBajado = null) {
     const cuantos = () => soloBanco.checked ? aCargar.filter(m => m.cargoBanco).length
                                             : aCargar.length;
 
-    salida.append(
+    // append() de un null escribe la palabra "null" en la pantalla: no es h(),
+    // que los saltea. Se filtran antes.
+    salida.append(...[
       h('div.grp', { style: { marginTop: '14px' } },
-        dato('Cuenta', r.cuenta || r.banco || '—'),
+        dato(lista ? 'De dónde' : 'Cuenta',
+             lista ? 'Lista de la app del banco' : (r.cuenta || r.banco || '—')),
         r.periodo.desde ? dato('Período',
           `${dia(r.periodo.desde)} al ${dia(r.periodo.hasta)}`) : null,
         dato('Movimientos', String(r.movimientos.length)),
-        dato('Te cobró el banco', `${plata(Math.round(cargos.total))} · ` +
-          `${cargos.conceptos.length} ${cargos.conceptos.length === 1 ? 'concepto' : 'conceptos'}`),
+        cargos.total ? dato('Te cobró el banco', `${plata(Math.round(cargos.total))} · ` +
+          `${cargos.conceptos.length} ${cargos.conceptos.length === 1 ? 'concepto' : 'conceptos'}`) : null,
         yaCargados.length ? dato('Ya estaban cargados', `${yaCargados.length}, no se repiten`) : null,
+        conTarjeta && pagosDeResumen(r).length
+          ? dato('Pagos del resumen',
+                 `${pagosDeResumen(r).length}, no se cargan`) : null,
         r.cuadra === false ? dato('Ojo', 'los saldos no cierran: puede faltar una hoja') : null),
 
       cargos.conceptos.length ? h('div', { style: { marginTop: '16px' } },
@@ -179,17 +234,23 @@ export function formImportarExtracto(yaBajado = null) {
 
       h('div', { style: { marginTop: '16px' } }, campo('Cargar en', cual)),
       cotejo,
-      h('label.li', { style: { padding: '11px 0' } },
+      conTarjeta && pagosDeResumen(r).length
+        ? h('div.small.mut', { style: { padding: '10px 4px 0', lineHeight: '1.5' } },
+            'El pago del resumen no se carga desde acá: la lista no dice de qué ',
+            'cuenta salió, y anotarlo dos veces es peor que no anotarlo. Se anota ',
+            'del lado de la cuenta. Abajo se ve si el que anotaste coincide.')
+        : null,
+
+      cargos.conceptos.length ? h('label.li', { style: { padding: '11px 0' } },
         h('div.m', h('div.t', 'Solo lo que cobra el banco'),
           h('div.s', { style: { whiteSpace: 'normal', lineHeight: '1.4' } },
             'Los gastos de todos los días ya entran por los avisos del banco. ' +
             'Lo que no entra por ningún lado son las comisiones.')),
-        soloBanco));
+        soloBanco) : null
+    ].filter(Boolean));
 
-    const pintarCotejo = () => cotejo.replaceChildren(
-      cual.value ? conciliacion(r, cual.value) : null);
-    cual.addEventListener('change', pintarCotejo);
-    pintarCotejo();
+    cotejo.replaceChildren(
+      cual.value ? conciliacion(r, cual.value, { lista, tarjeta: conTarjeta }) : null);
 
     const btn = h('button.btn');
     const pintarBoton = () => {
@@ -202,6 +263,7 @@ export function formImportarExtracto(yaBajado = null) {
       soloBanco.checked ? aCargar.filter(m => m.cargoBanco) : aCargar);
     pintarBoton();
     pie.append(btn);
+    }
   }
 
   async function importar(r, destino, filas) {
@@ -237,8 +299,8 @@ export function formImportarExtracto(yaBajado = null) {
    * se cargó en la cuenta que no era. El extracto es la única verdad
    * disponible para encontrarlos.
    */
-  function conciliacion(r, cuentaId) {
-    const c = conciliar(r, state.transactions, cuentaId);
+  function conciliacion(r, cuentaId, { lista = false, tarjeta = false } = {}) {
+    const c = conciliar(r, state.transactions, cuentaId, { tarjeta });
     const nombre = (state.accounts.find(a => a.id === cuentaId) || {}).nombre || 'la cuenta';
     const todoBien = !c.faltan.length && !c.sobran.length && !c.difieren.length;
 
@@ -271,8 +333,9 @@ export function formImportarExtracto(yaBajado = null) {
           h('div.s', `${dia(f.fecha)} · ${f.tipo}`)),
         h('div.v', plata(Math.round(f.importe))))), 'var(--amb)',
         (c.faltan.length > 12 ? `Y ${c.faltan.length - 12} más. ` : '') +
-        'Están en el banco y no en la app. Se cargan con el botón de abajo si ' +
-        'destildás "solo lo que cobra el banco".', c.faltan.length),
+        (lista ? 'Están en el banco y no en la app. Los carga el botón de abajo.'
+               : 'Están en el banco y no en la app. Se cargan con el botón de abajo si ' +
+                 'destildás "solo lo que cobra el banco".'), c.faltan.length),
 
       bloque('Sobran en la app', c.sobran.slice(0, 8).map(a => h('button.li', {
         onclick: () => abrirMovimiento(a.tx) },
@@ -312,6 +375,21 @@ export function formImportarExtracto(yaBajado = null) {
    */
   function porQueNo(txt) {
     const v = revisarExtracto(txt);
+    const lst = revisarLista(txt);
+    // Si vino una lista a medias —fechas sin importes, o al revés— el
+    // problema no es el resumen y decir "no parece un resumen" manda a
+    // arreglar lo que no está roto.
+    if (lst.fechas >= 2 || lst.importes >= 2) {
+      return h('div', { style: { marginTop: '14px' } },
+        h('div.grp.pad', h('div', { style: { lineHeight: '1.55' } },
+          'Parece la lista de movimientos de la app del banco, pero quedó ',
+          'incompleta: encontré ', h('b', `${lst.fechas} fechas`), ', ',
+          h('b', `${lst.importes} importes`), ' y ', h('b', `${lst.nombres} nombres`),
+          '. Hacen falta los tres de cada movimiento.',
+          h('div', { style: { marginTop: '9px', color: 'var(--tx2)' } },
+            'Suele pasar cuando se selecciona solo una columna. Probá de nuevo ',
+            'con "Seleccionar todo".'))));
+    }
     const linea = (ok, t) => h('div.li',
       h('div', { class: 'av ' + (ok ? 'pos' : 'amb') }, icono(ok ? 'check' : 'cerrar', 15)),
       h('div.m', h('div.t', t)));
