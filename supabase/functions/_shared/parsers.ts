@@ -11,7 +11,7 @@ export type Movimiento = {
   ultimos4?: string | null;
   cuotas: number;
   medio?: string | null;  // 'credito' | 'debito' | 'billetera'
-  emisor: string;         // galicia | modo | mercadopago
+  emisor: string;         // galicia | modo | mercadopago | personalpay
   confianza: number;      // 0-100
   tipo: 'gasto' | 'ingreso';
 };
@@ -164,6 +164,38 @@ export const REGLAS: Regla[] = [
         fecha: fechaAR(t.match(/\d{1,2}[\/\-.]\d{1,2}[\/\-.]\d{2,4}/)?.[0], hoy),
         ultimos4: null, cuotas: cuo ? Number(cuo[1]) : 1,
         medio: 'billetera', emisor: 'mercadopago', confianza: com ? 85 : 60, tipo: 'gasto'
+      };
+    }
+  },
+  // ---------------- Personal Pay ----------------
+  //
+  // La billetera de Telecom. Su portal de desarrolladores es para COBRAR
+  // —integrar pagos en un comercio— y no tiene forma de que uno lea sus
+  // propios movimientos, asi que la unica puerta es el mail que manda por
+  // cada operacion. Que es, dicho sea de paso, la misma puerta que ya
+  // funciona para Galicia y MODO.
+  {
+    emisor: 'personalpay',
+    remitentes: /personalpay|personal pay|telecom/i,
+    test: /pagaste|comprobante|tu pago|realizaste (un|una) (pago|compra|transferencia)|enviaste/i,
+    extraer(t, hoy) {
+      const monto = t.match(/(?:\$|ars)\s*([\d.,]+)/i);
+      if (!monto) return null;
+      const com = t.match(/(?:pagaste|compraste|abonaste)[^\n]{0,30}?\ben\s+([^\n.,]{2,60})/i)
+               || t.match(/comercio:?\s*([^\n,.]{2,60})/i)
+               || t.match(/\ba\s+([A-ZÁÉÍÓÚÑ][^\n.,]{2,50})/);
+      const cuo = t.match(/(\d{1,2})\s*cuotas?/i);
+      const u4 = t.match(/terminad[ao]\s*(?:en)?\s*(\d{4})/i);
+      return {
+        monto: plata(monto[1]), moneda: MONEDA(t),
+        comercio: limpiar(com?.[1] || 'Personal Pay'),
+        fecha: fechaAR(t.match(/\d{1,2}[\/\-.]\d{1,2}[\/\-.]\d{2,4}/)?.[0], hoy),
+        ultimos4: u4?.[1] || null,
+        cuotas: cuo ? Number(cuo[1]) : 1,
+        // Mas bajo que los otros a proposito: es el unico escrito sin tener a
+        // la vista un mail de verdad. Con confianza baja entra igual pero cae
+        // en Revisar, que es donde se ve si el nombre del comercio salio bien.
+        medio: 'billetera', emisor: 'personalpay', confianza: com ? 70 : 45, tipo: 'gasto'
       };
     }
   }

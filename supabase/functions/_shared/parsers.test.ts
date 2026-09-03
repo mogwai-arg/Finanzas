@@ -175,4 +175,43 @@ t('un mail sin monto no genera movimiento', () => {
   assert.equal(m, null);
 });
 
+
+console.log('\nPERSONAL PAY');
+
+t('lee un pago de Personal Pay', () => {
+  const m = parsearMail('avisos@personalpay.com.ar', 'Comprobante de pago',
+    'Pagaste $ 12.500,00 en COTO CICSA el 03/09/2026 con tu cuenta Personal Pay.',
+    new Date(2026, 8, 3))!;
+  assert.ok(m, 'tiene que reconocerlo');
+  assert.equal(m.monto, 12500);
+  assert.equal(m.emisor, 'personalpay');
+  assert.equal(m.tipo, 'gasto');
+  assert.equal(m.fecha, '2026-09-03');
+  assert.ok(/COTO/i.test(m.comercio), m.comercio);
+});
+
+t('las cuotas y los últimos cuatro, si vienen', () => {
+  const m = parsearMail('no-reply@personalpay.com.ar', 'Tu pago',
+    'Pagaste $ 120.000,00 en DEXTER en 6 cuotas con tu tarjeta terminada en 4412 el 03/09/2026.',
+    new Date(2026, 8, 3))!;
+  assert.equal(m.cuotas, 6);
+  assert.equal(m.ultimos4, '4412');
+});
+
+t('sin comercio entra igual, pero con menos confianza', () => {
+  // Entra y cae en Revisar, que es donde se ve si salió bien. Es el único
+  // parser escrito sin tener a la vista un mail de verdad.
+  const m = parsearMail('avisos@personalpay.com.ar', 'Comprobante',
+    'Realizaste una transferencia por $ 5.000,00 el 03/09/2026.',
+    new Date(2026, 8, 3))!;
+  assert.ok(m);
+  assert.ok(m.confianza < 60, 'sin comercio la confianza tiene que ser baja');
+});
+
+t('un mail de Personal Pay que no es una operación no se carga', () => {
+  const m = parsearMail('novedades@personalpay.com.ar', 'Novedades de la semana',
+    'Enterate de los descuentos de este mes.', new Date(2026, 8, 3));
+  assert.equal(m, null);
+});
+
 console.log(`\n${ok} pruebas OK`);

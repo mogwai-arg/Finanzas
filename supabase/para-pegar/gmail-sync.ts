@@ -177,6 +177,40 @@ var REGLAS = [
         tipo: "gasto"
       };
     }
+  },
+  // ---------------- Personal Pay ----------------
+  //
+  // La billetera de Telecom. Su portal de desarrolladores es para COBRAR
+  // —integrar pagos en un comercio— y no tiene forma de que uno lea sus
+  // propios movimientos, asi que la unica puerta es el mail que manda por
+  // cada operacion. Que es, dicho sea de paso, la misma puerta que ya
+  // funciona para Galicia y MODO.
+  {
+    emisor: "personalpay",
+    remitentes: /personalpay|personal pay|telecom/i,
+    test: /pagaste|comprobante|tu pago|realizaste (un|una) (pago|compra|transferencia)|enviaste/i,
+    extraer(t, hoy) {
+      const monto = t.match(/(?:\$|ars)\s*([\d.,]+)/i);
+      if (!monto) return null;
+      const com = t.match(/(?:pagaste|compraste|abonaste)[^\n]{0,30}?\ben\s+([^\n.,]{2,60})/i) || t.match(/comercio:?\s*([^\n,.]{2,60})/i) || t.match(/\ba\s+([A-ZÁÉÍÓÚÑ][^\n.,]{2,50})/);
+      const cuo = t.match(/(\d{1,2})\s*cuotas?/i);
+      const u4 = t.match(/terminad[ao]\s*(?:en)?\s*(\d{4})/i);
+      return {
+        monto: plata(monto[1]),
+        moneda: MONEDA(t),
+        comercio: limpiar(com?.[1] || "Personal Pay"),
+        fecha: fechaAR(t.match(/\d{1,2}[\/\-.]\d{1,2}[\/\-.]\d{2,4}/)?.[0], hoy),
+        ultimos4: u4?.[1] || null,
+        cuotas: cuo ? Number(cuo[1]) : 1,
+        // Mas bajo que los otros a proposito: es el unico escrito sin tener a
+        // la vista un mail de verdad. Con confianza baja entra igual pero cae
+        // en Revisar, que es donde se ve si el nombre del comercio salio bien.
+        medio: "billetera",
+        emisor: "personalpay",
+        confianza: com ? 70 : 45,
+        tipo: "gasto"
+      };
+    }
   }
 ];
 var ANUNCIA_FUERTE = /(nuevo valor|nuevo importe|pasar[aá] a ser|pasa a ser|pasa a|se actualiza a|actualizad[oa] a|nueva cuota|queda en)/i;
@@ -281,7 +315,11 @@ var REMITENTES = [
   "galicia.ar",
   "modo.com.ar",
   "mercadopago.com.ar",
-  "mercadolibre.com.ar"
+  "mercadolibre.com.ar",
+  // Personal Pay estaba en la busqueda ancha del diagnostico pero no en esta:
+  // la app veia esos mails al preguntarle "que te esta llegando" y despues no
+  // cargaba ninguno.
+  "personalpay.com.ar"
 ];
 var QUERY = `from:(${REMITENTES.join(" OR ")}) newer_than:14d`;
 var QUERY_ANCHA = "from:(galicia OR bancogalicia OR modo OR mercadopago OR mercadolibre OR personalpay OR naranja OR uala OR brubank) newer_than:30d";

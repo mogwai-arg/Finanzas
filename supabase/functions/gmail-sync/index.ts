@@ -8,7 +8,11 @@ import { esPagoDeTarjeta, comoPagoDeTarjeta } from '../_shared/pagos.ts';
 import { parsearMail, leerAumento, ES_RUIDO, ES_CONSUMO, type Movimiento } from '../_shared/parsers.ts';
 
 const REMITENTES = [
-  'bancogalicia.com.ar', 'galicia.ar', 'modo.com.ar', 'mercadopago.com.ar', 'mercadolibre.com.ar'
+  'bancogalicia.com.ar', 'galicia.ar', 'modo.com.ar', 'mercadopago.com.ar', 'mercadolibre.com.ar',
+  // Personal Pay estaba en la busqueda ancha del diagnostico pero no en esta:
+  // la app veia esos mails al preguntarle "que te esta llegando" y despues no
+  // cargaba ninguno.
+  'personalpay.com.ar'
 ];
 const QUERY = `from:(${REMITENTES.join(' OR ')}) newer_than:14d`;
 
