@@ -566,24 +566,54 @@ function tiraBishu(hoy) {
         meses: 3, margen: 10,
         referencia: state.settings?.inflacion_ref != null
           ? Number(state.settings.inflacion_ref) : null });
+      // `hasta` es lo que se paga hoy: es contra ese número que se va a poder
+      // decir, dentro de un mes, si lo bajaste.
       return r.casos.length ? { ...r.casos[0], normal: r.normal } : null;
     })(),
     gastadoEsteMesAlDia: F.gastadoAlDia(state.transactions, p, hoy.getDate()),
     gastadoMesPasadoAlDia: F.gastadoAlDia(state.transactions, F.mesAnterior(p), hoy.getDate()),
     cargoHoy: state.transactions.some(t =>
       (!t.fuente || t.fuente === 'manual') && String(t.fecha).slice(0, 10) === hoyISO()),
-    excedida: peor ? { nombre: nombreDe('categories', peor.category_id, 'Una categoría'),
+    excedida: peor ? { id: peor.category_id,
+                       nombre: nombreDe('categories', peor.category_id, 'Una categoría'),
                        exceso: Math.round(peor.gastado - peor.tope) } : null,
     cierraManana: cierra ? cierra.nombre : null,
     ahorro: F.estadoAhorro(budgets, { cuentas: state.accounts, txs: state.transactions,
                                       recurrings: state.recurrings,
                                       pagos: state.recurring_payments }, p, 'ARS', hoy),
     mayor: mayor ? { nombre: mayor.comercio || mayor.descripcion || 'un gasto',
-                     monto: Math.round(mayor.monto) } : null
+                     monto: Math.round(mayor.monto) } : null,
+
+    // Lo que Bishu ya dijo, y con qué comparar para saber si algo mejoró.
+    memoria: state.settings?.bishu || null,
+    categorias: F.estadoPresupuesto(budgets, F.resumenMes(state.transactions, p, 'ARS'),
+                                    Number(state.settings?.alert_pct) || 80)
+      .map(b => ({ ...b, nombre: nombreDe('categories', b.category_id, 'Sin categoría') })),
+    fijos: (state.recurrings || []).filter(r => r.activo !== false)
+      .map(r => ({ nombre: r.nombre, monto: Number(r.monto_estimado) || 0 }))
   };
 
   const frases = F_frases(datos, hoy);
   let i = 0;
+
+  /**
+   * Anotar lo que Bishu dijo, una vez por día y por tema.
+   *
+   * Sin esto la memoria no existe: la frase se elige, se muestra y se olvida.
+   * Y con esto no crece sin control —se guardan las últimas treinta— porque
+   * lo que importa es lo de las últimas semanas, no la historia entera.
+   */
+  const anotar = async f => {
+    if (!f.k) return;
+    const previo = state.settings?.bishu || {};
+    const dichos = Array.isArray(previo.dichos) ? previo.dichos : [];
+    const ya = dichos.find(x => x.k === f.k &&
+      String(x.cuando).slice(0, 10) === hoyISO());
+    if (ya) return;
+    const nuevos = [{ k: f.k, valor: f.valor ?? null, cuando: new Date().toISOString() },
+                    ...dichos].slice(0, 30);
+    await guardar('settings', { ...(state.settings || {}), bishu: { ...previo, dichos: nuevos } });
+  };
 
   const dibujo = h('div', { style: { flex: 'none' } });
   const linea = h('div', { style: { fontSize: '14.5px', lineHeight: '1.45',
@@ -604,6 +634,7 @@ function tiraBishu(hoy) {
     accion.textContent = ir ? 'Ver' : 'Elegí de qué te aviso';
     accion.style.color = ir ? 'var(--brand)' : 'var(--tx3)';
     accion.onclick = () => irA(ir || '/ajustes');
+    anotar(frases[i % frases.length]);
     otra.textContent = `Otra cosa · ${(i % frases.length) + 1} de ${frases.length}`;
   };
   pintar();

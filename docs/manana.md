@@ -237,3 +237,11 @@ faltar una hoja se ve igual que un mes barato.
   ajustar las expresiones.
 - Los seguros y las comisiones que aparecen podrían proponerse como gastos
   fijos, para que entren en la detección de aumentos.
+
+---
+
+## Migración pendiente
+
+`015_bishu_memoria.sql` — una columna `bishu jsonb` en `settings`. Sin ella,
+Bishu vuelve a empezar de cero cada vez: la escritura se rechaza y el cambio
+queda en el cajón de fallidas (que ahora avisa en Hoy, así que se nota).

@@ -153,6 +153,7 @@ create table if not exists public.settings (
   alert_pct    int default 80,                  -- % de presupuesto que dispara alerta
   avisos       jsonb not null default '{}'::jsonb, -- que avisos llegan al telefono
   saldo_minimo numeric(14,2) not null default 0,
+  bishu        jsonb not null default '{}'::jsonb,  -- lo que Bishu ya dijo
   updated_at   timestamptz not null default now()
 );
 

@@ -147,5 +147,88 @@ t('los días sin cargar cuentan desde lo último cargado a mano', () => {
   assert.equal(F.diasSinCargar(auto, d('2026-09-07')), 3);
 });
 
+// --------------------------------------------------------- la memoria
+const HOY = new Date(2026, 8, 20);
+const haceDias = n => new Date(2026, 8, 20 - n).toISOString();
+
+t('sin memoria dice lo mismo de siempre', () => {
+  const f = frasesDeBishu({ excedida: { id: 'c3', nombre: 'Combustible', exceso: 12000 } }, HOY);
+  assert.match(f[0].texto, /se pasó/);
+});
+
+t('lo que marcó y mejoró se dice PRIMERO', () => {
+  // Es todo el punto: una app que solo señala lo que está mal solo trae malas
+  // noticias, y a alguien así se lo deja de escuchar.
+  const f = frasesDeBishu({
+    memoria: { dichos: [{ k: 'tope:c3', valor: 12000, cuando: haceDias(10) }] },
+    categorias: [{ id: 'c3', nombre: 'Combustible', gastado: 98000, tope: 140000 }]
+  }, HOY);
+  assert.match(f[0].texto, /se te había pasado del tope y ahora va dentro/);
+});
+
+t('si sigue pasada, no felicita', () => {
+  // Felicitar por algo que no cambió es peor que no decir nada: la próxima vez
+  // ya no se le cree.
+  const f = frasesDeBishu({
+    memoria: { dichos: [{ k: 'tope:c3', valor: 12000, cuando: haceDias(10) }] },
+    categorias: [{ id: 'c3', nombre: 'Combustible', gastado: 160000, tope: 140000 }]
+  }, HOY);
+  assert.ok(!f.some(x => /ahora va dentro/.test(x.texto)));
+});
+
+t('un fijo que bajó después de marcarlo se reconoce, con el número del año', () => {
+  const f = frasesDeBishu({
+    memoria: { dichos: [{ k: 'aumento:Flow', valor: 46400, cuando: haceDias(25) }] },
+    fijos: [{ nombre: 'Flow', monto: 32000 }]
+  }, HOY);
+  assert.match(f[0].texto, /Flow te lo bajaron/);
+  assert.match(f[0].texto, /172\.800 en un año/);
+});
+
+t('una baja de dos pesos no cuenta como que lo bajaste', () => {
+  const f = frasesDeBishu({
+    memoria: { dichos: [{ k: 'aumento:Flow', valor: 46400, cuando: haceDias(25) }] },
+    fijos: [{ nombre: 'Flow', monto: 46200 }]
+  }, HOY);
+  assert.ok(!f.some(x => /te lo bajaron/.test(x.texto)));
+});
+
+t('dar vuelta el ritmo se reconoce', () => {
+  const f = frasesDeBishu({
+    memoria: { dichos: [{ k: 'ritmo', valor: 80000, cuando: haceDias(10) }] },
+    gastadoMesPasadoAlDia: 500000, gastadoEsteMesAlDia: 400000
+  }, HOY);
+  assert.match(f[0].texto, /lo diste vuelta/);
+});
+
+t('lo de ayer no vuelve a ser lo primero', () => {
+  // Lo mismo dos días seguidos deja de leerse. No se borra: baja al final.
+  const d = { memoria: { dichos: [{ k: 'tope:c3', cuando: haceDias(1) }] },
+              excedida: { id: 'c3', nombre: 'Combustible', exceso: 12000 },
+              cierraManana: 'Galicia Visa' };
+  const f = frasesDeBishu(d, HOY);
+  assert.match(f[0].texto, /cierra mañana/);
+  assert.ok(f.some(x => /se pasó/.test(x.texto)), 'sigue estando, abajo');
+});
+
+t('lo de hace una semana sí puede volver a decirse', () => {
+  const d = { memoria: { dichos: [{ k: 'tope:c3', cuando: haceDias(7) }] },
+              excedida: { id: 'c3', nombre: 'Combustible', exceso: 12000 } };
+  assert.match(frasesDeBishu(d, HOY)[0].texto, /se pasó/);
+});
+
+t('cada frase lleva de qué habla, para poder acordarse', () => {
+  const f = frasesDeBishu({ excedida: { id: 'c3', nombre: 'Combustible', exceso: 12000 } }, HOY);
+  assert.equal(f[0].k, 'tope:c3');
+  assert.equal(f[0].valor, 12000);
+});
+
+t('lo dicho HOY sigue primero: no puede cambiar sola entre dos aperturas', () => {
+  const d = { memoria: { dichos: [{ k: 'tope:c3', cuando: new Date(2026, 8, 20, 9).toISOString() }] },
+              excedida: { id: 'c3', nombre: 'Combustible', exceso: 12000 },
+              cierraManana: 'Galicia Visa' };
+  assert.match(frasesDeBishu(d, HOY)[0].texto, /se pasó/);
+});
+
 console.log(`\n${ok} pruebas OK${mal ? `, ${mal} FALLAN` : ''}\n`);
 process.exit(mal ? 1 : 0);

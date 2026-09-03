@@ -83,7 +83,25 @@ const detalle = p => [
 export function frasesDeBishu(d, hoy = new Date()) {
   const dia = hoy.getDate();
   const out = [];
-  const decir = (animo, texto, ir) => out.push({ animo, texto, ir });
+  // `k` identifica de QUÉ habla la frase, y `valor` cómo venía eso cuando la
+  // dijo. Es lo único que hace falta para acordarse: sin el qué no se puede
+  // seguir nada, y sin el cómo venía no se puede decir si mejoró.
+  const decir = (animo, texto, ir, k = null, valor = null) =>
+    out.push({ animo, texto, ir, k, valor });
+
+  const dichos = (d.memoria && d.memoria.dichos) || [];
+  const recordar = k => dichos.filter(x => x.k === k)
+    .sort((a, b) => (a.cuando < b.cuando ? 1 : -1))[0] || null;
+  const diasDesde = x => x && x.cuando
+    ? Math.round((hoy - new Date(x.cuando)) / 86400000) : null;
+
+  // ------------------------------------------------------ lo que ya dije
+  //
+  // Va primero, antes que cualquier novedad, y es todo el punto de tener
+  // memoria: una app que solo señala lo que está mal es una app que solo
+  // trae malas noticias. Decir "esto que te marqué la semana pasada mejoró"
+  // es lo único que convierte un señalamiento en algo que sirvió.
+  seguimiento(d, decir, recordar, diasDesde);
 
   // 1. Una promo que aplica hoy vence hoy: no hay nada que pueda esperar
   //    menos. Va antes que todo lo demás, y por eso no hace falta una
@@ -99,7 +117,8 @@ export function frasesDeBishu(d, hoy = new Date()) {
   // 3. Un tope pasado es plata que ya se fue, y el nombre de la categoría es
   //    lo único que hace que la próxima vez uno se acuerde.
   if (d.excedida)
-    decir('alerta', `${d.excedida.nombre} se pasó $ ${plata(d.excedida.exceso)} del tope.`, '/mes');
+    decir('alerta', `${d.excedida.nombre} se pasó $ ${plata(d.excedida.exceso)} del tope.`,
+          '/mes', `tope:${d.excedida.id || d.excedida.nombre}`, d.excedida.exceso);
 
   // 4. Lo que ya está comprometido en un mes que todavía no llegó. Va arriba
   //    porque es lo único que se decide ANTES: cuando el mes llega ya no hay
@@ -108,7 +127,7 @@ export function frasesDeBishu(d, hoy = new Date()) {
   if (d.aprieta)
     decir('alerta', `En ${d.aprieta.mes} ya tenés comprometido el ${d.aprieta.pct} % de lo ` +
                     `que entra. Te quedarían $ ${plata(d.aprieta.libre)} para todo el mes.`,
-          '/estadisticas');
+          '/estadisticas', `aprieta:${d.aprieta.mes}`, d.aprieta.pct);
 
   // 5. Un fijo que se despegó del resto es plata sobre la mesa todos los
   //    meses, no una vez: va antes que las comparaciones del mes, aunque no
@@ -117,7 +136,8 @@ export function frasesDeBishu(d, hoy = new Date()) {
   if (d.aumento)
     decir('alerta', `${d.aumento.nombre} subió ${Math.round(d.aumento.subio)} % en tres meses ` +
                     `y el resto de tus fijos ${Math.round(d.aumento.normal)} %. ` +
-                    `Son $ ${plata(d.aumento.demas)} de más por mes.`, '/mes');
+                    `Son $ ${plata(d.aumento.demas)} de más por mes.`,
+          '/mes', `aumento:${d.aumento.nombre}`, Math.round(d.aumento.hasta || 0));
 
   // 6. El cierre no se puede mover, y comprar un día antes o un día después
   //    cambia en un mes cuándo se paga.
@@ -136,7 +156,7 @@ export function frasesDeBishu(d, hoy = new Date()) {
       decir(dif < 0 ? 'festejo' : 'alerta',
         dif < 0 ? `Vas $ ${plata(dif)} menos que el mes pasado a esta altura. Bien ahí.`
                 : `Vas $ ${plata(dif)} más que el mes pasado a esta altura.`,
-        '/estadisticas');
+        '/estadisticas', 'ritmo', Math.round(dif));
     } else {
       decir('contento', 'Vas casi igual que el mes pasado a esta altura.', '/estadisticas');
     }
@@ -172,7 +192,68 @@ export function frasesDeBishu(d, hoy = new Date()) {
   if (dia <= 4) decir('contento', 'Arranca el mes. Cargá lo de hoy y yo llevo la cuenta.');
   decir('dormido', 'Por acá tranquilo. Cargá lo que gastes y te aviso si algo se desvía.');
 
-  return out;
+  // Lo mismo dos días seguidos deja de leerse. No se borra —sigue estando si
+  // uno toca— pero baja al final: lo primero tiene que ser algo que todavía
+  // no oíste.
+  //
+  // Lo dicho HOY no baja: si bajara, la frase cambiaría sola entre una
+  // apertura y la siguiente, y lo importante tiene que quedarse hasta que
+  // hagas algo con eso. Baja lo de ayer y lo de anteayer.
+  const reciente = f => {
+    if (!f.k) return false;
+    const dd = diasDesde(recordar(f.k));
+    return dd != null && dd >= 1 && dd <= 2;
+  };
+  return [...out.filter(f => !reciente(f)), ...out.filter(reciente)];
+}
+
+/**
+ * Lo que Bishu marcó antes, y en qué quedó.
+ *
+ * Sin esto, Bishu solo trae malas noticias: señala lo que está mal y nunca
+ * dice que se arregló. Nadie sigue escuchando a alguien así, y el que avisa
+ * de todo y no reconoce nada termina apagado.
+ *
+ * Solo se dice cuando mejoró DE VERDAD y contra lo que había cuando lo dijo,
+ * que es el número que quedó guardado. Felicitar por algo que no cambió es
+ * peor que no decir nada: la próxima vez ya no se le cree.
+ */
+function seguimiento(d, decir, recordar, diasDesde) {
+  // Una categoría que se había pasado del tope y este mes entra.
+  for (const c of d.categorias || []) {
+    const x = recordar(`tope:${c.category_id || c.id || c.nombre}`);
+    const dd = diasDesde(x);
+    if (!x || dd == null || dd < 5 || dd > 45) continue;
+    if (c.gastado > c.tope) continue;                    // sigue pasada
+    decir('festejo', `${c.nombre} se te había pasado del tope y ahora va dentro. ` +
+                     `Llevás $ ${plata(c.gastado)} de $ ${plata(c.tope)}.`,
+          '/estadisticas', `logro:tope:${c.category_id || c.id || c.nombre}`);
+  }
+
+  // Un fijo que se había despegado y bajó después de que lo dijimos.
+  for (const f of d.fijos || []) {
+    const x = recordar(`aumento:${f.nombre}`);
+    const dd = diasDesde(x);
+    if (!x || x.valor == null || dd == null || dd < 20) continue;
+    const baja = Number(x.valor) - Number(f.monto || 0);
+    if (baja < Math.max(500, Number(x.valor) * 0.03)) continue;
+    decir('festejo', `${f.nombre} te lo bajaron: pagás $ ${plata(baja)} menos por mes ` +
+                     `que cuando te lo marqué. Son $ ${plata(baja * 12)} en un año.`,
+          '/mes', `logro:aumento:${f.nombre}`);
+  }
+
+  // Venías gastando más que el mes pasado y diste vuelta el ritmo.
+  const x = recordar('ritmo');
+  const dd = diasDesde(x);
+  if (x && x.valor > 0 && dd != null && dd >= 5 && dd <= 40) {
+    const antes = Number(d.gastadoMesPasadoAlDia) || 0;
+    const ahora = Number(d.gastadoEsteMesAlDia) || 0;
+    const dif = ahora - antes;
+    if (antes > 0 && dif < 0) {
+      decir('festejo', `Venías gastando más que el mes pasado y lo diste vuelta: ` +
+                       `ahora vas $ ${plata(dif)} abajo.`, '/estadisticas', 'logro:ritmo');
+    }
+  }
 }
 
 /**
