@@ -127,10 +127,13 @@ function revisarDatosClash(js) {
       nombre = k;
     }
   }
+  const listas = Object.values(datos).filter(Array.isArray);
+  const vacio = listas.length > 0 && listas.every((v) => v.length === 0);
   return {
     bytes: js.length,
     claves,
-    listaMasLarga: nombre ? {
+    vacio,
+    listaMasLarga: nombre && mayor.length ? {
       clave: nombre,
       largo: mayor.length,
       primero: JSON.stringify(mayor[0]).slice(0, 300)

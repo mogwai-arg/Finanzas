@@ -10,6 +10,10 @@
 // importa un resumen no lo baja nunca.
 // =====================================================================
 
+// Antes que pdf.js: la librería usa Promise.withResolvers(), que Safari
+// incorporó en la 17.4. En un iPhone anterior se caía apenas arrancaba.
+import './compat.js';
+
 let motor = null;
 let sinWorker = false;
 
@@ -30,7 +34,9 @@ let sinWorker = false;
  */
 async function cargar({ conWorker = true } = {}) {
   const pdfjs = motor || (motor = await import('../vendor/pdf.mjs'));
-  const url = new URL('../vendor/pdf.worker.mjs', import.meta.url).href;
+  // Nuestro envoltorio y no el de vendor: adentro pone los mismos parches,
+  // porque el worker es un módulo aparte y no hereda nada de la página.
+  const url = new URL('./pdf-worker.mjs', import.meta.url).href;
   if (conWorker) {
     pdfjs.GlobalWorkerOptions.workerSrc = url;
     sinWorker = false;

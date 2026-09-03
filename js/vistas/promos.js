@@ -453,9 +453,13 @@ function hojaTraer() {
    * pantalla y no son lo mismo: el sobre trae con que se topó la función.
    */
   function nadaQueMostrar(revision) {
-    if (!revision) {
+    // Clash contestó con las listas vacías: hoy no hay promos en ese rubro.
+    // No es que no sepamos leer la página, y mostrar un volcado técnico para
+    // un caso normal asusta sin motivo.
+    if (!revision || revision.data?.vacio) {
       return h('div.grp.pad', h('div.small.mut', { style: { lineHeight: '1.55' } },
-        'No hay promos vigentes en este rubro.'));
+        'Hoy no hay promos cargadas en este rubro. Probá con otro, o volvé ',
+        'mañana: Clash las actualiza todos los días.'));
     }
     // Con el detalle a la vista: "no pude leerlas" sin decir qué llegó es un
     // callejón sin salida, y esto se arregla mirando dos líneas.

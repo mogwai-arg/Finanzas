@@ -213,9 +213,15 @@ export function revisarDatosClash(js: string) {
   for (const [k, v] of Object.entries(datos)) {
     if (Array.isArray(v) && v.length > mayor.length) { mayor = v; nombre = k; }
   }
+  // Las listas estan pero vienen vacias: eso NO es que no sepamos leer la
+  // pagina, es que hoy ese rubro no tiene promos. Son dos cosas distintas y
+  // se veian igual: una se arregla con codigo y la otra no se arregla.
+  const listas = Object.values(datos).filter(Array.isArray) as any[][];
+  const vacio = listas.length > 0 && listas.every(v => v.length === 0);
+
   return {
-    bytes: js.length, claves,
-    listaMasLarga: nombre ? { clave: nombre, largo: mayor.length,
+    bytes: js.length, claves, vacio,
+    listaMasLarga: nombre && mayor.length ? { clave: nombre, largo: mayor.length,
                               primero: JSON.stringify(mayor[0]).slice(0, 300) } : null
   };
 }
