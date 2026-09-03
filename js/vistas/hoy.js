@@ -12,7 +12,7 @@
 // una decisión de hoy. Hoy tiene que leerse de una sola mirada.
 // =====================================================================
 import { h, frag, icono, iconoDe, hoja, campo, select, aviso } from '../ui.js';
-import { state, guardar } from '../db.js';
+import { state, guardar, fallidas, sincronizar } from '../db.js';
 import * as F from '../finance.js';
 import { plataPartida, plata, cuandoVence, diasHasta, hoyISO, aFecha, nombreDe,
          aNumero, etiquetaCuenta } from '../formato.js';
@@ -34,6 +34,7 @@ export function vistaHoy(root, { arranca = 0 } = {}) {
 
   root.append(
     h('div.flow',
+      noSeGuardo(),
       sinRevisar(),
       conexionCaida(),
       carrusel(arranca, heroMes(res, hoy, p), plataLibre(hoy), heroDolares()),
@@ -173,6 +174,45 @@ function conexionCaida() {
         : 'Puede haber consumos sin cargar.'),
       h('button.btn', { onclick: () => irA('/ajustes') }, 'Reconectar'))
   );
+}
+
+/**
+ * Cambios que no se pudieron guardar.
+ *
+ * Es el aviso más importante de la app y no existía. Cuando una escritura
+ * falla, la pantalla ya se pintó como si hubiera andado —así se siente
+ * rápida— y el cambio queda en un cajón de fallidas que está en Ajustes,
+ * cuatro toques adentro. La siguiente sincronización trae la fila vieja del
+ * servidor y lo que habías hecho desaparece sin decir nada: un gasto fijo
+ * pagado vuelve a aparecer pendiente.
+ *
+ * En una app de plata eso es lo peor que puede pasar, así que va arriba de
+ * todo, con el nombre de lo que no se guardó.
+ */
+function noSeGuardo() {
+  const rotas = fallidas();
+  if (!rotas.length) return null;
+  const QUE = { recurring_payments: 'un pago de un gasto fijo', transactions: 'un movimiento',
+                recurrings: 'un gasto fijo', accounts: 'una cuenta', budgets: 'un presupuesto',
+                promos: 'una promo', recibos: 'un recibo' };
+  const cuales = [...new Set(rotas.map(r => QUE[r.tabla] || r.tabla))];
+
+  const btn = h('button.btn', 'Intentar de nuevo');
+  btn.onclick = async () => {
+    btn.disabled = true; btn.textContent = 'Probando…';
+    await sincronizar({ reintentarFallidas: true, completa: true });
+    aviso(fallidas().length ? 'Sigue sin poder guardarse' : 'Listo, se guardó');
+    // sincronizar() avisa al final y la pantalla se vuelve a dibujar sola.
+  };
+
+  return h('div.aviso.neg',
+    h('div.av.neg', icono('sube', 17)),
+    h('div.txt',
+      h('div.tt', rotas.length === 1 ? 'Un cambio no se guardó'
+                                     : `${rotas.length} cambios no se guardaron`),
+      h('div.ds', `Quedó sin subir ${cuales.join(', ')}. Lo que ves en la pantalla `,
+        'puede volver atrás solo hasta que se guarde de verdad.'),
+      btn));
 }
 
 // -------------------------------------------------------- hero del mes

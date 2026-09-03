@@ -13,7 +13,7 @@
 // =====================================================================
 import { admin, json, CORS, usuarioDe } from '../_shared/comun.ts';
 import { avisosDelDia } from '../_shared/avisos.ts';
-import { enviarPush, clavesDelEntorno, faltanClaves, bytesAB64u } from '../_shared/push.ts';
+import { enviarPush, clavesDelEntorno, faltanClaves, parValido, bytesAB64u } from '../_shared/push.ts';
 
 /** Al teléfono van a lo sumo dos: el resto está en la app cuando la abra. */
 const MAX_POR_VEZ = 2;
@@ -52,16 +52,56 @@ Deno.serve(async (req) => {
   }
 
   // ------------------------------------------------- aviso de prueba
+  //
+  // Devuelve el diagnóstico entero, no un "no se pudo". Un aviso que no llega
+  // puede ser cinco cosas distintas —falta una clave, la pública y la privada
+  // no son el mismo par, la del navegador no es la del servidor, el teléfono
+  // no está suscripto, o el servicio de push rechaza— y todas se ven igual
+  // desde afuera. Adivinar cuál es cuesta más que contarlas.
   if (cuerpo.probar) {
     const u = await usuarioDe(req);
     if (!u) return json({ error: 'sin sesión' }, 401);
-    if (!claves) return json({ enviados: 0,
-      motivo: `falta ${faltanClaves().join(' y ')} en los secretos de Supabase` });
-    const n = await mandar(sb, claves, u.id, [{
+
+    const faltan = faltanClaves();
+    const { data: subs } = await sb.from('push_subscriptions').select('*').eq('user_id', u.id);
+    const revision: Record<string, unknown> = {
+      VAPID_PUBLIC: !faltan.includes('VAPID_PUBLIC'),
+      VAPID_PRIVATE: !faltan.includes('VAPID_PRIVATE'),
+      VAPID_SUBJECT: !!Deno.env.get('VAPID_SUBJECT')?.trim(),
+      // La pública es pública por diseño: viaja en cada aviso. Devolverla es
+      // lo que permite comparar la de Supabase con la de Cloudflare, que es
+      // el error más silencioso de todos.
+      publica: claves?.publica ?? null,
+      parValido: claves ? await parValido(claves) : false,
+      suscripciones: (subs ?? []).length,
+      envios: [] as unknown[]
+    };
+
+    if (!claves) return json({ enviados: 0, revision,
+      motivo: `falta ${faltan.join(' y ')} en los secretos de Supabase` });
+    if (!revision.parValido) return json({ enviados: 0, revision,
+      motivo: 'VAPID_PUBLIC y VAPID_PRIVATE no son el mismo par: se generaron ' +
+              'en dos veces distintas. Generá el par de nuevo y poné las dos.' });
+    if (!revision.suscripciones) return json({ enviados: 0, revision,
+      motivo: 'este teléfono no está suscripto: prendé los avisos desde el teléfono, ' +
+              'con la app agregada a la pantalla de inicio' });
+
+    const { enviados, envios } = await mandar(sb, claves, u.id, [{
       tipo: 'prueba', titulo: 'Soy Bishu', tag: 'prueba', url: './#/hoy',
       cuerpo: 'Si ves esto, los avisos te llegan aunque la app esté cerrada.'
     }]);
-    return json({ enviados: n, motivo: n ? null : 'este teléfono no está suscripto' });
+    revision.envios = envios;
+    // El código del servicio de push es lo único que dice qué pasó del otro
+    // lado, y era justo lo que se tragaba el try/catch.
+    const rechazo = envios.find(e => !e.ok);
+    return json({ enviados, revision,
+      motivo: enviados ? null
+        : rechazo ? `el servicio de push contestó ${rechazo.status}` +
+                    (rechazo.status === 401 || rechazo.status === 403
+                      ? ': la firma no le cierra, casi siempre porque la clave pública del ' +
+                        'navegador no es la del servidor'
+                      : rechazo.error ? ` (${rechazo.error})` : '')
+        : 'no se pudo mandar' });
   }
 
   // ------------------------------------------------- la pasada diaria
@@ -110,7 +150,8 @@ Deno.serve(async (req) => {
       titulo: mensajes[0].titulo,
       cuerpo: mensajes.map(m => `${m.titulo}: ${m.cuerpo}`).join(' · ') });
 
-    const n = claves ? await mandar(sb, claves, u.user_id, mensajes.slice(0, MAX_POR_VEZ)) : 0;
+    const n = claves
+      ? (await mandar(sb, claves, u.user_id, mensajes.slice(0, MAX_POR_VEZ))).enviados : 0;
     salida.push({ user: u.user_id, avisos: mensajes.map(m => m.titulo), enviados: n });
   }
   return json({ ok: true, push: !!claves, salida });
@@ -121,19 +162,30 @@ Deno.serve(async (req) => {
  *
  * Una suscripción que el servicio de push da por muerta se borra: si no,
  * cada corrida vuelve a fallar contra un teléfono que ya no está.
+ *
+ * Devuelve también qué contestó cada teléfono. Antes el catch se comía el
+ * error y el 401 se veía igual que "no hay teléfonos": el punto ciego más
+ * caro de todo esto, porque es el código que dice que la firma no cierra.
  */
 async function mandar(sb: any, claves: any, userId: string, mensajes: any[]) {
   const { data: subs } = await sb.from('push_subscriptions').select('*').eq('user_id', userId);
+  const envios: { ok: boolean; status: number | null; error?: string; donde: string }[] = [];
   let enviados = 0;
   for (const s of subs ?? []) {
+    // De qué servicio es, sin exponer el endpoint entero, que es un secreto.
+    const donde = (() => { try { return new URL(s.endpoint).host; } catch { return '?'; } })();
     for (const m of mensajes) {
       try {
         const r = await enviarPush({ endpoint: s.endpoint, p256dh: s.p256dh, auth: s.auth },
           { title: m.titulo, body: m.cuerpo, url: m.url, tag: m.tag }, claves);
+        envios.push({ ok: r.ok, status: r.status, donde });
         if (r.ok) enviados++;
         else if (r.muerta) { await sb.from('push_subscriptions').delete().eq('id', s.id); break; }
-      } catch { /* un teléfono que falla no frena a los demás */ }
+      } catch (e) {
+        // Un teléfono que falla no frena a los demás, pero queda anotado.
+        envios.push({ ok: false, status: null, error: String(e?.message || e), donde });
+      }
     }
   }
-  return enviados;
+  return { enviados, envios };
 }

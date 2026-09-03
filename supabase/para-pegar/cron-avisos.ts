@@ -266,6 +266,38 @@ function clavesDelEntorno() {
 function faltanClaves() {
   return ["VAPID_PUBLIC", "VAPID_PRIVATE"].filter((n) => !Deno.env.get(n)?.trim());
 }
+async function parValido(claves) {
+  try {
+    const pub = b64uABytes(claves.publica);
+    if (pub.length !== 65 || pub[0] !== 4) return false;
+    const jwk = {
+      kty: "EC",
+      crv: "P-256",
+      ext: true,
+      x: bytesAB64u(pub.slice(1, 33)),
+      y: bytesAB64u(pub.slice(33, 65))
+    };
+    const privada = await crypto.subtle.importKey(
+      "jwk",
+      { ...jwk, d: claves.privada },
+      { name: "ECDSA", namedCurve: "P-256" },
+      false,
+      ["sign"]
+    );
+    const publica = await crypto.subtle.importKey(
+      "jwk",
+      jwk,
+      { name: "ECDSA", namedCurve: "P-256" },
+      false,
+      ["verify"]
+    );
+    const dato = texto("bishusha");
+    const firma = await crypto.subtle.sign({ name: "ECDSA", hash: "SHA-256" }, privada, dato);
+    return await crypto.subtle.verify({ name: "ECDSA", hash: "SHA-256" }, publica, firma, dato);
+  } catch {
+    return false;
+  }
+}
 
 // supabase/functions/cron-avisos/index.ts
 var MAX_POR_VEZ = 2;
@@ -298,18 +330,49 @@ Deno.serve(async (req) => {
   if (cuerpo.probar) {
     const u = await usuarioDe(req);
     if (!u) return json({ error: "sin sesi\xF3n" }, 401);
+    const faltan = faltanClaves();
+    const { data: subs } = await sb.from("push_subscriptions").select("*").eq("user_id", u.id);
+    const revision = {
+      VAPID_PUBLIC: !faltan.includes("VAPID_PUBLIC"),
+      VAPID_PRIVATE: !faltan.includes("VAPID_PRIVATE"),
+      VAPID_SUBJECT: !!Deno.env.get("VAPID_SUBJECT")?.trim(),
+      // La pública es pública por diseño: viaja en cada aviso. Devolverla es
+      // lo que permite comparar la de Supabase con la de Cloudflare, que es
+      // el error más silencioso de todos.
+      publica: claves?.publica ?? null,
+      parValido: claves ? await parValido(claves) : false,
+      suscripciones: (subs ?? []).length,
+      envios: []
+    };
     if (!claves) return json({
       enviados: 0,
-      motivo: `falta ${faltanClaves().join(" y ")} en los secretos de Supabase`
+      revision,
+      motivo: `falta ${faltan.join(" y ")} en los secretos de Supabase`
     });
-    const n = await mandar(sb, claves, u.id, [{
+    if (!revision.parValido) return json({
+      enviados: 0,
+      revision,
+      motivo: "VAPID_PUBLIC y VAPID_PRIVATE no son el mismo par: se generaron en dos veces distintas. Gener\xE1 el par de nuevo y pon\xE9 las dos."
+    });
+    if (!revision.suscripciones) return json({
+      enviados: 0,
+      revision,
+      motivo: "este tel\xE9fono no est\xE1 suscripto: prend\xE9 los avisos desde el tel\xE9fono, con la app agregada a la pantalla de inicio"
+    });
+    const { enviados, envios } = await mandar(sb, claves, u.id, [{
       tipo: "prueba",
       titulo: "Soy Bishu",
       tag: "prueba",
       url: "./#/hoy",
       cuerpo: "Si ves esto, los avisos te llegan aunque la app est\xE9 cerrada."
     }]);
-    return json({ enviados: n, motivo: n ? null : "este tel\xE9fono no est\xE1 suscripto" });
+    revision.envios = envios;
+    const rechazo = envios.find((e) => !e.ok);
+    return json({
+      enviados,
+      revision,
+      motivo: enviados ? null : rechazo ? `el servicio de push contest\xF3 ${rechazo.status}` + (rechazo.status === 401 || rechazo.status === 403 ? ": la firma no le cierra, casi siempre porque la clave p\xFAblica del navegador no es la del servidor" : rechazo.error ? ` (${rechazo.error})` : "") : "no se pudo mandar"
+    });
   }
   const hoy = /* @__PURE__ */ new Date();
   const per = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, "0")}`;
@@ -350,15 +413,23 @@ Deno.serve(async (req) => {
       titulo: mensajes[0].titulo,
       cuerpo: mensajes.map((m) => `${m.titulo}: ${m.cuerpo}`).join(" \xB7 ")
     });
-    const n = claves ? await mandar(sb, claves, u.user_id, mensajes.slice(0, MAX_POR_VEZ)) : 0;
+    const n = claves ? (await mandar(sb, claves, u.user_id, mensajes.slice(0, MAX_POR_VEZ))).enviados : 0;
     salida.push({ user: u.user_id, avisos: mensajes.map((m) => m.titulo), enviados: n });
   }
   return json({ ok: true, push: !!claves, salida });
 });
 async function mandar(sb, claves, userId, mensajes) {
   const { data: subs } = await sb.from("push_subscriptions").select("*").eq("user_id", userId);
+  const envios = [];
   let enviados = 0;
   for (const s of subs ?? []) {
+    const donde = (() => {
+      try {
+        return new URL(s.endpoint).host;
+      } catch {
+        return "?";
+      }
+    })();
     for (const m of mensajes) {
       try {
         const r = await enviarPush(
@@ -366,14 +437,16 @@ async function mandar(sb, claves, userId, mensajes) {
           { title: m.titulo, body: m.cuerpo, url: m.url, tag: m.tag },
           claves
         );
+        envios.push({ ok: r.ok, status: r.status, donde });
         if (r.ok) enviados++;
         else if (r.muerta) {
           await sb.from("push_subscriptions").delete().eq("id", s.id);
           break;
         }
-      } catch {
+      } catch (e) {
+        envios.push({ ok: false, status: null, error: String(e?.message || e), donde });
       }
     }
   }
-  return enviados;
+  return { enviados, envios };
 }

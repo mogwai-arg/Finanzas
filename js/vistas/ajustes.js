@@ -1,7 +1,7 @@
 // =====================================================================
 // vistas/ajustes.js
 // =====================================================================
-import { h, icono, aviso, confirmar, hoja, campo } from '../ui.js';
+import { h, frag, icono, aviso, confirmar, hoja, campo } from '../ui.js';
 import { state, salir, sincronizar, exportarJSON, pendientes, fallidas, DEMO,
          FUNCTIONS_URL, conectar, desconectar, leerAhora, mirarBandeja,
          guardar, probarAviso, generarClavesAviso } from '../db.js';
@@ -174,11 +174,7 @@ function seccionAvisos() {
       cabecera,
       boton ? h('div', { style: { padding: '0 14px 14px' } }, boton) : null,
       listo ? h('div', { style: { padding: '0 14px 14px' } },
-        h('button.btn.sec', { onclick: async () => {
-          try { const r = await probarAviso();
-                aviso(r.enviados ? 'Te lo mandé, mirá el teléfono' : 'No salió: ' + (r.motivo || 'revisá las claves')); }
-          catch (e) { aviso(e.message); }
-        } }, 'Mandarme uno de prueba')) : null,
+        h('button.btn.sec', { onclick: () => hojaPrueba() }, 'Mandarme uno de prueba')) : null,
       ...TIPOS.map(([k, titulo, detalle]) => {
         const chk = h('input', { type: 'checkbox', checked: prendido(k),
                                  disabled: !listo,
@@ -202,6 +198,89 @@ function seccionAvisos() {
     return h('div.li',
       h('div.m', h('div.t', 'Mínimo en la cuenta'),
         h('div.s', 'Debajo de esto, Bishu avisa')), inp);
+  }
+
+  /**
+   * El aviso de prueba, con el diagnóstico entero cuando no llega.
+   *
+   * Un aviso que no llega puede ser cinco cosas y todas se ven igual desde
+   * afuera: falta una clave, la pública y la privada no son el mismo par, la
+   * clave del navegador no es la del servidor, el teléfono no está suscripto,
+   * o el servicio de push rechaza la firma. Un "no salió, revisá las claves"
+   * en un cartelito no alcanza para arreglar ninguna de las cinco.
+   */
+  function hojaPrueba() {
+    const caja = h('div', h('div.small.mut', 'Mandando…'));
+    const cerrar = hoja('Aviso de prueba', caja);
+
+    probarAviso().then(r => {
+      const d = r.revision || {};
+      // La comparación que no puede hacer el servidor: la clave que tiene el
+      // navegador viene de Cloudflare y la del servidor de Supabase. Que las
+      // dos existan no quiere decir que sean la misma, y cuando no lo son el
+      // servicio de push contesta 403 sin explicar nada.
+      const delNavegador = (window.CONFIG?.VAPID_PUBLIC || '').trim();
+      const coincide = d.publica && delNavegador
+        ? d.publica === delNavegador : null;
+
+      const filas = [
+        ['VAPID_PUBLIC en Supabase', d.VAPID_PUBLIC,
+         'Va también en Supabase, no solo en Cloudflare: viaja en cada aviso.'],
+        ['VAPID_PRIVATE en Supabase', d.VAPID_PRIVATE, null],
+        ['VAPID_SUBJECT en Supabase', d.VAPID_SUBJECT,
+         'Con tu mail: mailto:vos@ejemplo.com'],
+        ['Las dos claves son el mismo par', d.parValido,
+         'Si generaste el par dos veces, puede haber quedado la pública de una ' +
+         'y la privada de la otra. Generá uno nuevo y poné las dos.'],
+        ['La del navegador es la misma', coincide,
+         coincide === null
+           ? 'Falta la clave en Cloudflare Pages, o no republicaste después de ponerla.'
+           : 'La de Cloudflare Pages tiene que ser idéntica a la de Supabase.'],
+        ['Este teléfono está suscripto', d.suscripciones > 0,
+         'Se prende desde el teléfono, con la app agregada a la pantalla de inicio.']
+      ];
+
+      caja.replaceChildren(h('div.flow', { style: { gap: '14px' } },
+        h('div.grp.pad', { style: { display: 'flex', alignItems: 'center', gap: '13px' } },
+          h('div', { style: { color: r.enviados ? 'var(--pos)' : 'var(--amb)', flex: 'none' } },
+            bishu(r.enviados ? 'festejo' : 'atento', 44)),
+          h('div',
+            h('div', { style: { fontWeight: '600', marginBottom: '2px' } },
+              r.enviados ? 'Salió, mirá el teléfono' : 'No salió'),
+            h('div.small.mut', { style: { lineHeight: '1.45' } },
+              r.enviados
+                ? 'Si no aparece nada, el teléfono tiene los avisos de esta app apagados ' +
+                  'en los ajustes del sistema.'
+                : (r.motivo || 'Abajo está qué falta.')))),
+
+        h('div', h('div.ghead', 'Qué está puesto'),
+          h('div.grp', filas.map(([que, ok, ayuda]) => h('div.li',
+            h('div', { class: 'av ' + (ok ? 'pos' : 'amb') },
+              icono(ok ? 'check' : 'cerrar', 15)),
+            h('div.m', h('div.t', que),
+              !ok && ayuda ? h('div.s', { style: { whiteSpace: 'normal',
+                                                   lineHeight: '1.4' } }, ayuda) : null))))),
+
+        (d.envios || []).length ? h('div',
+          h('div.ghead', 'Qué contestó el servicio de push'),
+          h('div.grp', d.envios.map(e => h('div.li',
+            h('div.m', h('div.t', e.donde || 'el servicio'),
+              h('div.s', e.error ? e.error : `código ${e.status}`)),
+            h('div.v', { style: { color: e.ok ? 'var(--pos)' : 'var(--neg)' } },
+              e.ok ? 'OK' : 'falló'))))) : null,
+
+        d.publica ? h('div.small.mut', { style: { lineHeight: '1.5' } },
+          'La clave pública del servidor termina en ',
+          h('b', String(d.publica).slice(-12)),
+          delNavegador ? frag(' y la del navegador en ', h('b', delNavegador.slice(-12)), '.')
+                       : '; el navegador no tiene ninguna.') : null,
+
+        h('button.btn.sec', { onclick: () => { cerrar(); hojaClaves(); } },
+          'Generar un par nuevo')));
+    }).catch(e => caja.replaceChildren(
+      h('div.small.mut', { style: { lineHeight: '1.5' } }, String(e.message || e))));
+
+    return cerrar;
   }
 
   /**

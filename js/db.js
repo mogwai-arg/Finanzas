@@ -6,6 +6,19 @@
 import { normalizar } from './filas.js';
 export { normalizar };
 
+/**
+ * Tablas que además del id tienen una clave natural única.
+ *
+ * Sin decirle esto a upsert, resuelve el conflicto SOLO por id: una fila
+ * nueva para un (recurring_id, periodo) que ya existe con otro id choca
+ * contra el unique, la escritura se encola, se reintenta cinco veces y
+ * termina apartada. Y lo peor no es que falle: es que la app ya se había
+ * pintado como si hubiera andado, así que el pago se veía hecho hasta que la
+ * siguiente sincronización traía la fila vieja del servidor y el gasto fijo
+ * volvía a aparecer pendiente, sin que nada dijera por qué.
+ */
+const CLAVE_NATURAL = { recurring_payments: 'recurring_id,periodo' };
+
 const CFG = window.CONFIG || {};
 export const DEMO = !!CFG.DEMO;
 
@@ -73,6 +86,9 @@ const escribir = (k, v) => localStorage.setItem(k, JSON.stringify(v));
 export const pendientes = () => leer(COLA_KEY).length;
 export const fallidas   = () => leer(ROTAS_KEY);
 
+const opcionesUpsert = tabla =>
+  CLAVE_NATURAL[tabla] ? { onConflict: CLAVE_NATURAL[tabla] } : undefined;
+
 function encolar(op) {
   const c = leer(COLA_KEY);
   // Una fila que se guarda dos veces no necesita subir dos veces.
@@ -110,7 +126,8 @@ export async function flushCola({ reintentarFallidas = false } = {}) {
       // se guardaron antes de que existiera este filtro, y sin esto seguirian
       // fallando por el mismo campo de mas para siempre.
       const { error } = op.accion === 'upsert'
-        ? await sb.from(op.tabla).upsert(normalizar(op.tabla, op.fila))
+        ? await sb.from(op.tabla).upsert(normalizar(op.tabla, op.fila),
+                                         opcionesUpsert(op.tabla))
         : await sb.from(op.tabla).delete().eq('id', op.id);
       if (error) throw new Error(error.message);
     } catch (e) {
@@ -395,7 +412,7 @@ export async function guardar(tabla, fila) {
   if (DEMO) return nueva;
   if (navigator.onLine) {
     try {
-      const { error } = await sb.from(tabla).upsert(nueva);
+      const { error } = await sb.from(tabla).upsert(nueva, opcionesUpsert(tabla));
       if (error) throw new Error(error.message);
     } catch (e) { encolar({ accion: 'upsert', tabla, fila: nueva }); }
   } else encolar({ accion: 'upsert', tabla, fila: nueva });
@@ -439,7 +456,7 @@ export async function guardarVarios(tabla, filas) {
   if (DEMO) return nuevas;
   if (navigator.onLine) {
     try {
-      const { error } = await sb.from(tabla).upsert(nuevas);
+      const { error } = await sb.from(tabla).upsert(nuevas, opcionesUpsert(tabla));
       if (error) throw new Error(error.message);
       return nuevas;
     } catch (e) { /* abajo se encolan */ }
