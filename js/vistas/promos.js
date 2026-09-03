@@ -3,10 +3,10 @@
 // La barra de tope consumido es lo que hace honesta la pantalla: una promo
 // de "25 %" con el tope al 62 % ya no es del 25 %.
 // =====================================================================
-import { h, icono, iconoDe, aviso, hoja } from '../ui.js';
+import { h, icono, iconoDe, aviso, hoja, campo } from '../ui.js';
 import { state, guardar, traerPromos } from '../db.js';
 import * as F from '../finance.js';
-import { plata, hoyISO } from '../formato.js';
+import { plata, hoyISO, aNumero } from '../formato.js';
 import { formPromo } from './formularios.js';
 import { posicion, sucursalesCerca, distanciaTexto, mapsUrl } from '../geo.js';
 
@@ -81,15 +81,19 @@ export function vistaPromos(root) {
         // Un toque para que aparezca en Hoy el día que cae, y otro para que
         // deje de aparecer. Es la única forma de que la de una vez al mes no
         // se pase: nadie entra a esta pantalla el día justo.
-        h('button.iconbtn', { 'aria-label': p.recordar ? 'No recordarme esta promo'
-                                                       : 'Recordarme esta promo',
-          'aria-pressed': String(!!p.recordar),
-          style: { flex: 'none', color: p.recordar ? 'var(--bra)' : 'var(--tx3)' },
+        //
+        // Antes era una campana sola, y una campana sola no dice si está
+        // prendida o apagada: había que acordarse del color. Con la palabra
+        // no hay nada que adivinar.
+        h('button', { 'aria-pressed': String(!!p.recordar),
+          class: 'pill ' + (p.recordar ? 'bra' : 'mut'),
+          style: { flex: 'none', border: '0', cursor: 'pointer', minHeight: '32px',
+                   padding: '0 10px' },
           onclick: async e => {
             e.stopPropagation();
             await guardar('promos', { ...p, recordar: !p.recordar });
             aviso(p.recordar ? 'No te la recuerdo más' : 'Te la recuerdo en Hoy');
-          } }, icono('campana', 18))),
+          } }, icono('campana', 13), p.recordar ? 'Te aviso' : 'Avisame')),
       tope > 0 && h('div', { style: { marginTop: '11px' } },
         h('div', { style: { display: 'flex', justifyContent: 'space-between',
                             fontSize: '11.5px', color: 'var(--tx2)', marginBottom: '5px' } },
@@ -101,7 +105,64 @@ export function vistaPromos(root) {
       tope > 0 && usado >= tope && h('div.small', { style: { color: 'var(--amb)', marginTop: '7px',
                                                              fontWeight: '600' } },
         'Tope agotado este mes'),
+      // La barra no se movía nunca. El tope solo se llenaba confirmando un
+      // movimiento en Revisar, que es donde uno NO está cuando se acuerda de
+      // que usó la promo. Una barra que siempre marca cero enseña a no
+      // mirarla, y era justo lo que hacía honesta a la pantalla.
+      tope > 0 ? h('div', { style: { marginTop: '11px' } },
+        h('button.btn.sec', { style: { minHeight: '40px', fontSize: '13.5px' },
+                              onclick: () => hojaUso(p, usado, uso) },
+          icono('mas', 15), usado > 0 ? 'Sumar otro uso' : 'Anotar que la usé')) : null,
       cerca(p));
+  }
+
+  /**
+   * Anotar lo que te devolvió una promo, desde donde la estás mirando.
+   *
+   * Lo que llena el tope es el REINTEGRO, no lo que gastaste: el tope de una
+   * promo de 20 % con $ 15.000 de límite se agota a los $ 75.000 de compra.
+   * Como uno se acuerda del gasto y no del reintegro, se pueden poner los dos
+   * y la app hace la cuenta.
+   */
+  function hojaUso(p, usado, uso) {
+    const valor = Number(p.valor) || 0;
+    const cGasto = h('input', { type: 'text', inputmode: 'decimal', placeholder: '0' });
+    const cVuelta = h('input', { type: 'text', inputmode: 'decimal', placeholder: '0' });
+    const cuenta = h('div.small.mut', { style: { marginTop: '-8px', lineHeight: '1.45' } });
+
+    const recalcular = origen => {
+      const g = aNumero(cGasto.value), v = aNumero(cVuelta.value);
+      if (origen === 'gasto' && valor > 0) cVuelta.value = String(Math.round(g * valor / 100));
+      if (origen === 'vuelta' && valor > 0 && v) cGasto.value = String(Math.round(v * 100 / valor));
+      const nuevo = usado + aNumero(cVuelta.value);
+      const tope = Number(p.tope) || 0;
+      cuenta.textContent = tope > 0
+        ? `Del tope llevarías ${plata(Math.round(nuevo))} de ${plata(tope)}` +
+          (nuevo >= tope ? ': queda agotado este mes.' : '.')
+        : '';
+    };
+    cGasto.addEventListener('input', () => recalcular('gasto'));
+    cVuelta.addEventListener('input', () => recalcular('vuelta'));
+    recalcular();
+
+    const cerrarUso = hoja(`Usé la de ${p.titulo}`, h('div',
+      h('div.small.mut', { style: { lineHeight: '1.55', marginBottom: '14px' } },
+        'Lo que llena el tope es lo que te devuelven, no lo que gastaste. ',
+        valor > 0 ? `Con ${valor} %, poné uno y calculo el otro.` : ''),
+      campo('Cuánto gastaste', cGasto),
+      campo('Cuánto te vuelve', cVuelta),
+      cuenta,
+      h('button.btn', { style: { marginTop: '16px' }, onclick: async () => {
+        const v = aNumero(cVuelta.value);
+        if (!v) { cVuelta.focus(); aviso('Falta cuánto te vuelve'); return; }
+        const per = hoyISO().slice(0, 7);
+        await guardar('promo_usos', uso
+          ? { ...uso, usado: Number(uso.usado) + v }
+          : { promo_id: p.id, periodo: per, usado: v });
+        cerrarUso();
+        aviso('Anotado');
+        pintar();
+      } }, 'Anotarlo')));
   }
 
   // --------------------------------------------------- cercania por GPS
