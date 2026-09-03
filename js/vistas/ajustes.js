@@ -239,19 +239,27 @@ function seccionAvisos() {
       const coincide = d.publica && delNavegador
         ? d.publica === delNavegador : null;
 
+      // Las dos claves tienen que estar para poder decir si son el mismo par
+      // o si coinciden con la del navegador. Sin ellas eso no se sabe, y
+      // marcarlo con una cruz sería tres problemas donde hay uno: es el mismo
+      // error de mostrar la consecuencia como si fuera otra causa.
+      const hayClaves = d.VAPID_PUBLIC && d.VAPID_PRIVATE;
       const filas = [
         ['VAPID_PUBLIC en Supabase', d.VAPID_PUBLIC,
          'Va también en Supabase, no solo en Cloudflare: viaja en cada aviso.'],
         ['VAPID_PRIVATE en Supabase', d.VAPID_PRIVATE, null],
         ['VAPID_SUBJECT en Supabase', d.VAPID_SUBJECT,
          'Con tu mail: mailto:vos@ejemplo.com'],
-        ['Las dos claves son el mismo par', d.parValido,
-         'Si generaste el par dos veces, puede haber quedado la pública de una ' +
-         'y la privada de la otra. Generá uno nuevo y poné las dos.'],
-        ['La del navegador es la misma', coincide,
-         coincide === null
-           ? 'Falta la clave en Cloudflare Pages, o no republicaste después de ponerla.'
-           : 'La de Cloudflare Pages tiene que ser idéntica a la de Supabase.'],
+        ['Las dos claves son el mismo par', hayClaves ? d.parValido : null,
+         hayClaves
+           ? 'Si generaste el par dos veces, puede haber quedado la pública de una ' +
+             'y la privada de la otra. Generá uno nuevo y poné las dos.'
+           : 'Se puede saber cuando estén las dos.'],
+        ['La del navegador es la misma', !d.VAPID_PUBLIC ? null : coincide,
+         !d.VAPID_PUBLIC ? 'Se puede saber cuando esté la del servidor.'
+           : coincide === null
+             ? 'Falta la clave en Cloudflare Pages, o no republicaste después de ponerla.'
+             : 'La de Cloudflare Pages tiene que ser idéntica a la de Supabase.'],
         ['Este teléfono está suscripto', d.suscripciones > 0,
          'Se prende desde el teléfono, con la app agregada a la pantalla de inicio.']
       ];
@@ -271,9 +279,10 @@ function seccionAvisos() {
 
         h('div', h('div.ghead', 'Qué está puesto'),
           h('div.grp', filas.map(([que, ok, ayuda]) => h('div.li',
-            h('div', { class: 'av ' + (ok ? 'pos' : 'amb') },
-              icono(ok ? 'check' : 'cerrar', 15)),
-            h('div.m', h('div.t', que),
+            h('div', { class: 'av ' + (ok ? 'pos' : ok === null ? '' : 'amb') },
+              ok === null ? h('span', { style: { fontWeight: '700' } }, '—')
+                          : icono(ok ? 'check' : 'cerrar', 15)),
+            h('div.m', h('div.t', { style: ok === null ? { color: 'var(--tx3)' } : {} }, que),
               !ok && ayuda ? h('div.s', { style: { whiteSpace: 'normal',
                                                    lineHeight: '1.4' } }, ayuda) : null))))),
 

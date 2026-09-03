@@ -17,11 +17,11 @@
 // se miran para saber dónde uno está parado, no para decidir hoy: acá tienen
 // una pantalla sola y no se repiten en ninguna otra.
 // =====================================================================
-import { h, frag, icono, iconoDeCategoria } from '../ui.js';
+import { h, frag, icono, iconoDeCategoria, hoja } from '../ui.js';
 import { state } from '../db.js';
 import * as F from '../finance.js';
 import * as S from '../sueldo.js';
-import { plata, plataPartida, hoyISO, buscar, nombreDe } from '../formato.js';
+import { plata, plataPartida, hoyISO, buscar, nombreDe, tituloTx } from '../formato.js';
 import { barrasHorizontales, barrasPorMes, leyenda } from '../graficos.js';
 import { irA } from '../ruteo.js';
 import { formPresupuesto } from './formularios.js';
@@ -82,8 +82,11 @@ function balance(per, moneda, hoy) {
                           state.recurring_payments, hoy, moneda);
   const hayLibre = pl.enCuentas || pl.resumenes || pl.fijos;
 
-  return h('div.grp.pad',
-    h('div.ghead', { style: { margin: '0 0 5px' } }, 'Entró y salió este mes'),
+  return h('button.grp.pad', { style: { width: '100%', textAlign: 'left', border: '0',
+                                        display: 'block', cursor: 'pointer' },
+                               onclick: () => hojaDeDondeSale(per, moneda) },
+    h('div.ghead', { style: { margin: '0 0 5px' } }, 'Entró y salió este mes',
+      h('span', { style: { textTransform: 'none', letterSpacing: '0' } }, 'De dónde sale')),
     // El mes en curso NO se pinta: con el sueldo adentro el día 1 y los
     // gastos sin hacer, un número verde enorme dice "vas bárbaro" todos los
     // meses. El color se gana cuando el mes cerró.
@@ -109,6 +112,78 @@ function balance(per, moneda, hoy) {
                                   borderTop: '1px solid var(--line)', lineHeight: '1.5' } },
       `Va el día ${dia} de ${enElMes}: el mes todavía no terminó, así que la `,
       'diferencia se mueve hasta fin de mes.'));
+}
+
+/**
+ * De dónde sale cada número, fila por fila.
+ *
+ * Un total que no cierra con la cabeza de uno no se puede discutir: o se le
+ * cree a la app o no se le cree, y cuando no se le cree la app deja de servir
+ * para lo único que sirve. Así que el número se abre y se puede auditar.
+ *
+ * Lo que quedó AFUERA es la mitad de la explicación: una movida entre cuentas
+ * propias y un pago de tarjeta no son gasto —el gasto ya se contó el día de la
+ * compra— y son justo los importes grandes que uno espera ver en el total.
+ */
+function hojaDeDondeSale(per, moneda) {
+  const d = F.deDondeSale(state.transactions, per, moneda, state.accounts);
+  const m = Number(per.slice(5, 7));
+  const linea = (izq, der, chico) => h('div.li',
+    h('div.m', h('div.t', izq), chico ? h('div.s', chico) : null),
+    h('div.v', der));
+
+  return hoja(`${MES_LARGO[m - 1]}, de dónde sale`, h('div.flow', { style: { gap: '16px' } },
+
+    h('div',
+      h('div.ghead', 'Entró', h('span.tabnum', { style: { textTransform: 'none',
+                                                          letterSpacing: '0' } },
+        plata(d.totalIngresos, moneda))),
+      d.ingresos.length
+        ? h('div.grp', d.ingresos.map(({ tx, monto }) => linea(
+            tituloTx(tx), plata(Math.round(monto), moneda),
+            `${String(tx.fecha).slice(8, 10)}/${String(tx.fecha).slice(5, 7)}` +
+            (tx.account_id ? ` · ${nombreDe('accounts', tx.account_id, '')}` : ''))))
+        : h('div.grp.pad', h('div.small.mut', 'No hay ingresos cargados este mes.'))),
+
+    h('div',
+      h('div.ghead', `Salió · ${d.cuantosGastos} ${d.cuantosGastos === 1 ? 'gasto' : 'gastos'}`,
+        h('span.tabnum', { style: { textTransform: 'none', letterSpacing: '0' } },
+          plata(d.totalGastos, moneda))),
+      // Las categorías suman EXACTAMENTE el total de arriba: eso es lo que
+      // hace que el número se pueda verificar en vez de creer.
+      h('div.grp', d.categorias.map(c => linea(
+        c.id ? nombreDe('categories', c.id, 'Sin categoría') : 'Sin categoría',
+        plata(Math.round(c.monto), moneda),
+        `${c.cuantos} ${c.cuantos === 1 ? 'movimiento' : 'movimientos'}`)))),
+
+    (d.movidas.cuantas || d.pagosTarjeta.cuantos) ? h('div',
+      h('div.ghead', 'No cuenta como gasto'),
+      h('div.grp',
+        d.pagosTarjeta.cuantos ? linea('Pagos de tarjeta',
+          plata(Math.round(d.pagosTarjeta.monto), moneda),
+          'el gasto ya se contó el día de la compra') : null,
+        d.movidas.cuantas ? linea('Movidas entre tus cuentas',
+          plata(Math.round(d.movidas.monto), moneda),
+          `${d.movidas.cuantas} ${d.movidas.cuantas === 1 ? 'movimiento' : 'movimientos'}`) : null))
+      : null,
+
+    d.repetidos.length ? h('div',
+      h('div.ghead', 'Puede estar cargado dos veces'),
+      h('div.grp', d.repetidos.slice(0, 8).map(r => linea(
+        r.txs.map(t => tituloTx(t)).join(' · ').slice(0, 46),
+        `${r.cuantos} × ${plata(Math.round(r.monto), moneda)}`,
+        `${r.fecha.slice(8, 10)}/${r.fecha.slice(5, 7)} · mismo día y mismo importe`))),
+      h('div.small.mut', { style: { padding: '10px 4px 0', lineHeight: '1.5' } },
+        'Pasa cuando el mismo consumo entra por el correo y además se importa ',
+        'del resumen. Dos cafés iguales el mismo día también existen, así que ',
+        'no se borran solos: miralos en Gastos y borrá el que sobre.'),
+      h('button.btn.sec', { style: { marginTop: '10px' },
+                            onclick: () => irA('/gastos') }, 'Ver en Gastos')) : null,
+
+    h('div.small.mut', { style: { lineHeight: '1.5' } },
+      'Si algún número no cierra, es acá donde se ve por qué. Los gastos de ',
+      'arriba son los del mes en que se compraron, no los del mes en que se ',
+      'pagan: una compra en cuotas cuenta entera el día que la hiciste.')));
 }
 
 // ---------------------------------------------------------------- por mes

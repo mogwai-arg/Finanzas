@@ -957,4 +957,54 @@ t('el dia del vencimiento todavia cuenta', () => {
 });
 
 
+
+// ------------------------------------------------ de dónde sale el número
+t('un movimiento sin moneda cuenta como pesos, no desaparece', () => {
+  // La base pone 'ARS' por omision, pero una fila vieja puede venir sin nada.
+  // Comparando con ===, esa fila no era ni de pesos ni de dolares: el sueldo
+  // en sobre no sumaba a lo que entro y la app decia que habia entrado la
+  // mitad, sin que nada dijera que faltaba algo.
+  const txs = [{ id: '1', fecha: '2026-09-01', tipo: 'ingreso', monto: 2026665, moneda: 'ARS' },
+               { id: '2', fecha: '2026-09-01', tipo: 'ingreso', monto: 1532000 }];
+  assert.equal(F.resumenMes(txs, '2026-09', 'ARS').ingresos, 3558665);
+});
+
+t('las categorías suman exactamente lo que salió', () => {
+  const txs = [{ id: '1', fecha: '2026-09-02', tipo: 'gasto', monto: 100, moneda: 'ARS', category_id: 'a' },
+               { id: '2', fecha: '2026-09-03', tipo: 'gasto', monto: 50, moneda: 'ARS', category_id: 'a' },
+               { id: '3', fecha: '2026-09-04', tipo: 'gasto', monto: 30, moneda: 'ARS', category_id: 'b' }];
+  const d = F.deDondeSale(txs, '2026-09', 'ARS', []);
+  assert.equal(d.totalGastos, 180);
+  assert.equal(d.categorias.reduce((s, c) => s + c.monto, 0), 180);
+  assert.equal(d.categorias[0].cuantos, 2);      // de mayor a menor
+});
+
+t('el pago de tarjeta y la movida se separan, y ninguno es gasto', () => {
+  const cuentas = [{ id: 'tj', tipo: 'credito' }, { id: 'mp', tipo: 'cuenta' }];
+  const txs = [{ id: '1', fecha: '2026-09-02', tipo: 'transferencia', monto: 939323,
+                 moneda: 'ARS', destino_account_id: 'tj' },
+               { id: '2', fecha: '2026-09-02', tipo: 'transferencia', monto: 652800,
+                 moneda: 'ARS', destino_account_id: 'mp' }];
+  const d = F.deDondeSale(txs, '2026-09', 'ARS', cuentas);
+  assert.equal(d.totalGastos, 0);
+  assert.equal(d.pagosTarjeta.monto, 939323);
+  assert.equal(d.movidas.monto, 652800);
+});
+
+t('mismo día y mismo importe se marca como posible repetido', () => {
+  const txs = [{ id: '1', fecha: '2026-09-02', tipo: 'gasto', monto: 48200, moneda: 'ARS' },
+               { id: '2', fecha: '2026-09-02', tipo: 'gasto', monto: 48200, moneda: 'ARS' },
+               { id: '3', fecha: '2026-09-03', tipo: 'gasto', monto: 48200, moneda: 'ARS' }];
+  const r = F.repetidos(txs);
+  assert.equal(r.length, 1);
+  assert.equal(r[0].cuantos, 2);
+});
+
+t('una transferencia nunca se marca como repetida', () => {
+  // Pagar dos tarjetas el mismo dia el mismo importe es normal.
+  const txs = [{ id: '1', fecha: '2026-09-02', tipo: 'transferencia', monto: 5000, moneda: 'ARS' },
+               { id: '2', fecha: '2026-09-02', tipo: 'transferencia', monto: 5000, moneda: 'ARS' }];
+  assert.equal(F.repetidos(txs).length, 0);
+});
+
 console.log(`\n${ok} pruebas OK`);

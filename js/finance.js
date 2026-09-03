@@ -21,6 +21,17 @@ export function periodoSuma(p, n) {
   const d = new Date(y, m - 1 + n, 1);
   return periodo(d);
 }
+/**
+ * La moneda de un movimiento, con pesos por omision.
+ *
+ * La base pone 'ARS' por omision, pero una fila vieja o traida por un
+ * importador puede llegar sin nada. Comparando con === , esa fila no era ni
+ * de pesos ni de dolares: desaparecia de TODAS las pantallas —no aparecia en
+ * Gastos, no sumaba al mes, no contaba en las estadisticas— sin que nada
+ * dijera que existia. Plata invisible es peor que plata mal sumada.
+ */
+export const monedaDe = tx => tx.moneda || 'ARS';
+
 export function parseFecha(s) {
   const [y, m, d] = String(s).slice(0, 10).split('-').map(Number);
   return new Date(y, m - 1, d);
@@ -184,7 +195,7 @@ export function totalTarjetaEnPeriodo(txs, tarjeta, per, moneda = 'ARS') {
   let total = 0;
   for (const tx of txs) {
     if (tx.account_id !== tarjeta.id) continue;
-    if (tx.moneda !== moneda) continue;
+    if (monedaDe(tx) !== moneda) continue;
     if (tx.tipo !== 'gasto') continue;
     for (const c of cronograma(tx, tarjeta)) {
       if (c.periodoVenc === per) total += c.monto;
@@ -216,7 +227,7 @@ export function comprometidoEnPeriodo(txs, tarjeta, per, moneda = 'ARS') {
 export function cuotasComprometidas(txs, tarjeta, per, moneda = 'ARS') {
   const out = [];
   for (const tx of txs) {
-    if (tx.account_id !== tarjeta.id || tx.tipo !== 'gasto' || tx.moneda !== moneda) continue;
+    if (tx.account_id !== tarjeta.id || tx.tipo !== 'gasto' || monedaDe(tx) !== moneda) continue;
     const cron = cronograma(tx, tarjeta);
     for (const c of cron) {
       // La cuota 1 es la compra de este ciclo; de la 2 en adelante viene de antes.
@@ -275,7 +286,7 @@ export function deudaFutura(txs, tarjetas, moneda = 'ARS', ref = hoy(), meses = 
   const mapa = {};
   const desde = periodo(ref);
   for (const tx of txs) {
-    if (tx.tipo !== 'gasto' || tx.moneda !== moneda) continue;
+    if (tx.tipo !== 'gasto' || monedaDe(tx) !== moneda) continue;
     const t = idx[tx.account_id];
     if (!t || t.tipo !== 'credito') continue;
     for (const c of cronograma(tx, t, ref)) {
@@ -308,7 +319,7 @@ export function limiteDeTarjeta(tarjeta, txs, ref = hoy(), moneda = 'ARS', pagad
   const limite = Number(tarjeta.limite) || 0;
   let consumido = 0;
   for (const tx of txs) {
-    if (tx.account_id !== tarjeta.id || tx.tipo !== 'gasto' || tx.moneda !== moneda) continue;
+    if (tx.account_id !== tarjeta.id || tx.tipo !== 'gasto' || monedaDe(tx) !== moneda) continue;
     for (const c of cronograma(tx, tarjeta, ref)) if (c.pendiente) consumido += c.monto;
   }
   // Pagar el resumen libera el limite en el momento, no cuando vence.
@@ -360,7 +371,7 @@ export function resumenMes(txs, per, moneda = 'ARS') {
     // Comprar dolares es una transferencia en pesos que deja dolares del otro
     // lado. Mirando en dolares, esa plata entro: si solo se mira la moneda de
     // origen, la operacion no existe en ninguna de las dos pantallas.
-    if (tx.moneda !== moneda) {
+    if (monedaDe(tx) !== moneda) {
       if (tx.tipo === 'transferencia' && tx.moneda_destino === moneda &&
           tx.monto_destino != null && periodo(parseFecha(tx.fecha)) === per)
         movido += Number(tx.monto_destino) || 0;
@@ -427,7 +438,7 @@ export function gastoPorCategoria(txs, per, moneda = 'ARS') {
 export function movimientosEnMoneda(txs, moneda) {
   const out = [];
   for (const tx of txs) {
-    if (tx.moneda === moneda) { out.push({ tx, entrante: false, monto: Number(tx.monto) || 0 }); continue; }
+    if (monedaDe(tx) === moneda) { out.push({ tx, entrante: false, monto: Number(tx.monto) || 0 }); continue; }
     if (tx.tipo === 'transferencia' && tx.moneda_destino === moneda && tx.monto_destino != null)
       out.push({ tx, entrante: true, monto: Number(tx.monto_destino) || 0 });
   }
@@ -444,7 +455,7 @@ export function movimientosEnMoneda(txs, moneda) {
 export function gastadoAlDia(txs, per, dia, moneda = 'ARS') {
   let total = 0;
   for (const tx of txs) {
-    if (tx.moneda !== moneda || tx.tipo !== 'gasto') continue;
+    if (monedaDe(tx) !== moneda || tx.tipo !== 'gasto') continue;
     const f = parseFecha(tx.fecha);
     if (periodo(f) !== per || f.getDate() > dia) continue;
     total += Number(tx.monto);
@@ -935,4 +946,77 @@ export function money(n, moneda = 'ARS') {
   return new Intl.NumberFormat('es-AR', {
     style: 'currency', currency: moneda, maximumFractionDigits: v % 1 === 0 ? 0 : 2
   }).format(v);
+}
+
+/**
+ * De donde sale el "entro y salio" de un mes, fila por fila.
+ *
+ * Existe porque un total que no cierra con la cabeza de uno no se puede
+ * discutir: o se le cree a la app o no se le cree, y cuando no se le cree la
+ * app deja de servir. Esto abre el numero: cada ingreso, cada gasto agrupado
+ * por categoria, lo que quedo AFUERA a proposito, y los movimientos que
+ * parecen cargados dos veces.
+ *
+ * Lo que queda afuera es la mitad de la explicacion: una transferencia entre
+ * cuentas propias y un pago de tarjeta no son gasto —el gasto ya se conto el
+ * dia de la compra— y son justo los importes grandes que uno espera ver.
+ */
+export function deDondeSale(txs, per, moneda = 'ARS', cuentas = []) {
+  const esCredito = id => (cuentas.find(a => a.id === id) || {}).tipo === 'credito';
+  const delMes = txs.filter(tx => periodo(parseFecha(tx.fecha)) === per &&
+                                  monedaDe(tx) === moneda);
+
+  const ingresos = delMes.filter(tx => tx.tipo === 'ingreso');
+  const gastos = delMes.filter(tx => tx.tipo !== 'ingreso' && tx.tipo !== 'transferencia');
+  const movidas = delMes.filter(tx => tx.tipo === 'transferencia' &&
+                                      !esCredito(tx.destino_account_id));
+  const pagosTarjeta = delMes.filter(tx => tx.tipo === 'transferencia' &&
+                                           esCredito(tx.destino_account_id));
+
+  const suma = l => round2(l.reduce((s, tx) => s + (Number(tx.monto) || 0), 0));
+
+  // Por categoria, de mayor a menor: la suma de estas filas es exactamente el
+  // total de arriba, y eso es lo que lo hace verificable.
+  const porCat = new Map();
+  for (const tx of gastos) {
+    const k = tx.category_id || 'sin';
+    const c = porCat.get(k) || { id: tx.category_id || null, monto: 0, cuantos: 0 };
+    c.monto = round2(c.monto + (Number(tx.monto) || 0));
+    c.cuantos++;
+    porCat.set(k, c);
+  }
+
+  return {
+    ingresos: ingresos.map(tx => ({ tx, monto: Number(tx.monto) || 0 }))
+                      .sort((a, b) => b.monto - a.monto),
+    totalIngresos: suma(ingresos),
+    categorias: [...porCat.values()].sort((a, b) => b.monto - a.monto),
+    totalGastos: suma(gastos),
+    cuantosGastos: gastos.length,
+    movidas: { cuantas: movidas.length, monto: suma(movidas) },
+    pagosTarjeta: { cuantos: pagosTarjeta.length, monto: suma(pagosTarjeta) },
+    repetidos: repetidos(delMes)
+  };
+}
+
+/**
+ * Movimientos que parecen cargados dos veces: mismo dia, mismo importe.
+ *
+ * Es lo que pasa cuando el mismo consumo entra por el correo y ademas se
+ * importa del resumen, o cuando uno lo anota a mano y despues aparece solo.
+ * No se borran solos —dos cafes de 4.500 el mismo dia existen— pero un total
+ * que no cierra casi siempre empieza aca.
+ */
+export function repetidos(txs) {
+  const grupos = new Map();
+  for (const tx of txs) {
+    if (tx.tipo === 'transferencia') continue;
+    const k = `${String(tx.fecha).slice(0, 10)}|${Math.round(Number(tx.monto) * 100)}`;
+    if (!grupos.has(k)) grupos.set(k, []);
+    grupos.get(k).push(tx);
+  }
+  return [...grupos.values()].filter(g => g.length > 1)
+    .map(g => ({ fecha: String(g[0].fecha).slice(0, 10), monto: Number(g[0].monto) || 0,
+                 cuantos: g.length, txs: g }))
+    .sort((a, b) => (b.monto * b.cuantos) - (a.monto * a.cuantos));
 }
