@@ -214,7 +214,23 @@ function seccionAvisos() {
     const cerrar = hoja('Aviso de prueba', caja);
 
     probarAviso().then(r => {
-      const d = r.revision || {};
+      // Sin `revision`, el servidor todavía tiene la versión vieja de
+      // cron-avisos: no sabe contestar nada de esto. Decir que faltan las seis
+      // cosas sería mentir con seis cruces.
+      if (!r.revision) {
+        caja.replaceChildren(h('div.flow', { style: { gap: '14px' } },
+          h('div.grp.pad', { style: { display: 'flex', alignItems: 'center', gap: '13px' } },
+            h('div', { style: { color: 'var(--amb)', flex: 'none' } }, bishu('atento', 44)),
+            h('div',
+              h('div', { style: { fontWeight: '600', marginBottom: '2px' } },
+                'El servidor tiene la versión vieja'),
+              h('div.small.mut', { style: { lineHeight: '1.45' } },
+                'Contestó “', String(r.motivo || 'sin detalle'), '”, que es lo que decía ',
+                'antes. Pegá de nuevo la función cron-avisos en Supabase y ',
+                'volvé a probar: la nueva revisa las seis cosas de a una.')))));
+        return;
+      }
+      const d = r.revision;
       // La comparación que no puede hacer el servidor: la clave que tiene el
       // navegador viene de Cloudflare y la del servidor de Supabase. Que las
       // dos existan no quiere decir que sean la misma, y cuando no lo son el

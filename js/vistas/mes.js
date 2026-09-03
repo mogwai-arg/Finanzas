@@ -212,7 +212,7 @@ export function formPago(r, periodo) {
           descripcion: r.nombre, comercio: r.nombre,
           monto, moneda: r.moneda, tipo: 'gasto',
           account_id: cCuenta.value, category_id: r.category_id || null,
-          cuotas: 1, fuente: 'manual', origen: 'gasto fijo', revisado: true
+          cuotas: 1, fuente: 'manual', origen: 'manual', revisado: true
         });
       } else if (tx) { await borrar('transactions', tx.id); tx = null; }
 

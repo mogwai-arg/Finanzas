@@ -97,6 +97,19 @@ async function iniciar() {
   render();
   tabs.hidden = false;
   onChange(render);
+
+  // Un cambio que la base rechaza se dice en el momento. Antes la pantalla
+  // decía "Guardado", el cambio quedaba en una cola que fallaba cinco veces y
+  // recién después aparecía en un cajón de Ajustes, mientras la siguiente
+  // sincronización lo deshacía sin avisar. Cargar un gasto tiene que dejarte
+  // tranquilo de que ya está, y para eso lo que no entra tiene que doler ya.
+  let visto = 0;
+  onChange(() => {
+    const r = state.rechazo;
+    if (!r || r.cuando === visto) return;
+    visto = r.cuando;
+    aviso('No se pudo guardar. Mirá el aviso de arriba en Hoy.');
+  });
   alCambiarRuta(() => { window.scrollTo(0, 0); render(); });
 
   // El primer arranque no tiene caché: ahí sí se espera a que baje todo.

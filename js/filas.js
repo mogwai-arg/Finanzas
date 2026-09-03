@@ -32,6 +32,26 @@ const COLUMNAS = {
 const diaValido = n => (Number.isInteger(Number(n)) && Number(n) >= 1 && Number(n) <= 31
   ? Number(n) : null);
 
+// Valores que la base acepta en una columna con `check`. Cualquier otra cosa
+// se cambia por el primero, que es el valor por omision.
+//
+// Existe por un caso real: marcar pagado un gasto fijo guardaba el gasto con
+// origen 'gasto fijo', y el check de la tabla solo acepta 'manual' e
+// 'import'. La fila se rechazaba, quedaba trabada, y con ella el pago del
+// gasto fijo —que apunta a esa transaccion por clave foranea—. El pago se
+// veia hecho en la pantalla y volvia a aparecer pendiente en la siguiente
+// sincronizacion, sin decir por que.
+//
+// El filtro de columnas ya evitaba que un campo de mas trabara todo; esto
+// hace lo mismo con un VALOR de mas, que es el otro error que la base
+// rechaza y la pantalla no puede ver.
+const VALORES = {
+  transactions: {
+    origen: ['manual', 'import'],
+    tipo: ['gasto', 'ingreso', 'transferencia']
+  }
+};
+
 /** Deja la fila como la base la espera: sin campos de mas ni valores imposibles. */
 export function normalizar(tabla, fila) {
   const cols = COLUMNAS[tabla];
@@ -44,5 +64,9 @@ export function normalizar(tabla, fila) {
     f.vencimiento_dia = diaValido(f.vencimiento_dia);
   }
   if (tabla === 'transactions' && f.monto != null) f.monto = Math.abs(Number(f.monto)) || 0;
+
+  for (const [col, validos] of Object.entries(VALORES[tabla] || {})) {
+    if (f[col] != null && !validos.includes(f[col])) f[col] = validos[0];
+  }
   return f;
 }

@@ -50,5 +50,27 @@ t('una tabla sin lista de columnas pasa entera', () => {
   assert.equal(f.cualquier_cosa, 1);
 });
 
+
+// --------------------------------------------------------- valores con check
+t('un origen que la base no acepta se cambia por el de siempre', () => {
+  // Marcar pagado un gasto fijo guardaba origen 'gasto fijo', y el check de la
+  // tabla solo acepta 'manual' e 'import': la fila se rechazaba, y con ella el
+  // pago del gasto fijo, que le apunta por clave foranea. El pago se veia
+  // hecho y volvia a aparecer pendiente en la siguiente sincronizacion.
+  assert.equal(normalizar('transactions', { id: '1', origen: 'gasto fijo' }).origen, 'manual');
+});
+
+t('un origen valido no se toca', () => {
+  assert.equal(normalizar('transactions', { id: '1', origen: 'import' }).origen, 'import');
+});
+
+t('sin origen no se inventa ninguno', () => {
+  assert.equal('origen' in normalizar('transactions', { id: '1', monto: 5 }), false);
+});
+
+t('un tipo imposible cae en gasto', () => {
+  assert.equal(normalizar('transactions', { id: '1', tipo: 'cualquiera' }).tipo, 'gasto');
+});
+
 console.log(`\n${ok} pruebas OK${mal ? `, ${mal} FALLAN` : ''}\n`);
 process.exit(mal ? 1 : 0);

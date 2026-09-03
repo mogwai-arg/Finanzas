@@ -196,6 +196,10 @@ function noSeGuardo() {
                 recurrings: 'un gasto fijo', accounts: 'una cuenta', budgets: 'un presupuesto',
                 promos: 'una promo', recibos: 'un recibo' };
   const cuales = [...new Set(rotas.map(r => QUE[r.tabla] || r.tabla))];
+  // El motivo, con las palabras de la base. Sin esto el cartel es un callejón
+  // sin salida: se puede reintentar para siempre sin saber que lo que sobra
+  // es un valor que la tabla no acepta.
+  const motivos = [...new Set(rotas.map(r => r.error).filter(Boolean))].slice(0, 3);
 
   const btn = h('button.btn', 'Intentar de nuevo');
   btn.onclick = async () => {
@@ -212,6 +216,8 @@ function noSeGuardo() {
                                      : `${rotas.length} cambios no se guardaron`),
       h('div.ds', `Quedó sin subir ${cuales.join(', ')}. Lo que ves en la pantalla `,
         'puede volver atrás solo hasta que se guarde de verdad.'),
+      motivos.length ? h('div.small.mut', { style: { marginTop: '8px', lineHeight: '1.5' } },
+        motivos.map(m => h('div', { style: { marginTop: '4px' } }, '· ', m))) : null,
       btn));
 }
 

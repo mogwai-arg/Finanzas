@@ -17,7 +17,22 @@ export { normalizar };
  * siguiente sincronización traía la fila vieja del servidor y el gasto fijo
  * volvía a aparecer pendiente, sin que nada dijera por qué.
  */
-const CLAVE_NATURAL = { recurring_payments: 'recurring_id,periodo' };
+const CLAVE_NATURAL = {
+  recurring_payments: 'recurring_id,periodo',
+  recibos: 'user_id,periodo,concepto'
+};
+
+/**
+ * Que tabla tiene que subir antes que cual.
+ *
+ * recurring_payments apunta a transactions por clave foranea: si la
+ * transaccion no llego al servidor, el pago se rechaza aunque este perfecto.
+ * Asi es como UN error se convertia en dos —nueve transacciones rechazadas
+ * arrastraban siete pagos— y por que arreglar el primero no alcanzaba si el
+ * segundo se intentaba antes.
+ */
+const ORDEN = ['accounts', 'categories', 'transactions', 'recurrings'];
+const prioridad = t => { const i = ORDEN.indexOf(t); return i < 0 ? ORDEN.length : i; };
 
 const CFG = window.CONFIG || {};
 export const DEMO = !!CFG.DEMO;
@@ -84,10 +99,32 @@ const leer = k => { try { return JSON.parse(localStorage.getItem(k) || '[]'); } 
 const escribir = (k, v) => localStorage.setItem(k, JSON.stringify(v));
 
 export const pendientes = () => leer(COLA_KEY).length;
-export const fallidas   = () => leer(ROTAS_KEY);
+
+/**
+ * Lo que no se pudo guardar: lo apartado MAS lo que ya falló al menos una vez.
+ *
+ * Contar solo lo apartado hacía esto: tocabas "reintentar", las filas volvían
+ * a la cola con el contador en cero, fallaban de nuevo y quedaban ahí con un
+ * intento encima —fuera del cajón—, así que la pantalla decía "al día". A los
+ * cinco intentos volvían a apartarse y aparecían otra vez, más que antes.
+ * Tocar el botón parecía arreglarlo y empeorarlo al mismo tiempo.
+ */
+export const fallidas = () => [...leer(ROTAS_KEY),
+                               ...leer(COLA_KEY).filter(op => (op.intentos || 0) > 0)];
 
 const opcionesUpsert = tabla =>
   CLAVE_NATURAL[tabla] ? { onConflict: CLAVE_NATURAL[tabla] } : undefined;
+
+/** Lo último que la base rechazó, para que la app lo pueda decir en voz alta. */
+export const rechazos = new Set();
+function rechazo(tabla, e) {
+  const msg = String(e?.message || e);
+  // Sin señal el fetch tira TypeError: eso es la cola haciendo su trabajo, no
+  // un rechazo.
+  if (/failed to fetch|networkerror|load failed/i.test(msg)) return;
+  state.rechazo = { tabla, error: msg, cuando: Date.now() };
+  emit();
+}
 
 function encolar(op) {
   const c = leer(COLA_KEY);
@@ -117,7 +154,12 @@ export async function flushCola({ reintentarFallidas = false } = {}) {
     }
   }
 
-  let cola = leer(COLA_KEY);
+  // Primero las tablas de las que otras cuelgan: subir un pago antes que su
+  // transaccion lo rechaza por clave foranea aunque el pago este bien.
+  const cola = leer(COLA_KEY)
+    .map((op, i) => [op, i])
+    .sort((a, b) => (prioridad(a[0].tabla) - prioridad(b[0].tabla)) || (a[1] - b[1]))
+    .map(([op]) => op);
   const quedan = [], rotas = leer(ROTAS_KEY);
 
   for (const op of cola) {
@@ -414,7 +456,13 @@ export async function guardar(tabla, fila) {
     try {
       const { error } = await sb.from(tabla).upsert(nueva, opcionesUpsert(tabla));
       if (error) throw new Error(error.message);
-    } catch (e) { encolar({ accion: 'upsert', tabla, fila: nueva }); }
+    } catch (e) {
+      encolar({ accion: 'upsert', tabla, fila: nueva });
+      // Que la base RECHACE una fila no es lo mismo que estar sin señal, y se
+      // veía igual: la pantalla decía "Guardado" y el cambio se deshacía solo
+      // más tarde. Se avisa ahora, que es cuando todavía se puede hacer algo.
+      if (navigator.onLine) rechazo(tabla, e);
+    }
   } else encolar({ accion: 'upsert', tabla, fila: nueva });
   return nueva;
 }
@@ -459,7 +507,7 @@ export async function guardarVarios(tabla, filas) {
       const { error } = await sb.from(tabla).upsert(nuevas, opcionesUpsert(tabla));
       if (error) throw new Error(error.message);
       return nuevas;
-    } catch (e) { /* abajo se encolan */ }
+    } catch (e) { if (navigator.onLine) rechazo(tabla, e); }
   }
   for (const n of nuevas) encolar({ accion: 'upsert', tabla, fila: n });
   return nuevas;
