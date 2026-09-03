@@ -126,7 +126,8 @@ const TIPOS = [
   ['resumen',  'Cierre de tarjeta',  'La víspera del cierre, para llegar con la compra'],
   ['saldo',    'Saldo bajo',         'Cuando una cuenta queda por debajo del mínimo'],
   ['aumentos', 'Aumentos',           'Cuando un correo dice que subió un gasto fijo'],
-  ['bishu',    'Cómo venís',         'Bishu compara con el mes pasado, una vez por semana']
+  ['bishu',    'Cómo venís',         'Bishu compara con el mes pasado, una vez por semana'],
+  ['cierre',   'Cierre del mes',     'El día 1, cómo cerró el mes que terminó']
 ];
 
 function seccionAvisos() {

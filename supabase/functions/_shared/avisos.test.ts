@@ -107,5 +107,45 @@ t('la opinión es semanal, no de todos los días', () => {
   assert.equal(avisosDelDia(datos, d('2026-09-07')).length, 0);   // muy temprano en el mes
 });
 
+// ------------------------------------------------------- cierre del mes
+t('el día 1 avisa cómo cerró el mes, comparando con el anterior', () => {
+  const m = avisosDelDia({
+    salioMesCerrado: 2_500_000, salioMesAnterior: 2_900_000, movimientosMesCerrado: 41
+  }, new Date(2026, 8, 1));
+  const c = m.find(x => x.tipo === 'cierre');
+  assert.ok(!!c, 'tiene que haber aviso de cierre');
+  assert.ok(c!.titulo.includes('agosto'), 'nombra el mes que cerró: ' + c!.titulo);
+  assert.ok(c!.cuerpo.includes('menos'), 'dice que gastó menos: ' + c!.cuerpo);
+  assert.ok(c!.url.includes('/cierre/2026-08'), 'lleva al cierre de ese mes: ' + c!.url);
+});
+
+t('sin mes anterior con qué comparar, dice lo que salió y nada más', () => {
+  const m = avisosDelDia({
+    salioMesCerrado: 2_500_000, salioMesAnterior: 0, movimientosMesCerrado: 41
+  }, new Date(2026, 8, 1));
+  const c = m.find(x => x.tipo === 'cierre')!;
+  assert.ok(c.cuerpo.includes('41 movimientos'), c.cuerpo);
+});
+
+t('el cierre es del día 1 y de ningún otro', () => {
+  for (const dia of [2, 5, 15, 28]) {
+    const m = avisosDelDia({ salioMesCerrado: 2_500_000, movimientosMesCerrado: 41 },
+                           new Date(2026, 8, dia));
+    assert.ok(!m.some(x => x.tipo === 'cierre'), 'no debería avisar el ' + dia);
+  }
+});
+
+t('un mes sin nada cargado no se anuncia', () => {
+  const m = avisosDelDia({ salioMesCerrado: 0, movimientosMesCerrado: 0 },
+                         new Date(2026, 8, 1));
+  assert.ok(!m.some(x => x.tipo === 'cierre'), 'no hay nada que contar');
+});
+
+t('el cierre se puede apagar como cualquier otro', () => {
+  const m = avisosDelDia({ prefs: { cierre: false }, salioMesCerrado: 2_500_000,
+                           movimientosMesCerrado: 41 }, new Date(2026, 8, 1));
+  assert.ok(!m.some(x => x.tipo === 'cierre'), 'apagado no avisa');
+});
+
 console.log(`\n${ok} pruebas OK${mal ? `, ${mal} FALLAN` : ''}\n`);
 process.exit(mal ? 1 : 0);

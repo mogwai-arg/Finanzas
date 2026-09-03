@@ -14,6 +14,7 @@ import { vistaDonde } from './vistas/donde.js';
 import { vistaCuenta } from './vistas/cuenta.js';
 import { vistaGastos } from './vistas/gastos.js';
 import { vistaEstadisticas } from './vistas/estadisticas.js';
+import { vistaCierre, nombreDelMes as tituloDelCierre } from './vistas/cierre.js';
 import { vistaTarjetas, vistaTarjeta } from './vistas/tarjetas.js';
 import { vistaPromos } from './vistas/promos.js';
 import { vistaMes } from './vistas/mes.js';
@@ -37,6 +38,8 @@ const RUTAS = [
   ['/mes',            { tab: 'pagar',    titulo: 'Pagar',      sub: 'Resúmenes y gastos fijos del mes', vista: vistaMes }],
   ['/sueldo',         { tab: 'hoy',      titulo: 'Sueldo',     sub: 'Recibos, paritarias y proyección', vista: vistaSueldo, atras: true }],
   ['/gastos',         { tab: 'gastos',   titulo: 'Gastos',     vista: vistaGastos, acciones: ['buscar'] }],
+  ['/cierre',         { tab: 'numeros',  titulo: 'Cómo cerró', sub: 'El último mes completo', vista: vistaCierre, atras: true }],
+  ['/cierre/:per',    { tab: 'numeros',  titulo: p => tituloDelCierre(p.per), sub: 'Cómo cerró el mes', vista: vistaCierre, atras: true }],
   ['/estadisticas',     { tab: 'numeros',  titulo: 'Números',    sub: 'Dónde estás parado', vista: r => vistaEstadisticas(r, { moneda: 'ARS' }) }],
   ['/estadisticas/usd', { tab: 'numeros',  titulo: 'Números',    sub: 'Dónde estás parado', vista: r => vistaEstadisticas(r, { moneda: 'USD' }) }],
   ['/tarjetas',       { tab: 'pagar',    titulo: 'Tarjetas',   vista: vistaTarjetas, atras: true }],

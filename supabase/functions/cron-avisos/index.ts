@@ -107,10 +107,12 @@ Deno.serve(async (req) => {
   // ------------------------------------------------- la pasada diaria
   const hoy = new Date();
   const per = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}`;
-  const mesPasado = (() => {
-    const d = new Date(hoy.getFullYear(), hoy.getMonth() - 1, 1);
+  const mesAntesDe = (p: string) => {
+    const [y, m] = p.split('-').map(Number);
+    const d = new Date(y, m - 2, 1);
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-  })();
+  };
+  const mesPasado = mesAntesDe(per);
   const hastaHoy = (p: string) => `${p}-${String(hoy.getDate()).padStart(2, '0')}`;
 
   const { data: users } = await sb.from('settings').select('user_id, avisos, saldo_minimo');
@@ -125,22 +127,34 @@ Deno.serve(async (req) => {
       sb.from('notificaciones').select('*').eq('user_id', u.user_id)
         .eq('tipo', 'aumento').eq('leida', false)
     ]);
-    // Los movimientos solo hacen falta para los saldos y para comparar meses:
-    // desde el mes pasado alcanza, y es una fracción de la tabla.
+    // Los movimientos solo hacen falta para los saldos y para comparar meses.
+    // Dos meses atrás y no uno: el día 1, el cierre compara el mes que
+    // terminó contra el anterior, y con un solo mes ese anterior no está.
+    const dosAtras = mesAntesDe(mesPasado);
     const { data: txs } = await sb.from('transactions').select('*')
-      .eq('user_id', u.user_id).gte('fecha', `${mesPasado}-01`);
+      .eq('user_id', u.user_id).gte('fecha', `${dosAtras}-01`);
 
     const gastado = (p: string) => (txs ?? [])
-      .filter(t => t.tipo === 'gasto' && t.moneda === 'ARS' &&
+      .filter(t => t.tipo === 'gasto' && (t.moneda || 'ARS') === 'ARS' &&
                    t.fecha >= `${p}-01` && t.fecha <= hastaHoy(p))
       .reduce((s, t) => s + Number(t.monto), 0);
+
+    // El mes entero, no hasta el día de hoy: un mes cerrado ya no se mueve.
+    const salioEnTodo = (p: string) => (txs ?? [])
+      .filter(t => t.tipo === 'gasto' && (t.moneda || 'ARS') === 'ARS' &&
+                   String(t.fecha).slice(0, 7) === p)
+      .reduce((s, t) => s + Number(t.monto), 0);
+    const cuantosEn = (p: string) => (txs ?? [])
+      .filter(t => String(t.fecha).slice(0, 7) === p).length;
 
     const mensajes = avisosDelDia({
       prefs: u.avisos ?? {}, saldoMinimo: Number(u.saldo_minimo) || 0,
       cuentas: cuentas.data ?? [], txs: txs ?? [],
       recurrings: recurrings.data ?? [], pagos: pagos.data ?? [],
       promos: promos.data ?? [], aumentos: aumentos.data ?? [],
-      gastadoEsteMes: gastado(per), gastadoMesPasado: gastado(mesPasado)
+      gastadoEsteMes: gastado(per), gastadoMesPasado: gastado(mesPasado),
+      salioMesCerrado: salioEnTodo(mesPasado), salioMesAnterior: salioEnTodo(dosAtras),
+      movimientosMesCerrado: cuantosEn(mesPasado)
     }, hoy);
     if (!mensajes.length) continue;
 

@@ -84,6 +84,10 @@ export type Datos = {
   aumentos?: any[];          // notificaciones tipo 'aumento' sin leer
   gastadoEsteMes?: number;   // hasta hoy
   gastadoMesPasado?: number; // hasta el mismo dia del mes pasado
+  // Para el cierre del dia 1: el mes que acaba de terminar, entero.
+  salioMesCerrado?: number;
+  salioMesAnterior?: number;
+  movimientosMesCerrado?: number;
 };
 
 /**
@@ -178,8 +182,38 @@ export function avisosDelDia(d: Datos, ref = new Date()): Mensaje[] {
     }
   }
 
+  // ----------------------------------------------------------- cierre del mes
+  //
+  // El dia 1, una vez, y solo si hubo mes: es lo unico que la app le devuelve
+  // a treinta dias de cargar gastos. Y es el unico aviso que puede decir algo
+  // en positivo sin mentir, porque el mes ya no se mueve.
+  if (on('cierre') && dia === 1) {
+    const salio = Number(d.salioMesCerrado) || 0;
+    const antes = Number(d.salioMesAnterior) || 0;
+    const cuantos = Number(d.movimientosMesCerrado) || 0;
+    const cerrado = mesAnterior(per);
+    if (salio > 0 || cuantos > 0) {
+      const menos = antes - salio;
+      const cuerpo = antes > 0 && Math.abs(menos) >= 1000
+        ? (menos > 0 ? `Gastaste ${plata(menos)} menos que el mes anterior.`
+                     : `Gastaste ${plata(-menos)} más que el mes anterior.`)
+        : `Salieron ${plata(salio)} en ${cuantos} ${cuantos === 1 ? 'movimiento' : 'movimientos'}.`;
+      out.push(msg('cierre', `Cerró ${nombreDeMes(cerrado)}`, cuerpo,
+                   `cierre-${cerrado}`, `./#/cierre/${cerrado}`));
+    }
+  }
+
   return out;
 }
+
+const MESES_LARGOS = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio',
+                      'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+const nombreDeMes = (per: string) => MESES_LARGOS[Number(per.slice(5, 7)) - 1];
+const mesAnterior = (per: string) => {
+  const [y, m] = per.split('-').map(Number);
+  const d = new Date(y, m - 2, 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+};
 
 const msg = (tipo: string, titulo: string, cuerpo: string, tag: string, url = './#/hoy'): Mensaje =>
   ({ tipo, titulo, cuerpo, tag, url });

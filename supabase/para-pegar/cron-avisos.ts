@@ -140,8 +140,45 @@ function avisosDelDia(d, ref = /* @__PURE__ */ new Date()) {
       }
     }
   }
+  if (on("cierre") && dia === 1) {
+    const salio = Number(d.salioMesCerrado) || 0;
+    const antes = Number(d.salioMesAnterior) || 0;
+    const cuantos = Number(d.movimientosMesCerrado) || 0;
+    const cerrado = mesAnterior(per);
+    if (salio > 0 || cuantos > 0) {
+      const menos = antes - salio;
+      const cuerpo = antes > 0 && Math.abs(menos) >= 1e3 ? menos > 0 ? `Gastaste ${plata(menos)} menos que el mes anterior.` : `Gastaste ${plata(-menos)} m\xE1s que el mes anterior.` : `Salieron ${plata(salio)} en ${cuantos} ${cuantos === 1 ? "movimiento" : "movimientos"}.`;
+      out.push(msg(
+        "cierre",
+        `Cerr\xF3 ${nombreDeMes(cerrado)}`,
+        cuerpo,
+        `cierre-${cerrado}`,
+        `./#/cierre/${cerrado}`
+      ));
+    }
+  }
   return out;
 }
+var MESES_LARGOS = [
+  "enero",
+  "febrero",
+  "marzo",
+  "abril",
+  "mayo",
+  "junio",
+  "julio",
+  "agosto",
+  "septiembre",
+  "octubre",
+  "noviembre",
+  "diciembre"
+];
+var nombreDeMes = (per) => MESES_LARGOS[Number(per.slice(5, 7)) - 1];
+var mesAnterior = (per) => {
+  const [y, m] = per.split("-").map(Number);
+  const d = new Date(y, m - 2, 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+};
 var msg = (tipo, titulo, cuerpo, tag, url = "./#/hoy") => ({ tipo, titulo, cuerpo, tag, url });
 
 // supabase/functions/_shared/push.ts
@@ -376,10 +413,12 @@ Deno.serve(async (req) => {
   }
   const hoy = /* @__PURE__ */ new Date();
   const per = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, "0")}`;
-  const mesPasado = (() => {
-    const d = new Date(hoy.getFullYear(), hoy.getMonth() - 1, 1);
+  const mesAntesDe = (p) => {
+    const [y, m] = p.split("-").map(Number);
+    const d = new Date(y, m - 2, 1);
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-  })();
+  };
+  const mesPasado = mesAntesDe(per);
   const hastaHoy = (p) => `${p}-${String(hoy.getDate()).padStart(2, "0")}`;
   const { data: users } = await sb.from("settings").select("user_id, avisos, saldo_minimo");
   const salida = [];
@@ -392,8 +431,11 @@ Deno.serve(async (req) => {
       de("promos"),
       sb.from("notificaciones").select("*").eq("user_id", u.user_id).eq("tipo", "aumento").eq("leida", false)
     ]);
-    const { data: txs } = await sb.from("transactions").select("*").eq("user_id", u.user_id).gte("fecha", `${mesPasado}-01`);
-    const gastado = (p) => (txs ?? []).filter((t) => t.tipo === "gasto" && t.moneda === "ARS" && t.fecha >= `${p}-01` && t.fecha <= hastaHoy(p)).reduce((s, t) => s + Number(t.monto), 0);
+    const dosAtras = mesAntesDe(mesPasado);
+    const { data: txs } = await sb.from("transactions").select("*").eq("user_id", u.user_id).gte("fecha", `${dosAtras}-01`);
+    const gastado = (p) => (txs ?? []).filter((t) => t.tipo === "gasto" && (t.moneda || "ARS") === "ARS" && t.fecha >= `${p}-01` && t.fecha <= hastaHoy(p)).reduce((s, t) => s + Number(t.monto), 0);
+    const salioEnTodo = (p) => (txs ?? []).filter((t) => t.tipo === "gasto" && (t.moneda || "ARS") === "ARS" && String(t.fecha).slice(0, 7) === p).reduce((s, t) => s + Number(t.monto), 0);
+    const cuantosEn = (p) => (txs ?? []).filter((t) => String(t.fecha).slice(0, 7) === p).length;
     const mensajes = avisosDelDia({
       prefs: u.avisos ?? {},
       saldoMinimo: Number(u.saldo_minimo) || 0,
@@ -404,7 +446,10 @@ Deno.serve(async (req) => {
       promos: promos.data ?? [],
       aumentos: aumentos.data ?? [],
       gastadoEsteMes: gastado(per),
-      gastadoMesPasado: gastado(mesPasado)
+      gastadoMesPasado: gastado(mesPasado),
+      salioMesCerrado: salioEnTodo(mesPasado),
+      salioMesAnterior: salioEnTodo(dosAtras),
+      movimientosMesCerrado: cuantosEn(mesPasado)
     }, hoy);
     if (!mensajes.length) continue;
     await sb.from("notificaciones").insert({

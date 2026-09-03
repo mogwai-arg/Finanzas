@@ -1075,3 +1075,99 @@ export function extractoDeCuenta(cuenta, txs, ref = hoy()) {
     faltaOrigen: cuenta.tipo !== 'credito' && saldo < 0
   };
 }
+
+/**
+ * Como cerro un mes.
+ *
+ * Es lo que le falta a la app para que valga la pena cargar todos los dias.
+ * Uno anota gastos durante treinta dias y no pasa nada: el dia 1 tiene que
+ * pasar algo. Y es el unico momento en que un numero se puede pintar de verde
+ * sin mentir, porque el mes ya no se mueve.
+ *
+ * Las reglas del tono, que son las mismas de Bishu: una cosa por vez, sin
+ * retar, y nada de medallas. En una app de plata la racha rota se lee como
+ * culpa, y la culpa es la razon numero uno por la que se abandonan.
+ *
+ * `ref` es el dia desde el que se mira: un mes cerrado de verdad es el que ya
+ * termino.
+ */
+export function cierreDeMes(datos, per, moneda = 'ARS', ref = hoy()) {
+  const { cuentas = [], txs = [], recurrings = [], pagos = [], budgets = [],
+          categorias = [] } = datos || {};
+  const [y, m] = per.split('-').map(Number);
+  const finDelMes = new Date(y, m, 0);
+  if (ref <= finDelMes) return null;              // todavia no cerro
+
+  const previo = mesAnterior(per);
+  const res = resumenMes(txs, per, moneda);
+  const antes = resumenMes(txs, previo, moneda);
+
+  // Lo que de verdad quedo: la plata libre subio o bajo. No "ingresos menos
+  // gastos", que el dia 1 da un superavit enorme porque el sueldo ya entro y
+  // los gastos todavia no salieron.
+  const libre = f => plataLibre(cuentas, txs, recurrings, pagos, f, moneda).libre;
+  const desde = libre(new Date(y, m - 1, 0));
+  const hasta = libre(finDelMes);
+  const quedo = round2(hasta - desde);
+
+  // Por categoria, este mes contra el anterior. Sirve la que mas se movio,
+  // para arriba y para abajo: una sola de cada lado.
+  const nombre = id => (categorias.find(c => c.id === id) || {}).nombre || 'Sin categoría';
+  const deAntes = new Map(gastoPorCategoria(txs, previo, moneda).map(c => [c.id || 'sin', c.monto]));
+  const cats = gastoPorCategoria(txs, per, moneda).map(c => {
+    const previoMonto = deAntes.get(c.id || 'sin') || 0;
+    return { id: c.id, nombre: nombre(c.id), monto: c.monto, parte: c.parte,
+             antes: previoMonto, cambio: round2(c.monto - previoMonto) };
+  });
+  // Solo se compara lo que existia antes: una categoria nueva "subio" todo su
+  // valor y eso no dice nada.
+  const comparables = cats.filter(c => c.antes > 0);
+  const subio = comparables.filter(c => c.cambio > 0).sort((a, b) => b.cambio - a.cambio)[0] || null;
+  const bajo = comparables.filter(c => c.cambio < 0).sort((a, b) => a.cambio - b.cambio)[0] || null;
+
+  const delMes = budgets.filter(b => b.periodo === per);
+  const presu = estadoPresupuesto(delMes, res).map(b => ({ ...b, nombre: nombre(b.category_id) }));
+  const pasadas = presu.filter(b => b.gastado > b.tope);
+  const dentro = presu.filter(b => b.tope > 0 && b.gastado <= b.tope);
+
+  const mayor = txs
+    .filter(tx => tx.tipo === 'gasto' && monedaDe(tx) === moneda &&
+                  periodo(parseFecha(tx.fecha)) === per)
+    .sort((a, b) => Number(b.monto) - Number(a.monto))[0] || null;
+
+  const delMesTxs = txs.filter(tx => periodo(parseFecha(tx.fecha)) === per);
+  const cargados = delMesTxs.length;
+  const aMano = delMesTxs.filter(tx => !tx.fuente || tx.fuente === 'manual').length;
+
+  return {
+    periodo: per, moneda, previo,
+    entro: res.ingresos, salio: res.gastos,
+    antesSalio: antes.gastos,
+    // Positivo = gastaste menos que el mes pasado.
+    gastasteMenos: round2(antes.gastos - res.gastos),
+    hayConQueComparar: antes.gastos > 0,
+    quedo, desde: round2(desde), hasta: round2(hasta),
+    ahorro: estadoAhorro(delMes, { cuentas, txs, recurrings, pagos }, per, moneda, ref),
+    categorias: cats, subio, bajo,
+    presupuesto: presu, pasadas, dentro,
+    mayor: mayor ? { nombre: mayor.comercio || mayor.descripcion || 'un gasto',
+                     monto: round2(Number(mayor.monto)), categoria: nombre(mayor.category_id) } : null,
+    cargados, aMano,
+    // Lo unico que se propone para el mes que arranca: la categoria que mas
+    // subio, con un tope. Una cosa, no una lista de propositos.
+    proponer: subio && !delMes.some(b => b.category_id === subio.id)
+      ? { categoria: subio.id, nombre: subio.nombre, tope: redondearTope(subio.antes) }
+      : null
+  };
+}
+
+/** Un tope que se pueda leer: 137.482 no es un tope, 140.000 si. */
+function redondearTope(n) {
+  const v = Math.abs(Number(n) || 0);
+  if (v <= 0) return 0;
+  const paso = v >= 1000000 ? 50000 : v >= 100000 ? 10000 : v >= 10000 ? 1000 : 100;
+  return Math.round(v / paso) * paso;
+}
+
+/** El ultimo mes cerrado a la fecha: el anterior al que corre. */
+export const ultimoMesCerrado = (ref = hoy()) => mesAnterior(periodo(ref));

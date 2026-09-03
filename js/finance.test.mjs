@@ -1054,4 +1054,68 @@ t('lo anterior al saldo declarado no se cuenta dos veces', () => {
   assert.equal(e.filas.length, 1);
 });
 
+// ----------------------------------------------------------- cierre del mes
+t('un mes que todavia no termino no cierra', () => {
+  assert.equal(F.cierreDeMes({ txs: [] }, '2026-09', 'ARS', new Date(2026, 8, 3)), null);
+});
+
+t('el cierre compara contra el mes anterior, categoria por categoria', () => {
+  const txs = [
+    { id: 'a', fecha: '2026-07-05', tipo: 'gasto', monto: 200000, moneda: 'ARS', category_id: 'c1' },
+    { id: 'b', fecha: '2026-07-10', tipo: 'gasto', monto: 80000, moneda: 'ARS', category_id: 'c2' },
+    { id: 'c', fecha: '2026-08-03', tipo: 'gasto', monto: 260000, moneda: 'ARS', category_id: 'c1' },
+    { id: 'd', fecha: '2026-08-12', tipo: 'gasto', monto: 40000, moneda: 'ARS', category_id: 'c2' }
+  ];
+  const cats = [{ id: 'c1', nombre: 'Supermercado' }, { id: 'c2', nombre: 'Salidas' }];
+  const d = F.cierreDeMes({ txs, categorias: cats }, '2026-08', 'ARS', new Date(2026, 8, 1));
+  assert.equal(d.subio.nombre, 'Supermercado');
+  assert.equal(d.subio.cambio, 60000);
+  assert.equal(d.bajo.nombre, 'Salidas');
+  assert.equal(d.bajo.cambio, -40000);
+  assert.equal(d.gastasteMenos, -20000);      // gasto 20.000 MAS que en julio
+});
+
+t('una categoria que no existia el mes pasado no cuenta como que subio', () => {
+  // Sin esto, cualquier categoria nueva aparece como "lo que mas subio" con
+  // todo su valor, y la comparacion no dice nada.
+  const txs = [
+    { id: 'a', fecha: '2026-07-05', tipo: 'gasto', monto: 10000, moneda: 'ARS', category_id: 'c1' },
+    { id: 'b', fecha: '2026-08-05', tipo: 'gasto', monto: 12000, moneda: 'ARS', category_id: 'c1' },
+    { id: 'c', fecha: '2026-08-06', tipo: 'gasto', monto: 500000, moneda: 'ARS', category_id: 'nueva' }
+  ];
+  const cats = [{ id: 'c1', nombre: 'Nafta' }, { id: 'nueva', nombre: 'Mudanza' }];
+  const d = F.cierreDeMes({ txs, categorias: cats }, '2026-08', 'ARS', new Date(2026, 8, 1));
+  assert.equal(d.subio.nombre, 'Nafta');
+});
+
+t('propone un tope redondo para lo que mas subio, y no si ya tiene', () => {
+  const txs = [
+    { id: 'a', fecha: '2026-07-05', tipo: 'gasto', monto: 137482, moneda: 'ARS', category_id: 'c1' },
+    { id: 'b', fecha: '2026-08-05', tipo: 'gasto', monto: 190000, moneda: 'ARS', category_id: 'c1' }
+  ];
+  const cats = [{ id: 'c1', nombre: 'Combustible' }];
+  const d = F.cierreDeMes({ txs, categorias: cats }, '2026-08', 'ARS', new Date(2026, 8, 1));
+  assert.equal(d.proponer.tope, 140000);      // 137.482 no es un tope, 140.000 si
+
+  const conTope = F.cierreDeMes({ txs, categorias: cats,
+    budgets: [{ periodo: '2026-08', category_id: 'c1', monto: 150000 }] },
+    '2026-08', 'ARS', new Date(2026, 8, 1));
+  assert.equal(conTope.proponer, null);
+});
+
+t('lo que quedo es cuanto subio la plata libre, no ingresos menos gastos', () => {
+  // El dia 1 el sueldo ya entro y los gastos todavia no salieron: "ingresos
+  // menos gastos" da un superavit enorme que no existe.
+  const cuentas = [{ id: 'gal', tipo: 'cuenta', moneda: 'ARS', saldo_inicial: 0, saldo_al: '2026-07-31' }];
+  const txs = [
+    { id: 'i', fecha: '2026-08-01', tipo: 'ingreso', monto: 3000000, moneda: 'ARS', account_id: 'gal' },
+    { id: 'g', fecha: '2026-08-20', tipo: 'gasto', monto: 1000000, moneda: 'ARS', account_id: 'gal' }
+  ];
+  const d = F.cierreDeMes({ txs, cuentas }, '2026-08', 'ARS', new Date(2026, 8, 1));
+  assert.equal(d.entro, 3000000);
+  assert.equal(d.salio, 1000000);
+  assert.equal(d.quedo, 2000000);             // la plata libre subio eso
+  assert.equal(d.hasta - d.desde, 2000000);
+});
+
 console.log(`\n${ok} pruebas OK`);

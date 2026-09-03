@@ -19,6 +19,7 @@ import { plataPartida, plata, cuandoVence, diasHasta, hoyISO, aFecha, nombreDe,
 import { irA } from '../ruteo.js';
 import { formPago } from './mes.js';
 import { bishu, frasesDeBishu as F_frases } from '../bishu.js';
+import { nombreDelMes } from './cierre.js';
 
 const per = () => hoyISO().slice(0, 7);
 
@@ -35,6 +36,7 @@ export function vistaHoy(root, { arranca = 0 } = {}) {
   root.append(
     h('div.flow',
       noSeGuardo(),
+      cerroElMes(hoy),
       sinRevisar(),
       conexionCaida(),
       carrusel(arranca, heroMes(res, hoy, p), plataLibre(hoy), heroDolares()),
@@ -219,6 +221,28 @@ function noSeGuardo() {
       motivos.length ? h('div.small.mut', { style: { marginTop: '8px', lineHeight: '1.5' } },
         motivos.map(m => h('div', { style: { marginTop: '4px' } }, '· ', m))) : null,
       btn));
+}
+
+/**
+ * El mes cerró: acá está cómo.
+ *
+ * Aparece los primeros días y después se va sola. Es lo único que la app le
+ * devuelve a treinta días de cargar gastos, así que va arriba de todo; pero
+ * el día 12 ya no es noticia y estorbaría.
+ */
+function cerroElMes(hoy) {
+  if (hoy.getDate() > 7) return null;
+  const per = F.ultimoMesCerrado(hoy);
+  const hubo = state.transactions.some(t => String(t.fecha).slice(0, 7) === per);
+  if (!hubo) return null;
+
+  return h('button.aviso.bra', { style: { width: '100%', textAlign: 'left' },
+                                 onclick: () => irA(`/cierre/${per}`) },
+    h('div', { style: { flex: 'none', color: 'var(--bra)' } }, bishu('contento', 34)),
+    h('div.txt',
+      h('div.tt', `Cerró ${nombreDelMes(per).toLowerCase()}`),
+      h('div.ds', 'Cuánto quedó, en qué se te fue y qué cambió contra el mes anterior.')),
+    h('span.chev', icono('chev', 15)));
 }
 
 // -------------------------------------------------------- hero del mes

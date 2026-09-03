@@ -25,6 +25,7 @@ import { plata, plataPartida, hoyISO, buscar, nombreDe, tituloTx } from '../form
 import { barrasHorizontales, barrasPorMes, leyenda } from '../graficos.js';
 import { irA } from '../ruteo.js';
 import { formPresupuesto } from './formularios.js';
+import { nombreDelMes } from './cierre.js';
 
 const MES_CORTO = ['ene', 'feb', 'mar', 'abr', 'may', 'jun',
                    'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
@@ -41,6 +42,7 @@ export function vistaEstadisticas(root, { moneda = 'ARS' } = {}) {
       porMes(moneda, hoy),
       categorias(per, moneda),
       presupuesto(per, hoy),
+      puertaAlCierre(hoy),
       mayores(per, moneda),
       proximoSueldo()));
   };
@@ -288,6 +290,19 @@ function mayores(per, moneda) {
             .filter(Boolean).join(' · '))),
         h('div.v', plata(Math.round(t.monto), moneda)));
     })));
+}
+
+/** El cierre del último mes completo, desde acá también y todo el mes. */
+function puertaAlCierre(hoy) {
+  const per = F.ultimoMesCerrado(hoy);
+  if (!state.transactions.some(t => String(t.fecha).slice(0, 7) === per)) return null;
+  return h('section',
+    h('div.grp',
+      h('button.li', { onclick: () => irA(`/cierre/${per}`) },
+        h('div.av', icono('reloj', 17)),
+        h('div.m', h('div.t', `Cómo cerró ${nombreDelMes(per).toLowerCase()}`),
+          h('div.s', 'Lo que quedó, contra el mes anterior, y con tus topes')),
+        h('span.chev', icono('chev', 15)))));
 }
 
 // --------------------------------------------------------- presupuesto
