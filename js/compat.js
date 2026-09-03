@@ -11,6 +11,56 @@
 // es un módulo aparte y no hereda nada del que lo creó.
 // =====================================================================
 
+/**
+ * Recorrer un ReadableStream con `for await`.
+ *
+ * Este es el que rompía el PDF en el iPhone. pdf.js hace, adentro de
+ * getTextContent:
+ *
+ *     for await (const t of this.streamTextContent(...))
+ *
+ * y eso necesita que ReadableStream tenga Symbol.asyncIterator. Chrome lo
+ * tiene desde hace años; Safari no lo implementó hasta muy tarde, así que
+ * `e[Symbol.asyncIterator]` es undefined y sale el error más inútil de todos:
+ * "undefined is not a function", sin decir qué función ni de qué objeto.
+ *
+ * El parche es el que define la propia especificación de streams: un
+ * iterador armado sobre el reader.
+ */
+if (typeof ReadableStream !== 'undefined' &&
+    typeof ReadableStream.prototype[Symbol.asyncIterator] !== 'function') {
+  const iterar = function ({ preventCancel = false } = {}) {
+    const lector = this.getReader();
+    return {
+      next() {
+        return lector.read().then(({ done, value }) =>
+          done ? { done: true, value: undefined } : { done: false, value });
+      },
+      return(v) {
+        // Cortar a mitad de camino tiene que soltar el stream: sin esto, un
+        // `break` deja el lector tomado y el siguiente intento falla.
+        if (!preventCancel) { try { lector.cancel(v); } catch { /* ya cerrado */ } }
+        lector.releaseLock();
+        return Promise.resolve({ done: true, value: v });
+      },
+      throw(e) {
+        if (!preventCancel) { try { lector.cancel(e); } catch { /* ya cerrado */ } }
+        lector.releaseLock();
+        return Promise.reject(e);
+      },
+      [Symbol.asyncIterator]() { return this; }
+    };
+  };
+  Object.defineProperty(ReadableStream.prototype, Symbol.asyncIterator, {
+    value: iterar, writable: true, configurable: true
+  });
+  if (typeof ReadableStream.prototype.values !== 'function') {
+    Object.defineProperty(ReadableStream.prototype, 'values', {
+      value: iterar, writable: true, configurable: true
+    });
+  }
+}
+
 if (typeof Promise.withResolvers !== 'function') {
   Promise.withResolvers = function withResolvers() {
     let resolve, reject;
