@@ -63,6 +63,11 @@ button.li:active{background:var(--fill)}
 .li .chev{color:var(--tx3);flex:none}
 .li.sev::after{content:"";position:absolute;left:0;top:8px;bottom:8px;width:3px;border-radius:0 3px 3px 0}
 .li.sev-neg::after{background:var(--neg)} .li.sev-amb::after{background:var(--amb)}
+/* Un movimiento que entro solo y todavia no confirmaste. La barra sola no
+   alcanza —el color nunca es la unica senal—, asi que la fila ademas lo
+   dice con la palabra en el renglon de abajo. */
+.li.nuevo::after{content:"";position:absolute;left:0;top:8px;bottom:8px;width:3px;
+                 border-radius:0 3px 3px 0;background:var(--brand)}
 
 .av{width:32px;height:32px;border-radius:9px;display:grid;place-items:center;flex:none;
     background:var(--fill);color:var(--tx2)}

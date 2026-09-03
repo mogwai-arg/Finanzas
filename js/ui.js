@@ -120,7 +120,8 @@ export function iconoDe(texto = '') {
     [/farmac|pastilla|remedio/, 'pastilla'],
     [/salud|osde|swiss|medic|prepaga|hospital/, 'salud'],
     [/colegio|escuela|educa|matricula|universidad/, 'colegio'],
-    [/hogar|mueble|sodimac|easy|expensas|alquiler/, 'casa2'],
+    [/hogar|mueble|sodimac|easy|expensas|alquiler|fravega|frávega|garbarino|musimundo|electro/, 'casa2'],
+    [/ropa|indumentaria|zapatilla|calzado|naked|zara|adidas|nike|vestir/, 'carro'],
     [/netflix|spotify|disney|prime|hbo|entreten|cine|juguete|suscrip|streaming/, 'play'],
     [/openai|vercel|github|aws|cloud|adobe|microsoft|google|apple/, 'nube'],
     [/uber|cabify|taxi|transporte|sube|peaje|nafta|estacionamiento/, 'auto'],
@@ -129,7 +130,7 @@ export function iconoDe(texto = '') {
     [/banco|galicia|nacion|caja/, 'banco'],
     [/mercado ?pago|personal ?pay|modo|billetera/, 'qr'],
     [/efectivo|sobre/, 'sobre'],
-    [/luz|gas|agua|internet|telefon|servicio|edesur|metrogas|flow/, 'rayo']
+    [/luz|gas|agua|internet|telefon|servicio|edesur|metrogas|flow|aysa|edenor|camuzzi|telecom|fibertel|movistar|claro/, 'rayo']
   ];
   for (const [re, ic] of mapa) if (re.test(t)) return ic;
   return 'varios';

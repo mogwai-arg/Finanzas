@@ -1,12 +1,29 @@
 // =====================================================================
-// vistas/gastos.js — la lista, agrupada por dia, con buscador.
+// vistas/gastos.js — la lista, agrupada por mes y por dia, con buscador.
+//
+// Es la pestaña de "¿en qué se me fue?", así que tiene que decir cuánto: la
+// banda de cada mes lleva el total, y antes no lo llevaba ninguna parte de
+// la pantalla.
+//
+// El encabezado del día muestra lo que SALIÓ, no el neto. Con el neto, el día
+// que cobrás el sueldo el día entero da positivo y se lee como un día en que
+// no gastaste.
+//
+// Y en cada fila, la cuenta va debajo del monto y no en el renglón de abajo:
+// ahí siempre quedaba cortada ("Coto · Supermercado · Merca…"), justo el dato
+// que no está en ninguna otra parte de la fila.
+//
 // El reintegro se muestra DEBAJO del monto, no restado: se quiere ver lo
 // que se pago y lo que van a devolver, separados.
 // =====================================================================
 import { h, icono, iconoDe, deslizable, confirmar, aviso } from '../ui.js';
 import { state, borrar } from '../db.js';
 import * as F from '../finance.js';
-import { plata, fechaRelativa, nombreDe, buscar, tituloTx, dondeTx } from '../formato.js';
+import { plata, nombreDe, buscar, tituloTx, dondeTx, aFecha } from '../formato.js';
+
+const MESES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio',
+               'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+const DIAS = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
 import { formMovimiento } from './form-movimiento.js';
 
 export function vistaGastos(root) {
@@ -45,28 +62,54 @@ export function vistaGastos(root) {
       return;
     }
 
-    const porDia = new Map();
+    // Dos niveles: la banda del mes y, adentro, cada día. Sin la banda, la
+    // lista pasaba de septiembre a agosto sin aviso —"martes 1, lunes 31,
+    // domingo 30, 22 ago"— y encima con dos formatos de fecha.
+    const porMes = new Map();
     for (const it of txs) {
-      if (!porDia.has(it.tx.fecha)) porDia.set(it.tx.fecha, []);
-      porDia.get(it.tx.fecha).push(it);
+      const mes = String(it.tx.fecha).slice(0, 7);
+      if (!porMes.has(mes)) porMes.set(mes, new Map());
+      const dias = porMes.get(mes);
+      if (!dias.has(it.tx.fecha)) dias.set(it.tx.fecha, []);
+      dias.get(it.tx.fecha).push(it);
     }
-    for (const [fecha, items] of porDia) {
-      const neto = items.reduce((s, { tx: t, monto }) =>
-        s + (t.tipo === 'ingreso' ? monto : t.tipo === 'transferencia' ? 0 : -monto), 0);
-      lista.append(h('section',
-        h('div.ghead', fechaRelativa(fecha),
-          h('span', { class: 'tabnum small', style: { fontWeight: '500', letterSpacing: '0',
-                                                      textTransform: 'none',
-                                                      color: neto > 0 ? 'var(--pos)' : 'var(--tx3)' } },
-            plata(neto, moneda, { signo: neto > 0 }))),
-        h('div.grp', items.map(it => deslizable(fila(it, moneda), {
-          alEditar: () => formMovimiento(it.tx),
-          alBorrar: async () => {
-            if (!await confirmar(`¿Borrar "${tituloTx(it.tx)}"?`)) return;
-            await borrar('transactions', it.tx.id);
-            aviso('Borrado'); pintar();
-          }
-        })))));
+
+    // Lo que salió: las movidas entre cuentas propias no cuentan, y los
+    // ingresos tampoco. Es la única suma que contesta "¿cuánto gasté?".
+    const salida = items => items.reduce((s, { tx: t, monto }) =>
+      s + (t.tipo === 'gasto' ? monto : 0), 0);
+
+    for (const [mes, dias] of porMes) {
+      const todos = [...dias.values()].flat();
+      const gastos = salida(todos);
+      const entro = todos.reduce((s, { tx: t, monto, entrante }) =>
+        s + (t.tipo === 'ingreso' || entrante ? monto : 0), 0);
+
+      lista.append(h('div.ghead', { style: { margin: '10px 4px -4px' } },
+        h('span', nombreDeMes(mes)),
+        h('span', { style: { textTransform: 'none', letterSpacing: '0', fontWeight: '500',
+                             textAlign: 'right', lineHeight: '1.35' } },
+          gastos > 0 ? h('span.tabnum', `salieron ${plata(Math.round(gastos), moneda)}`) : null,
+          entro > 0 ? h('div.tabnum', { style: { color: 'var(--tx3)', fontSize: '11.5px' } },
+            `entraron ${plata(Math.round(entro), moneda)}`) : null)));
+
+      for (const [fecha, items] of dias) {
+        const gastoDelDia = salida(items);
+        lista.append(h('section',
+          h('div.ghead', { style: { margin: '0 4px 8px' } }, diaDeLaSemana(fecha),
+            gastoDelDia > 0 ? h('span', { class: 'tabnum small',
+                style: { fontWeight: '500', letterSpacing: '0', textTransform: 'none',
+                         color: 'var(--tx3)' } },
+              plata(Math.round(gastoDelDia), moneda)) : null),
+          h('div.grp', items.map(it => deslizable(fila(it, moneda), {
+            alEditar: () => formMovimiento(it.tx),
+            alBorrar: async () => {
+              if (!await confirmar(`¿Borrar "${tituloTx(it.tx)}"?`)) return;
+              await borrar('transactions', it.tx.id);
+              aviso('Borrado'); pintar();
+            }
+          })))));
+      }
     }
   }
 
@@ -85,16 +128,44 @@ export function vistaGastos(root) {
     const donde = entrante
       ? `de ${cuenta ? cuenta.nombre : 'otra cuenta'}${destino ? ` · ${destino.nombre}` : ''}`
       : null;
-    return h('button.li', { onclick: () => formMovimiento(t) },
+    // El renglón de abajo tiene 176 px reales en un teléfono: entran dos
+    // datos, no cuatro. El que no puede faltar es la CUENTA —es el único que
+    // no está en ninguna otra parte de la fila— así que va primero y lo que
+    // se corta, si algo se corta, es lo que viene después.
+    //
+    // Y el comercio se muestra solo si aporta algo: en la mayoría de las
+    // filas el título YA es el comercio, y abajo aparecía otra vez con el
+    // nombre limpio ("FRAVEGA SACIEI" arriba, "Frávega" abajo). Repetirlo
+    // gastaba el ancho que le faltaba a la cuenta y terminaba mostrando "F.".
+    const comercio = dondeTx(t);
+    const conQue = cuenta && !entrante && !esTransf
+      ? `${cuenta.nombre}${cuenta.ultimos4 ? ' ·' + cuenta.ultimos4 : ''}` : null;
+    const medio = donde ? donde
+      : esPagoTarjeta ? `a ${destino.nombre} · ya contó al comprar`
+      : esTransf && destino ? `a ${destino.nombre}`
+      : [conQue,
+         comercio && !pareceIgual(comercio, tituloTx(t)) ? comercio : null,
+         !conQue && !comercio ? cat : null,
+         t.cuotas > 1 ? `${t.cuotas} cuotas` : null].filter(Boolean).join(' · ');
+
+    const sinRevisar = t.revisado === false;
+    return h('button.li', { class: 'li' + (sinRevisar ? ' nuevo' : ''),
+                            onclick: () => formMovimiento(t) },
       h('div', { class: 'av' + (esIngreso ? ' pos' : '') },
         icono(esTransf ? 'sync' : iconoDe(t.comercio || t.descripcion || cat), 17)),
       h('div.m',
-        h('div.t', tituloTx(t)),
-        donde ? h('div.s', donde) :
-        esPagoTarjeta ? h('div.s', `a ${destino.nombre} · ya contó al comprar`) :
-        h('div.s', esTransf && destino ? `a ${destino.nombre}` : [dondeTx(t), cat].filter(Boolean).join(' · '),
-          cuenta ? ` · ${cuenta.nombre}${cuenta.ultimos4 ? ' ·' + cuenta.ultimos4 : ''}` : '',
-          t.cuotas > 1 ? ` · ${t.cuotas} cuotas` : '')),
+        // "Sin revisar" va en el renglón del título y no debajo del monto: en
+        // la columna de la plata competía con la cifra, y en el renglón de
+        // abajo se comía el ancho de la cuenta. Acá arriba sobra lugar —los
+        // títulos son cortos— y queda al lado de la barra de la izquierda,
+        // así la marca no depende solo del color.
+        h('div.t', { style: { display: 'flex', alignItems: 'baseline', gap: '7px' } },
+          h('span', { style: { minWidth: '0', overflow: 'hidden',
+                               textOverflow: 'ellipsis' } }, tituloTx(t)),
+          sinRevisar ? h('span', { style: { flex: 'none', fontSize: '11px', fontWeight: '600',
+                                            color: 'var(--brand)', letterSpacing: '0' } },
+            'sin revisar') : null),
+        h('div.s', medio)),
       // La pata que entra va en verde igual que un ingreso: lo que decide el
       // color es si la plata sube o baja en la moneda que se está mirando,
       // no de qué tipo es el movimiento.
@@ -105,8 +176,34 @@ export function vistaGastos(root) {
         esTransf ? plata(monto, moneda, { signo: entrante })
                  : plata(esIngreso ? monto : -monto, moneda, { signo: esIngreso }),
         t.reintegro > 0 && h('small', { style: { color: 'var(--pos)' } },
-          `−${plata(t.reintegro, moneda)} reintegro`),
-        t.revisado === false && h('small', { style: { color: 'var(--brand)' } }, 'sin revisar')));
+          `−${plata(t.reintegro, moneda)} reintegro`)));
+  }
+
+  /**
+   * ¿"Frávega" y "FRAVEGA SACIEI" son el mismo comercio? Sí, y por eso uno de
+   * los dos sobra. Con cinco letras alcanza para decidirlo sin inventar.
+   */
+  function pareceIgual(a, b) {
+    const limpiar = t => String(t).toLowerCase()
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]/g, '');
+    const x = limpiar(a), y = limpiar(b);
+    if (!x || !y) return false;
+    return x.includes(y.slice(0, 5)) || y.includes(x.slice(0, 5));
+  }
+
+  /** 'Septiembre' · 'Agosto 2025' — el año solo si no es el que corre. */
+  function nombreDeMes(per) {
+    const [y, m] = per.split('-').map(Number);
+    return MESES[m - 1] + (y === new Date().getFullYear() ? '' : ` ${y}`);
+  }
+
+  /** 'hoy' · 'ayer' · 'martes 1' — sin el mes, que ya está en la banda. */
+  function diaDeLaSemana(iso) {
+    const d = aFecha(iso);
+    const dias = Math.round((new Date(new Date().toDateString()) - d) / 86400000);
+    if (dias === 0) return 'hoy';
+    if (dias === 1) return 'ayer';
+    return `${DIAS[d.getDay()]} ${d.getDate()}`;
   }
 
   pintar();
