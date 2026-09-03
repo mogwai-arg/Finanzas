@@ -60,6 +60,11 @@ export function formImportarResumen(yaBajado = null) {
         alAvanzar: (n, total) => { estado.textContent = `Leyendo página ${n} de ${total}…`; }
       });
       if (clave) { try { localStorage.setItem(CLAVE_KEY, clave); } catch { /* modo privado */ } }
+      if (texto.value.replace(/\s/g, '').length < 40) {
+        estado.textContent = 'Ese PDF no tiene texto adentro: es una imagen. ' +
+          'Probá bajarlo desde la web del banco, que suele darlo con texto.';
+        return;
+      }
       estado.textContent = `${f.name || 'El resumen'} · ${texto.value.split('\n').length} líneas leídas`;
       leer();
     } catch (e) {

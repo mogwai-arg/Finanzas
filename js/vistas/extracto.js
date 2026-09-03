@@ -13,7 +13,8 @@
 // =====================================================================
 import { h, icono, hoja, aviso, campo, select } from '../ui.js';
 import { state, guardar, guardarVarios } from '../db.js';
-import { parseExtracto, aMovimientos, cargosDelBanco, queCargo } from '../extracto.js';
+import { parseExtracto, revisarExtracto, aMovimientos, cargosDelBanco,
+         queCargo } from '../extracto.js';
 import { plata } from '../formato.js';
 
 export function formImportarExtracto(yaBajado = null) {
@@ -48,6 +49,13 @@ export function formImportarExtracto(yaBajado = null) {
         alAvanzar: (n, total) => { estado.textContent = `Leyendo página ${n} de ${total}…`; }
       });
       if (clave) { try { localStorage.setItem(CLAVE_KEY, clave); } catch { /* modo privado */ } }
+      if (texto.value.replace(/\s/g, '').length < 40) {
+        // El PDF abrió pero no tiene letras: es una imagen. Es común cuando
+        // se baja desde la app del banco en vez de la web.
+        estado.textContent = 'Ese PDF no tiene texto adentro: es una imagen. ' +
+          'Probá bajarlo desde la web del banco, que suele darlo con texto.';
+        return;
+      }
       estado.textContent = `${f.name || 'El resumen'} · ${texto.value.split('\n').length} líneas`;
       leer();
     } catch (e) {
@@ -89,11 +97,7 @@ export function formImportarExtracto(yaBajado = null) {
   function leer() {
     salida.replaceChildren(); pie.replaceChildren();
     const r = parseExtracto(texto.value);
-    if (!r) {
-      salida.append(nota('No lo reconocí como un resumen de cuenta. Fijate que sea el de ' +
-        'la cuenta y no el de la tarjeta, y que esté el texto entero.'));
-      return;
-    }
+    if (!r) { salida.append(porQueNo(texto.value)); return; }
     if (!r.movimientos.length) {
       salida.append(nota('Lo reconocí pero no encontré movimientos. Suele pasar cuando se ' +
         'copia solo la primera hoja.'));
@@ -193,6 +197,51 @@ export function formImportarExtracto(yaBajado = null) {
     if (hay) return hay;
     return guardar('categories', { nombre: 'Bancarios', tipo: 'gasto', icono: 'banco',
                                    color: '#5C6272', orden: 99 });
+  }
+
+  /**
+   * Por qué no lo pudo leer, con lo que sí vio.
+   *
+   * "No lo reconozco" a secas es un callejón sin salida: no se sabe si el
+   * problema es el formato, si copiaste media hoja o si el PDF vino
+   * escaneado. Con esto se sabe en qué paso falló, y de paso alcanza para
+   * mandarlo y que le arreglemos el formato.
+   */
+  function porQueNo(txt) {
+    const v = revisarExtracto(txt);
+    const linea = (ok, t) => h('div.li',
+      h('div', { class: 'av ' + (ok ? 'pos' : 'amb') }, icono(ok ? 'check' : 'cerrar', 15)),
+      h('div.m', h('div.t', t)));
+
+    const motivo = v.lineas < 3
+      ? 'Llegó casi nada de texto. Si el PDF es una foto o un escaneo no tiene ' +
+        'letras adentro, y ahí no hay nada que leer: probá bajarlo de nuevo desde ' +
+        'la web del banco en vez de la app.'
+      : v.pareceTarjeta && v.conSaldo === 0
+      ? 'Esto parece el resumen de la TARJETA, no el de la cuenta. El de tarjeta ' +
+        'se sube desde Tarjetas → Importar un resumen.'
+      : v.conFecha === 0
+      ? 'No encontré ninguna línea que empiece con una fecha. Puede ser que el ' +
+        'PDF haya salido con las columnas mezcladas.'
+      : v.conSaldo === 0
+      ? 'Las líneas traen un solo importe. Un extracto de cuenta lleva el saldo ' +
+        'al lado de cada movimiento, y es de ahí de donde saco si entró o salió.'
+      : 'Leí las líneas pero no pude armarlo. Mandame el texto de abajo y lo ajusto.';
+
+    return h('div', { style: { marginTop: '14px' } },
+      h('div.grp.pad', h('div.small', { style: { lineHeight: '1.55' } }, motivo)),
+      h('div.ghead', { style: { marginTop: '16px' } }, 'Qué vi'),
+      h('div.grp',
+        linea(v.lineas >= 3, `${v.lineas} ${v.lineas === 1 ? 'línea' : 'líneas'} de texto`),
+        linea(v.conFecha > 0, `${v.conFecha} empiezan con una fecha`),
+        linea(v.conSaldo > 0, `${v.conSaldo} traen importe y saldo`),
+        linea(v.nombraSaldo, v.nombraSaldo ? 'Nombra el saldo' : 'No dice "saldo" en ningún lado')),
+      v.muestra.length ? h('div', { style: { marginTop: '16px' } },
+        h('div.ghead', 'Así vienen las filas'),
+        h('div.grp.pad', v.muestra.map(m =>
+          h('div', { style: { fontFamily: 'ui-monospace, monospace', fontSize: '11.5px',
+                              lineHeight: '1.6', wordBreak: 'break-all',
+                              color: 'var(--tx2)' } }, m)))) : null);
   }
 
   const dato = (k, v) => h('div.li', h('div.m', h('div.t', k)), h('div.v', v));

@@ -51,7 +51,13 @@ export function fecha(s, anio = null, mesRef = null) {
   return `${y}-${String(mes).padStart(2, '0')}-${String(dia).padStart(2, '0')}`;
 }
 
-const NUMERO = /-?\d{1,3}(?:\.\d{3})*,\d{2}-?|-?\d+,\d{2}-?/g;
+// Un importe con coma decimal (1.234,56 o 1234,56) o, si el banco no imprime
+// centavos, uno con separador de miles (20.581). Un entero pelado NO entra:
+// seria confundir un numero de comprobante con plata.
+const NUMERO = /-?\d{1,3}(?:\.\d{3})*,\d{2}-?|-?\d+,\d{2}-?|-?\d{1,3}(?:\.\d{3})+-?/g;
+
+// Un renglon de movimiento: empieza con una fecha y despues trae algo.
+const FILA = /^(\d{1,2}[-/.](?:[A-Za-zÁÉÍÓÚáéíóú]{3,}|\d{1,2})(?:[-/.]\d{2,4})?)\s+(.+)$/;
 
 /**
  * Lee un extracto de cuenta.
@@ -64,11 +70,24 @@ export function parseExtracto(texto) {
   if (lineas.length < 3) return null;
 
   const todo = lineas.join('\n');
-  // Tiene que parecer un extracto de cuenta y no un resumen de tarjeta: los
-  // dos traen fechas e importes, y confundirlos cargaría los consumos dos
-  // veces.
-  const esExtracto = /saldo\s*(inicial|anterior|final|al d[ií]a)|movimientos de (la )?cuenta|resumen de cuenta|cuenta corriente|caja de ahorro/i.test(todo);
-  if (!esExtracto) return null;
+
+  // ¿Es un extracto de cuenta y no un resumen de tarjeta? Los dos traen
+  // fechas e importes, y confundirlos cargaría los consumos dos veces.
+  //
+  // La primera version lo decidia por palabras del encabezado, y eso es
+  // fragil: cada banco titula distinto y el primero de verdad no dijo
+  // ninguna de las que esperabamos. La senal que no depende del vocabulario
+  // es la ESTRUCTURA: un extracto de cuenta lleva el saldo corriendo al lado
+  // de cada movimiento, asi que casi todas sus filas traen dos importes. Un
+  // resumen de tarjeta trae uno solo por consumo.
+  const porPalabra = /saldo|movimientos de (la )?cuenta|resumen de cuenta|cuenta corriente|caja de ahorro|extracto/i.test(todo);
+  const filas = lineas.map(l => l.match(FILA)).filter(Boolean);
+  const conDos = filas.filter(f => (f[2].match(NUMERO) || []).length >= 2).length;
+  const porForma = filas.length >= 3 && conDos / filas.length >= 0.5;
+  if (!porPalabra && !porForma) return null;
+  // Con palabras pero sin saldo corriendo, es casi seguro el de la tarjeta.
+  if (porPalabra && filas.length >= 3 && !porForma &&
+      /visa|mastercard|amex|l[ií]mite de compra|pago m[ií]nimo/i.test(todo)) return null;
 
   const banco = /galicia/i.test(todo) ? 'galicia'
               : /santander/i.test(todo) ? 'santander'
@@ -86,12 +105,16 @@ export function parseExtracto(texto) {
   const anio = desde ? Number(desde.slice(0, 4)) : null;
   const mesRef = desde ? Number(desde.slice(5, 7)) : null;
 
-  const saldoInicial = buscarSaldo(lineas, /saldo\s*(inicial|anterior|al\s+inicio)/i);
-  const saldoFinal = buscarSaldo(lineas, /saldo\s*(final|al\s+cierre|al\s+d[ií]a)/i);
+  // Cada banco lo titula distinto: "saldo anterior", "saldo último extracto",
+  // "saldo al inicio del período".
+  const saldoInicial = buscarSaldo(lineas,
+    /saldo\s*(inicial|anterior|[uú]ltimo|al\s+inicio|al\s+comienzo|del\s+per[ií]odo\s+anterior)/i);
+  const saldoFinal = buscarSaldo(lineas,
+    /saldo\s*(final|actual|al\s+cierre|al\s+d[ií]a|disponible|total)/i);
 
   const crudos = [];
   for (const l of lineas) {
-    const f = l.match(/^(\d{1,2}[-/.](?:[A-Za-zÁÉÍÓÚáéíóú]{3,}|\d{1,2})(?:[-/.]\d{2,4})?)\s+(.+)$/);
+    const f = l.match(FILA);
     if (!f) continue;
     const iso = fecha(f[1], anio, mesRef);
     if (!iso) continue;
@@ -105,8 +128,11 @@ export function parseExtracto(texto) {
     const importe = Math.abs(monto(nums[nums.length > 1 ? nums.length - 2 : 0]) || 0);
     if (!importe) continue;
 
-    const descripcion = f[2].slice(0, f[2].indexOf(nums[0])).trim()
-      .replace(/\s{2,}/g, ' ').replace(/[.\s]+$/, '');
+    // Muchos extractos traen una segunda fecha (fecha valor) antes de la
+    // descripcion: sacarla evita que el comercio quede como "02/09 EDESUR".
+    const descripcion = f[2].slice(0, f[2].indexOf(nums[0]))
+      .replace(/^\s*\d{1,2}[-/.]\d{1,2}(?:[-/.]\d{2,4})?\s+/, '')
+      .trim().replace(/\s{2,}/g, ' ').replace(/[.\s]+$/, '');
     if (!descripcion) continue;
 
     crudos.push({ fecha: iso, descripcion, importe, saldo,
@@ -297,4 +323,35 @@ export function cargosPorMes(txs, meses = 6, ref = new Date()) {
     });
   }
   return out;
+}
+
+/**
+ * Que vio el lector cuando no pudo leer.
+ *
+ * Un "no lo reconozco" a secas es un callejon sin salida: el que lo lee no
+ * sabe si el problema es el formato, si copio media hoja o si el PDF vino
+ * escaneado. Y del otro lado, sin saber que vio, hay que adivinar.
+ *
+ * Es la misma idea del diagnostico de los avisos: cuando algo falla, la app
+ * tiene que decir lo que sabe, no lo que no pudo.
+ */
+export function revisarExtracto(texto) {
+  const lineas = String(texto || '').split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+  const todo = lineas.join('\n');
+  const filas = lineas.map(l => l.match(FILA)).filter(Boolean);
+  const conImporte = filas.filter(f => (f[2].match(NUMERO) || []).length >= 1);
+  const conSaldo = filas.filter(f => (f[2].match(NUMERO) || []).length >= 2);
+
+  return {
+    lineas: lineas.length,
+    conFecha: filas.length,
+    conImporte: conImporte.length,
+    conSaldo: conSaldo.length,
+    nombraSaldo: /saldo/i.test(todo),
+    pareceTarjeta: /visa|mastercard|amex|l[ií]mite de compra|pago m[ií]nimo/i.test(todo),
+    // Las primeras filas con fecha, para poder ver como vienen de verdad.
+    muestra: filas.slice(0, 4).map(f => `${f[1]} ${f[2]}`.slice(0, 90)),
+    // Y el arranque del texto, que es donde esta el encabezado.
+    encabezado: lineas.slice(0, 4).map(l => l.slice(0, 70))
+  };
 }

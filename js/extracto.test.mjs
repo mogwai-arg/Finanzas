@@ -115,5 +115,71 @@ t('sin año en la fila usa el del período', () => {
   assert.ok(r.movimientos.every(m => m.fecha.startsWith('2026-09')));
 });
 
+// ---------------------------------- formatos que el primero real rompio
+t('lo reconoce por la FORMA aunque el encabezado no diga las palabras', () => {
+  // La primera version decidia por palabras del encabezado y eso es fragil:
+  // cada banco titula distinto. La senal que no depende del vocabulario es
+  // que cada fila lleve el saldo corriendo al lado del importe.
+  const sinPalabras = `MI BANCO
+Movimientos
+02/09  PAGO SERVICIOS               20.581,06     979.418,94
+05/09  ACREDITACION                2.026.665,38  3.005.960,83
+06/09  COMISION                        980,15    3.004.980,68`;
+  const r = E.parseExtracto(sinPalabras);
+  assert.ok(r, 'tiene que reconocerlo por la forma');
+  assert.equal(r.movimientos.length, 3);
+});
+
+t('lee importes sin centavos', () => {
+  const sinCentavos = `RESUMEN DE CUENTA
+02/09  DEBITO EDESUR        20.581     979.418
+05/09  COMISION MANTENIMIENTO   18.500     960.918`;
+  const r = E.parseExtracto(sinCentavos);
+  assert.equal(r.movimientos.length, 2);
+  assert.equal(r.movimientos[0].importe, 20581);
+});
+
+t('la fecha valor no se cuela en el nombre del comercio', () => {
+  const conValor = `RESUMEN DE CUENTA
+SALDO ANTERIOR                                 1.000.000,00
+02/09  02/09  DEBITO AUTOMATICO EDESUR   20.581,06   979.418,94`;
+  const r = E.parseExtracto(conValor);
+  assert.equal(r.movimientos[0].descripcion, 'DEBITO AUTOMATICO EDESUR');
+});
+
+t('un resumen de tarjeta con la palabra saldo sigue sin colarse', () => {
+  const tarjeta = `RESUMEN VISA
+Saldo anterior 0,00   Pago minimo 45.000,00   Limite de compra 3.000.000,00
+01-08-26 COTO CICSA        48.200,00
+03-08-26 YPF FULL          52.000,00
+05-08-26 SPOTIFY            8.999,00`;
+  assert.equal(E.parseExtracto(tarjeta), null);
+});
+
+t('reconoce el saldo aunque el banco lo titule distinto', () => {
+  const otro = `RESUMEN DE CUENTA
+SALDO ULTIMO EXTRACTO                          1.000.000,00
+02/09  DEBITO EDESUR        20.581,06     979.418,94
+SALDO ACTUAL                                     979.418,94`;
+  const r = E.parseExtracto(otro);
+  assert.equal(r.saldoInicial, 1000000);
+  assert.equal(r.cuadra, true);
+});
+
+t('cuando no puede, dice QUE vio', () => {
+  // Un "no lo reconozco" a secas es un callejon sin salida: no se sabe si el
+  // problema es el formato, media hoja copiada o un PDF escaneado.
+  const rev = E.revisarExtracto('cualquier cosa\nsin fechas ni importes');
+  assert.equal(rev.lineas, 2);
+  assert.equal(rev.conFecha, 0);
+  assert.equal(rev.nombraSaldo, false);
+
+  const conAlgo = E.revisarExtracto(`RESUMEN
+02/09  ALGO   1.000,00   2.000,00`);
+  assert.equal(conAlgo.conFecha, 1);
+  assert.equal(conAlgo.conSaldo, 1);
+  assert.equal(conAlgo.muestra.length, 1);
+});
+
 console.log(`\n${ok} pruebas OK${mal ? `, ${mal} FALLAN` : ''}\n`);
 process.exit(mal ? 1 : 0);
