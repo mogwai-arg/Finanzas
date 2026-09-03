@@ -1,26 +1,23 @@
 // =====================================================================
-// vistas/mes.js — gastos fijos y presupuesto del mes.
+// vistas/mes.js — Pagar: qué se debe este mes y cuándo.
+//
+// Es la pestaña que contesta "¿qué debo?": el total arriba, los resúmenes de
+// tarjeta, los gastos fijos y la puerta a cada tarjeta por dentro. El
+// presupuesto se fue a Números y los vencimientos que apremian se ven en Hoy;
+// acá está la lista completa.
 // =====================================================================
 import { h, frag, icono, iconoDe, hoja, aviso, select, deslizable, confirmar } from '../ui.js';
 import { state, guardar, borrar } from '../db.js';
 import * as F from '../finance.js';
-import { plata, cuandoVence, nombreDe, fechaISO, hoyISO, etiquetaCuenta,
+import { plata, cuandoVence, fechaISO, hoyISO, etiquetaCuenta,
          aNumero as num } from '../formato.js';
 import { irA } from '../ruteo.js';
-import { formRecurrente, formPresupuesto } from './formularios.js';
+import { formRecurrente } from './formularios.js';
 
 export function vistaMes(root) {
   const hoy = new Date();
   const p = hoyISO().slice(0, 7);
   const rec = F.recurrentesDelMes(state.recurrings, state.recurring_payments, p, hoy);
-  const res = F.resumenMes(state.transactions, p, 'ARS');
-  const budgets = state.budgets.filter(b => b.periodo === p);
-  const alertPct = Number(state.settings?.alert_pct) || 80;
-  const porCuenta = F.estadoPorCuenta(budgets, state.transactions, p, alertPct);
-  const paraAhorro = { cuentas: state.accounts, txs: state.transactions,
-                       recurrings: state.recurrings, pagos: state.recurring_payments };
-  const ahorro = ['ARS', 'USD']
-    .map(m => F.estadoAhorro(budgets, paraAhorro, p, m, hoy)).filter(Boolean);
   const faltan = rec.filter(r => !r.pagado);
   // Los que se debitan en la tarjeta no se pagan aparte: salen con el resumen,
   // que ya está contado más arriba. Sumarlos sería cobrarlos dos veces.
@@ -36,7 +33,7 @@ export function vistaMes(root) {
 
     (faltan.length || esteMes.length) ? h('div.grp.pad',
       h('div.ghead', { style: { margin: '0' } }, 'Falta pagar'),
-      h('div', { class: 'cifra', style: { fontSize: '30px', marginTop: '5px' } }, plata(Math.round(total))),
+      h('div', { class: 'cifra', style: { marginTop: '5px' } }, plata(Math.round(total))),
       h('div.small.mut', { style: { marginTop: '4px' } },
         [esteMes.length ? `${esteMes.length} ${esteMes.length === 1 ? 'resumen' : 'resúmenes'}` : null,
          rec.length ? `${faltanEnCuenta.length} de ${rec.length} gastos fijos` : null]
@@ -75,29 +72,19 @@ export function vistaMes(root) {
             h('p', 'El colegio, la prepaga, la luz. Cargalos una vez y la app te avisa cada mes.'),
             h('button.btn.sec', { onclick: () => formRecurrente() }, 'Cargar el primero'))),
 
+    // Las tarjetas por dentro: límite, plástico y cuotas comprometidas.
+    // Antes eran una pestaña propia y ahora viven bajo Pagar, que es la
+    // pregunta que contestan.
     h('section',
       h('div.grp',
-        h('button.li', { onclick: () => irA('/estadisticas') },
-          h('div.av', icono('tendencia', 17)),
-          h('div.m', h('div.t', 'Dónde estás parado'),
-            h('div.s', 'Mes a mes, en qué se fue y los gastos más grandes')),
-          h('span.chev', icono('chev', 15))))),
-
-    h('section',
-      h('div.ghead', 'Presupuesto',
-        h('button', { onclick: () => formPresupuesto(p) }, budgets.length ? 'Ajustar' : 'Definir')),
-      budgets.length
-        ? h('div',
-            h('div.grp', F.estadoPresupuesto(budgets, res, alertPct).map(b => filaPresupuesto(b))),
-            porCuenta.length ? h('div', { style: { marginTop: '16px' } },
-              h('div.ghead', 'Tope por tarjeta'),
-              h('div.grp', porCuenta.map(b => filaPresupuesto(b, nombreDe('accounts', b.account_id))))) : null,
-            ahorro.length ? h('div', { style: { marginTop: '16px' } },
-              h('div.ghead', 'Ideal de ahorro'),
-              h('div.grp', ahorro.map(filaAhorro))) : null)
-        : h('div.grp.pad', h('div.small.mut', { style: { lineHeight: '1.5' } },
-            'Sin topes cargados no hay con qué comparar el gasto del mes. ',
-            'Empezá por tres categorías, no por diez.')))
+        h('button.li', { onclick: () => irA('/tarjetas') },
+          h('div.av', icono('tarjeta', 17)),
+          h('div.m', h('div.t', 'Ver las tarjetas'),
+            h('div.s', 'Límite disponible, ciclos y cuotas comprometidas')),
+          h('span.chev', icono('chev', 15)))))
+    // El presupuesto se fue a Números: es la pantalla de "dónde estoy
+    // parado", no de "qué tengo que pagar". Estaba acá y también en Hoy, con
+    // pies de fila distintos en cada una.
   ));
 }
 
@@ -277,82 +264,6 @@ function totalFijos(rec) {
   }).filter(Boolean);
   if (!filas.length) return null;
   return h('div', { style: { padding: '12px 14px 2px' } }, filas);
-}
-
-/**
- * El ahorro no es un tope que no hay que pasar: es un piso al que llegar, y
- * por eso se muestra al revés que un presupuesto: cuánto falta, no cuánto
- * queda.
- *
- * Y con el mes corriendo NO se declara cumplido. El día 3, con el sueldo
- * adentro y los gastos sin hacer, la plata libre está arriba de cualquier
- * meta: festejar ahí es felicitar a alguien que no tiene plata. Mientras el
- * mes corre se dice cómo viene y contra qué compararlo.
- */
-function filaAhorro(a) {
-  const nombre = a.moneda === 'USD' ? 'En dólares' : 'En pesos';
-  // Con signo, siempre. Sin él, "pasó de $ 1.930.458 a $ 1.350.971" escondía
-  // que el primero era NEGATIVO y que la plata libre había subido, no bajado.
-  const con = n => (n < 0 ? '−' : '') + plata(Math.round(Math.abs(n)), a.moneda);
-
-  return h('div', { style: { padding: '13px 14px' } },
-    h('div', { style: { display: 'flex', justifyContent: 'space-between',
-                        alignItems: 'baseline', gap: '10px' } },
-      h('span', { style: { fontSize: '14.5px', fontWeight: '500' } }, nombre),
-      h('span.small.mut',
-        h('b', { style: { color: a.ahorrado < 0 ? 'var(--amb)'
-                                : a.logrado ? 'var(--pos)' : 'var(--tx)' } }, con(a.ahorrado)),
-        ` de ${plata(a.tope, a.moneda)}`)),
-
-    // La barra aparece cuando el mes cerró. Mientras corre, una barra llena se
-    // lee como "listo", y el día 3 —con el sueldo adentro y los gastos sin
-    // hacer— eso es felicitar a alguien que todavía no ahorró nada.
-    !a.enCurso ? h('div.mini',
-      h('b', { style: { flex: String(Math.max(1, a.pct)) } }),
-      h('span', { style: { flex: String(Math.max(1, 100 - a.pct)) } })) : null,
-
-    h('div.small.mut', { style: { marginTop: '7px', lineHeight: '1.45' } },
-      a.enCurso
-        ? frag('Así viene, y faltan ', h('b', { style: { color: 'var(--tx)' } },
-            `${a.dias} ${a.dias === 1 ? 'día' : 'días'}`),
-            ' de gastos. ',
-            a.referencia != null
-              ? `A esta altura del mes pasado ibas ${con(a.referencia)}.`
-              : 'Todavía no hay un mes anterior con qué comparar.')
-        : a.logrado ? '¡Llegaste!'
-        : a.ahorrado < 0 ? `El mes cerró ${con(a.ahorrado)}: se fue más de lo que entró.`
-        : `Te faltaron ${con(a.falta)}.`),
-
-    // De dónde sale el número: sin esto, un ahorro que no cierra no se puede
-    // discutir con la app.
-    h('div.small.mut', { style: { marginTop: '4px', color: 'var(--tx3)' } },
-      `tu plata libre pasó de ${con(a.desde)} a ${con(a.ahora)}`));
-}
-
-function filaPresupuesto(b, nombre) {
-  const nom = nombre || nombreDe('categories', b.category_id, 'Sin categoría');
-  const dentro = Math.min(b.gastado, b.tope);
-  const exceso = Math.max(0, b.gastado - b.tope);
-  return h('div', { style: { padding: '13px 14px', position: 'relative' } },
-    h('div', { style: { display: 'flex', justifyContent: 'space-between',
-                        alignItems: 'baseline', gap: '10px' } },
-      h('span', { style: { fontSize: '14.5px', fontWeight: '500' } }, nom),
-      h('span.small.mut', h('b', { style: { color: 'var(--tx)' } },
-        plata(Math.round(b.gastado), b.moneda || 'ARS')),
-        ` de ${plata(b.tope, b.moneda || 'ARS')}`)),
-    // El tramo vacío tiene que estar: con Math.max(1, …) y sin hermano, una
-    // categoría en cero dibujaba la barra ENTERA llena. Se veía como gastado
-    // todo el tope justo donde no se gastó nada.
-    h('div.mini',
-      dentro > 0 ? h('b', { class: b.pct >= 80 ? 'al' : '',
-                            style: { flex: String(dentro) } }) : null,
-      exceso > 0 ? h('s', { style: { flex: String(exceso) } }) : null,
-      b.restante > 0 ? h('span', { style: { flex: String(b.restante) } }) : null),
-    exceso > 0 && h('div', {
-      style: { fontSize: '12.5px', color: 'var(--amb)', fontWeight: '600', marginTop: '7px' } },
-      `${plata(Math.round(exceso), b.moneda || 'ARS')} de más`),
-    exceso === 0 && b.restante > 0 && h('div.small.mut', { style: { marginTop: '7px' } },
-      `quedan ${plata(Math.round(b.restante), b.moneda || 'ARS')}`));
 }
 
 /**

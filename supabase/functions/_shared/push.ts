@@ -159,3 +159,34 @@ export function clavesDelEntorno(): Claves | null {
 export function faltanClaves(): string[] {
   return ['VAPID_PUBLIC', 'VAPID_PRIVATE'].filter(n => !Deno.env.get(n)?.trim());
 }
+
+/**
+ * Si la publica y la privada son el MISMO par.
+ *
+ * Es la falla que no se ve: las dos claves estan puestas, ninguna esta vacia,
+ * y el aviso sale firmado igual. Pero si la publica quedo de una generacion y
+ * la privada de otra —muy facil si se generaron dos veces— el servicio de push
+ * rechaza la firma y no llega nada, sin decir por que.
+ *
+ * Se comprueba firmando algo con la privada y verificandolo con la publica.
+ */
+export async function parValido(claves: Claves): Promise<boolean> {
+  try {
+    const pub = b64uABytes(claves.publica);
+    if (pub.length !== 65 || pub[0] !== 4) return false;
+    const jwk: JsonWebKey = {
+      kty: 'EC', crv: 'P-256', ext: true,
+      x: bytesAB64u(pub.slice(1, 33)), y: bytesAB64u(pub.slice(33, 65))
+    };
+    const privada = await crypto.subtle.importKey('jwk',
+      { ...jwk, d: claves.privada }, { name: 'ECDSA', namedCurve: 'P-256' }, false, ['sign']);
+    const publica = await crypto.subtle.importKey('jwk', jwk,
+      { name: 'ECDSA', namedCurve: 'P-256' }, false, ['verify']);
+    const dato = texto('bishusha');
+    const firma = await crypto.subtle.sign({ name: 'ECDSA', hash: 'SHA-256' }, privada, dato);
+    return await crypto.subtle.verify({ name: 'ECDSA', hash: 'SHA-256' }, publica, firma, dato);
+  } catch {
+    // Importar la privada con las coordenadas de OTRA publica ya falla acá.
+    return false;
+  }
+}

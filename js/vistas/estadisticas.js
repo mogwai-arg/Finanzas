@@ -1,22 +1,30 @@
 // =====================================================================
-// vistas/estadisticas.js — dónde estás parado.
+// vistas/estadisticas.js — Números: dónde estás parado.
 //
-// Tres preguntas, en el orden en que uno las hace:
+// Las preguntas, en el orden en que uno las hace:
 //
 //   1. ¿Este mes entró más de lo que salió?      -> la cifra de arriba
 //   2. ¿Y comparado con los meses anteriores?    -> las barras por mes
 //   3. ¿En qué se fue?                           -> las categorías
+//   4. ¿Me estoy pasando de lo que puse?         -> el presupuesto
+//   5. ¿Cuánto entra el mes que viene?           -> la proyección del sueldo
 //
 // El mes en curso va marcado en las dos primeras: comparar un mes por la
 // mitad contra meses enteros es la forma más fácil de creerse que se está
 // gastando poco.
+//
+// Presupuesto y proyección vivían en Hoy y en Pagar. Son las dos cosas que
+// se miran para saber dónde uno está parado, no para decidir hoy: acá tienen
+// una pantalla sola y no se repiten en ninguna otra.
 // =====================================================================
 import { h, frag, icono, iconoDeCategoria } from '../ui.js';
 import { state } from '../db.js';
 import * as F from '../finance.js';
-import { plata, plataPartida, hoyISO, buscar } from '../formato.js';
+import * as S from '../sueldo.js';
+import { plata, plataPartida, hoyISO, buscar, nombreDe } from '../formato.js';
 import { barrasHorizontales, barrasPorMes, leyenda } from '../graficos.js';
 import { irA } from '../ruteo.js';
+import { formPresupuesto } from './formularios.js';
 
 const MES_CORTO = ['ene', 'feb', 'mar', 'abr', 'may', 'jun',
                    'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
@@ -32,7 +40,9 @@ export function vistaEstadisticas(root, { moneda = 'ARS' } = {}) {
       balance(per, moneda, hoy),
       porMes(moneda, hoy),
       categorias(per, moneda),
-      mayores(per, moneda)));
+      presupuesto(per, hoy),
+      mayores(per, moneda),
+      proximoSueldo()));
   };
   pintar();
 }
@@ -49,28 +59,56 @@ function selectorMoneda(actual) {
 
 // --------------------------------------------------------------- balance
 /**
- * Lo que quedó este mes: entró menos salió.
+ * Lo que entró menos lo que salió, y —al lado— lo que de verdad queda.
  *
- * Va arriba y en grande porque es la única cifra que contesta la pregunta de
- * fondo. Positivo no se pinta de verde a lo loco: el mes en curso puede estar
- * en verde solo porque el sueldo entró el 1 y los gastos todavía no.
+ * Antes esta ficha decía "QUEDÓ ESTE MES $ 3.110.877" en verde mientras la
+ * plata libre de Hoy decía $ 1.350.971. Dos pantallas de la misma app
+ * contestando distinto la misma pregunta, con 1,7 millones de diferencia: es
+ * el mismo error que hacía que el ahorro dijera "¡llegaste!" sin plata.
+ *
+ * Los dos números están bien, pero contestan cosas distintas: la diferencia
+ * del mes es del mes, la plata libre es de ahora y ya le restó los resúmenes
+ * y los fijos que faltan. Así que van juntos y con el nombre correcto: el de
+ * arriba es la diferencia, no lo que hay.
  */
 function balance(per, moneda, hoy) {
   const r = F.resumenMes(state.transactions, per, moneda);
   const dia = hoy.getDate();
   const enElMes = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0).getDate();
-  const { simbolo, numero } = plataPartida(Math.round(r.ingresos - r.gastos), moneda);
-  const bien = r.ingresos - r.gastos >= 0;
+  const dif = Math.round(r.ingresos - r.gastos);
+  const enCurso = per === hoyISO().slice(0, 7);
+  const { simbolo, numero } = plataPartida(dif, moneda);
+  const pl = F.plataLibre(state.accounts, state.transactions, state.recurrings,
+                          state.recurring_payments, hoy, moneda);
+  const hayLibre = pl.enCuentas || pl.resumenes || pl.fijos;
 
   return h('div.grp.pad',
-    h('div.ghead', { style: { margin: '0 0 5px' } }, 'Quedó este mes'),
-    h('div', { class: 'cifra' + (bien ? ' pos' : ' neg') }, h('em', simbolo), numero),
+    h('div.ghead', { style: { margin: '0 0 5px' } }, 'Entró y salió este mes'),
+    // El mes en curso NO se pinta: con el sueldo adentro el día 1 y los
+    // gastos sin hacer, un número verde enorme dice "vas bárbaro" todos los
+    // meses. El color se gana cuando el mes cerró.
+    h('div', { class: 'cifra' + (enCurso ? '' : dif >= 0 ? ' pos' : ' neg') },
+      h('em', simbolo), numero),
     h('div.small.mut', { style: { marginTop: '5px' } },
       `entró ${plata(Math.round(r.ingresos), moneda)} · salió ${plata(Math.round(r.gastos), moneda)}`),
+
+    hayLibre ? h('div', { style: { marginTop: '13px', paddingTop: '13px',
+                                   borderTop: '1px solid var(--line)' } },
+      h('div', { style: { display: 'flex', justifyContent: 'space-between',
+                          alignItems: 'baseline', gap: '10px' } },
+        h('span.small.mut', 'Plata libre hoy'),
+        h('span', { class: 'tabnum' + (pl.libre < 0 ? ' neg' : ''),
+                    style: { fontWeight: '700', fontSize: '17px' } },
+          plata(Math.round(pl.libre), moneda))),
+      h('div.small.mut', { style: { marginTop: '6px', lineHeight: '1.45' } },
+        'La diferencia de arriba no es lo que tenés: le falta restar los ',
+        'resúmenes de tarjeta y los gastos fijos que todavía no pagaste. ',
+        'Eso ya está restado en la plata libre.')) : null,
+
     h('div.small.mut', { style: { marginTop: '11px', paddingTop: '11px',
                                   borderTop: '1px solid var(--line)', lineHeight: '1.5' } },
-      `Va el día ${dia} de ${enElMes}: el mes todavía no terminó, así que el número `,
-      'se mueve hasta fin de mes.'));
+      `Va el día ${dia} de ${enElMes}: el mes todavía no terminó, así que la `,
+      'diferencia se mueve hasta fin de mes.'));
 }
 
 // ---------------------------------------------------------------- por mes
@@ -97,8 +135,12 @@ function porMes(moneda, hoy) {
       ' y salió ',
       h('b', { style: { color: 'var(--tx)' } }, plata(Math.round(m.gastos), moneda)),
       m.ingresos || m.gastos
-        ? frag('. Quedaron ', h('b', { style: { color: bal >= 0 ? 'var(--pos)' : 'var(--amb)' } },
-            plata(Math.round(bal), moneda)), '.')
+        // "Quedaron" no: lo que quedó son las cuentas menos lo que se debe, y
+        // eso es la plata libre. Esto es una resta del mes y nada más.
+        ? frag('. La diferencia fue ',
+            h('b', { style: { color: m.enCurso ? 'var(--tx)'
+                                    : bal >= 0 ? 'var(--pos)' : 'var(--amb)' } },
+              plata(Math.round(bal), moneda)), '.')
         : '. No hay nada cargado en ese mes.');
   };
 
@@ -133,7 +175,10 @@ function categorias(per, moneda) {
   }));
 
   return h('section',
-    h('div.ghead', 'En qué se fue', h('span.mut', `${cs.length}`)),
+    // Un "4" suelto al lado del título no decía de qué era.
+    h('div.ghead', 'En qué se fue',
+      h('span.mut', { style: { textTransform: 'none', letterSpacing: '0', fontWeight: '500' } },
+        `${cs.length} ${cs.length === 1 ? 'categoría' : 'categorías'}`)),
     h('div.grp.pad', barrasHorizontales(datos, { moneda,
       alFila: d => irA('/gastos') })),
     cs.length > 8 ? h('div.small.mut', { style: { padding: '10px 4px 0' } },
@@ -169,3 +214,201 @@ function mayores(per, moneda) {
         h('div.v', plata(Math.round(t.monto), moneda)));
     })));
 }
+
+// --------------------------------------------------------- presupuesto
+/**
+ * Los topes del mes: por categoría, por tarjeta y el ideal de ahorro.
+ *
+ * Estaba en Hoy y en Pagar a la vez, con pie de fila distinto en cada una.
+ * Una sola versión, y la completa.
+ */
+function presupuesto(per, hoy) {
+  const budgets = state.budgets.filter(b => b.periodo === per);
+  const alertPct = Number(state.settings?.alert_pct) || 80;
+  const res = F.resumenMes(state.transactions, per, 'ARS');
+  const porCuenta = F.estadoPorCuenta(budgets, state.transactions, per, alertPct);
+  const paraAhorro = { cuentas: state.accounts, txs: state.transactions,
+                       recurrings: state.recurrings, pagos: state.recurring_payments };
+  const ahorro = ['ARS', 'USD']
+    .map(m => F.estadoAhorro(budgets, paraAhorro, per, m, hoy)).filter(Boolean);
+
+  return h('section',
+    h('div.ghead', 'Presupuesto',
+      h('button', { onclick: () => formPresupuesto(per) },
+        budgets.length ? 'Ajustar' : 'Definir')),
+    budgets.length
+      ? h('div',
+          h('div.grp', F.estadoPresupuesto(budgets, res, alertPct).map(b => filaPresupuesto(b))),
+          porCuenta.length ? h('div', { style: { marginTop: '16px' } },
+            h('div.ghead', 'Tope por tarjeta'),
+            h('div.grp', porCuenta.map(b =>
+              filaPresupuesto(b, nombreDe('accounts', b.account_id))))) : null,
+          ahorro.length ? h('div', { style: { marginTop: '16px' } },
+            h('div.ghead', 'Ideal de ahorro'),
+            h('div.grp', ahorro.map(filaAhorro))) : null)
+      : h('div.grp.pad', h('div.small.mut', { style: { lineHeight: '1.5' } },
+          'Sin topes cargados no hay con qué comparar el gasto del mes. ',
+          'Empezá por tres categorías, no por diez.')));
+}
+
+/**
+ * El ahorro no es un tope que no hay que pasar: es un piso al que llegar, y
+ * por eso se muestra al revés que un presupuesto: cuánto falta, no cuánto
+ * queda.
+ *
+ * Y con el mes corriendo NO se declara cumplido. El día 3, con el sueldo
+ * adentro y los gastos sin hacer, la plata libre está arriba de cualquier
+ * meta: festejar ahí es felicitar a alguien que no tiene plata. Mientras el
+ * mes corre se dice cómo viene y contra qué compararlo.
+ */
+function filaAhorro(a) {
+  const nombre = a.moneda === 'USD' ? 'En dólares' : 'En pesos';
+  // Con signo, siempre. Sin él, "pasó de $ 1.930.458 a $ 1.350.971" escondía
+  // que el primero era NEGATIVO y que la plata libre había subido, no bajado.
+  const con = n => (n < 0 ? '−' : '') + plata(Math.round(Math.abs(n)), a.moneda);
+
+  return h('div', { style: { padding: '13px 14px' } },
+    h('div', { style: { display: 'flex', justifyContent: 'space-between',
+                        alignItems: 'baseline', gap: '10px' } },
+      h('span', { style: { fontSize: '14.5px', fontWeight: '500' } }, nombre),
+      h('span.small.mut',
+        h('b', { style: { color: a.ahorrado < 0 ? 'var(--amb)'
+                                : a.logrado ? 'var(--pos)' : 'var(--tx)' } }, con(a.ahorrado)),
+        ` de ${plata(a.tope, a.moneda)}`)),
+
+    // La barra aparece cuando el mes cerró. Mientras corre, una barra llena se
+    // lee como "listo", y el día 3 —con el sueldo adentro y los gastos sin
+    // hacer— eso es felicitar a alguien que todavía no ahorró nada.
+    !a.enCurso ? h('div.mini',
+      h('b', { style: { flex: String(Math.max(1, a.pct)) } }),
+      h('span', { style: { flex: String(Math.max(1, 100 - a.pct)) } })) : null,
+
+    h('div.small.mut', { style: { marginTop: '7px', lineHeight: '1.45' } },
+      a.enCurso
+        ? frag('Así viene, y faltan ', h('b', { style: { color: 'var(--tx)' } },
+            `${a.dias} ${a.dias === 1 ? 'día' : 'días'}`),
+            ' de gastos. ',
+            a.referencia != null
+              ? `A esta altura del mes pasado ibas ${con(a.referencia)}.`
+              : 'Todavía no hay un mes anterior con qué comparar.')
+        : a.logrado ? '¡Llegaste!'
+        : a.ahorrado < 0 ? `El mes cerró ${con(a.ahorrado)}: se fue más de lo que entró.`
+        : `Te faltaron ${con(a.falta)}.`),
+
+    // De dónde sale el número: sin esto, un ahorro que no cierra no se puede
+    // discutir con la app.
+    h('div.small.mut', { style: { marginTop: '4px', color: 'var(--tx3)' } },
+      `tu plata libre pasó de ${con(a.desde)} a ${con(a.ahora)}`));
+}
+
+function filaPresupuesto(b, nombre) {
+  const nom = nombre || nombreDe('categories', b.category_id, 'Sin categoría');
+  const dentro = Math.min(b.gastado, b.tope);
+  const exceso = Math.max(0, b.gastado - b.tope);
+  return h('div', { style: { padding: '13px 14px', position: 'relative' } },
+    h('div', { style: { display: 'flex', justifyContent: 'space-between',
+                        alignItems: 'baseline', gap: '10px' } },
+      h('span', { style: { fontSize: '14.5px', fontWeight: '500' } }, nom),
+      h('span.small.mut', h('b', { style: { color: 'var(--tx)' } },
+        plata(Math.round(b.gastado), b.moneda || 'ARS')),
+        ` de ${plata(b.tope, b.moneda || 'ARS')}`)),
+    // El tramo vacío tiene que estar: con Math.max(1, …) y sin hermano, una
+    // categoría en cero dibujaba la barra ENTERA llena. Se veía como gastado
+    // todo el tope justo donde no se gastó nada.
+    h('div.mini',
+      dentro > 0 ? h('b', { class: b.pct >= 80 ? 'al' : '',
+                            style: { flex: String(dentro) } }) : null,
+      exceso > 0 ? h('s', { style: { flex: String(exceso) } }) : null,
+      b.restante > 0 ? h('span', { style: { flex: String(b.restante) } }) : null),
+    exceso > 0 && h('div', {
+      style: { fontSize: '12.5px', color: 'var(--amb)', fontWeight: '600', marginTop: '7px' } },
+      `${plata(Math.round(exceso), b.moneda || 'ARS')} de más`),
+    exceso === 0 && b.restante > 0 && h('div.small.mut', { style: { marginTop: '7px' } },
+      `quedan ${plata(Math.round(b.restante), b.moneda || 'ARS')}`));
+}
+
+// ------------------------------------------------------- proximo sueldo
+/**
+ * Lo que se cobra la proxima vez, en banco y en sobre, con la razon del
+ * cambio. Un sueldo puede BAJAR aun con aumento —si el mes anterior tenia
+ * vacaciones o un bono que no se repite—, y sin explicacion esa caida
+ * parece un error de la app.
+ */
+function proximoSueldo() {
+  const recibos = (state.recibos || []).map(r => ({
+    periodo: r.periodo, basico: Number(r.basico) || 0,
+    remunerativo: Number(r.remunerativo) || 0,
+    noRemunerativo: Number(r.no_remunerativo ?? r.noRemunerativo) || 0,
+    deducciones: Number(r.deducciones) || 0, neto: Number(r.neto) || 0,
+    sobre: Number(r.sobre) || 0, conceptos: r.conceptos || []
+  }));
+  if (recibos.length < 2) return null;
+
+  const ult = recibos[recibos.length - 1];
+  const cobro = S.proximoCobro(recibos, {
+    diaCobro: Number(state.settings?.dia_cobro) || 1,
+    sobre: ult.sobre || Number(state.settings?.sobre_estimado) || 0,
+    sobreDesde: ult.periodo,
+    // El acuerdo sale de los que estan cargados en Sueldo. Sin ninguno que
+    // cubra el periodo, se proyecta con el ritmo aprendido y se avisa.
+    acuerdo: S.acuerdoVigente(state.paritarias, S.sumarMeses(ult.periodo, 1)),
+    sumas: S.sumasDeclaradas(state.sumas_nr)
+  });
+  if (!cobro) return null;
+
+  const baja = cobro.diferencia < 0;
+  const razones = cobro.porque.slice(0, 2);
+
+  return h('section',
+    h('div.ghead', 'El mes que viene',
+      h('span.pill.mut', { style: { textTransform: 'none', letterSpacing: '0' } },
+        cobro.conAcuerdo ? 'con paritaria firmada' : 'estimado')),
+    h('button.grp.pad', { style: { width: '100%', textAlign: 'left', border: '0',
+                                   cursor: 'pointer', display: 'block' },
+                          onclick: () => irA('/sueldo') },
+      h('div', { style: { display: 'flex', justifyContent: 'space-between',
+                          alignItems: 'flex-start', gap: '10px' } },
+        h('div',
+          // El segundo escalón de la escala: es una proyección del mes que
+          // viene y no tiene que ganarle a la cifra de la pantalla.
+          h('div', { class: 'cifra' + (state.ocultarMontos ? ' oculto' : ''),
+                     style: { fontSize: 'var(--t-cifra2)' } }, plata(Math.round(cobro.total))),
+          h('div.small.mut', { style: { marginTop: '4px' } },
+            `entrarían el ${diaMes(cobro.fecha)}`)),
+        h('span', { class: `pill ${baja ? 'amb' : 'pos'}` },
+          h('span', { style: { display: 'grid', transform: baja ? 'rotate(180deg)' : 'none' } },
+            icono('sube', 11)),
+          `${cobro.porcentaje > 0 ? '+' : ''}${cobro.porcentaje.toFixed(1)} %`)),
+
+      // Banco y sobre, separados: el sobre es casi la mitad de lo que entra.
+      h('div', { style: { display: 'flex', gap: '3px', marginTop: '14px', height: '7px' } },
+        h('div', { style: { flex: String(Math.max(1, cobro.banco)), background: 'var(--tx)',
+                            borderRadius: '99px 0 0 99px' } }),
+        cobro.sobre > 0 && h('div', { style: { flex: String(cobro.sobre), background: 'var(--tx3)',
+                                               borderRadius: '0 99px 99px 0' } })),
+      h('div.legend', { style: { marginTop: '9px' } },
+        h('span', 'banco ', h('b', { class: state.ocultarMontos ? 'oculto' : '' },
+          plata(Math.round(cobro.banco)))),
+        cobro.sobre > 0 && h('span', 'sobre ', h('b', { class: state.ocultarMontos ? 'oculto' : '' },
+          plata(Math.round(cobro.sobre))))),
+
+      razones.length ? h('div', {
+        style: { marginTop: '13px', paddingTop: '13px', borderTop: '1px solid var(--line)',
+                 fontSize: '13px', color: 'var(--tx2)', lineHeight: '1.45' } },
+        baja ? 'Da menos que este mes porque ' : 'Cambia porque ',
+        razones.map((r, i) => frag(i > 0 ? ', y ' : '',
+          r.conMonto ? `${r.texto} (${plata(Math.round(r.monto))})` : r.texto)), '.') : null,
+
+      h('div', { style: { display: 'flex', alignItems: 'center', gap: '5px', marginTop: '9px',
+                          fontSize: '12.5px', color: cobro.conAcuerdo ? 'var(--tx3)' : 'var(--amb)' } },
+        h('span', cobro.conAcuerdo
+          ? 'Cálculo estimativo, con el aumento ya acordado.'
+          : 'Sin paritaria cargada para ese mes: cargala para afinar el número.'),
+        icono('chev', 13)))
+  );
+}
+
+const diaMes = iso => {
+  const [, m, d] = iso.split('-').map(Number);
+  return `${d}/${m}`;
+};

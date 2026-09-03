@@ -2,15 +2,18 @@
 // vistas/hoy.js — la pantalla principal.
 //
 // Responde tres preguntas en orden de urgencia, que es como se usan:
-//   1. ¿Cómo vengo este mes?
-//   2. ¿Qué tengo que pagar y cuándo?
-//   3. ¿Con qué me conviene pagar?
-// No son tres pestañas: es un orden vertical.
+//   1. ¿Cómo vengo este mes?      -> el carrusel de arriba
+//   2. ¿Qué tengo que pagar ya?   -> lo que se viene, los tres primeros
+//   3. ¿Qué me estoy perdiendo?   -> lo que dice Bishu
+//   4. ¿Con qué me conviene pagar? -> antes de comprar
+//
+// Lo que NO va acá: el presupuesto entero, la proyección del sueldo y la
+// lista completa de vencimientos. Cada una tiene su pantalla y ninguna es
+// una decisión de hoy. Hoy tiene que leerse de una sola mirada.
 // =====================================================================
 import { h, frag, icono, iconoDe, hoja, campo, select, aviso } from '../ui.js';
 import { state, guardar } from '../db.js';
 import * as F from '../finance.js';
-import * as S from '../sueldo.js';
 import { plataPartida, plata, cuandoVence, diasHasta, hoyISO, aFecha, nombreDe,
          aNumero, etiquetaCuenta } from '../formato.js';
 import { irA } from '../ruteo.js';
@@ -38,11 +41,11 @@ export function vistaHoy(root, { arranca = 0 } = {}) {
       // Bishu arriba del presupuesto: es la voz de la app, y al fondo de la
       // pantalla no la lee nadie.
       tiraBishu(hoy),
-      presupuesto(res, p),
-      // La proyección del sueldo es del MES QUE VIENE: útil, pero no es una
-      // decisión de hoy. Abajo del presupuesto y con la cifra más chica, para
-      // que no le gane al número del mes en curso.
-      proximoSueldo(),
+      // Presupuesto y proyección del sueldo se fueron a Números. Ninguno de
+      // los dos es una decisión de hoy, los dos estaban también en otra
+      // pantalla, y entre los dos Hoy medía dos pantallas y media con 36
+      // cifras. Lo que Bishu tenga que decir de una categoría pasada de tope
+      // lo dice él, que para eso está arriba.
       antesDeComprar()
     )
   );
@@ -58,24 +61,23 @@ export function vistaHoy(root, { arranca = 0 } = {}) {
  */
 function carrusel(arranca, ...paneles) {
   const vivos = paneles.filter(Boolean);
-  if (vivos.length < 2) return vivos[0] || null;
+  if (vivos.length < 2) return vivos[0]?.nodo || null;
   const inicio = Math.min(Math.max(0, arranca), vivos.length - 1);
 
-  const via = h('div.heroes', ...vivos);
-  const puntos = h('div.puntos', ...vivos.map((_, i) =>
-    h('button.punto', { 'aria-label': `Ver ${i + 1} de ${vivos.length}`,
-                        'aria-selected': String(i === inicio),
-                        onclick: () => via.scrollTo({ left: i * via.clientWidth,
-                                                      behavior: 'smooth' }) })));
+  const via = h('div.heroes', ...vivos.map(v => v.nodo));
+  const solapas = vivos.map((v, i) =>
+    h('button', { role: 'tab', 'aria-selected': String(i === inicio),
+                  onclick: () => via.scrollTo({ left: i * via.clientWidth,
+                                                behavior: 'smooth' }) }, v.nombre));
+  const barra = h('div.seg', { role: 'tablist', 'aria-label': 'Qué número mirar' }, ...solapas);
 
-  // El punto sigue al dedo, no al revés: se marca el que quedó a la vista.
+  // La solapa sigue al dedo, no al revés: se marca la que quedó a la vista.
   let pendiente = null;
   via.addEventListener('scroll', () => {
     cancelAnimationFrame(pendiente);
     pendiente = requestAnimationFrame(() => {
       const i = Math.round(via.scrollLeft / Math.max(1, via.clientWidth));
-      puntos.querySelectorAll('.punto').forEach((b, j) =>
-        b.setAttribute('aria-selected', String(j === i)));
+      solapas.forEach((b, j) => b.setAttribute('aria-selected', String(j === i)));
     });
   }, { passive: true });
 
@@ -83,8 +85,8 @@ function carrusel(arranca, ...paneles) {
   // pedida, no verla pasar.
   if (inicio) setTimeout(() => { via.scrollLeft = inicio * via.clientWidth; }, 0);
 
-  return h('div', { style: { display: 'flex', flexDirection: 'column', gap: '12px' } },
-    via, puntos);
+  return h('div', { style: { display: 'flex', flexDirection: 'column', gap: '10px' } },
+    barra, via);
 }
 
 /**
@@ -111,8 +113,7 @@ function plataLibre(hoy) {
     pl.fijos > 0 ? `fijos ${plata(Math.round(pl.fijos))}` : null
   ].filter(Boolean).join(' − ');
 
-  return h('div.grp.pad',
-    h('div.ghead', { style: { margin: '0 0 5px' } }, 'Plata libre'),
+  return { nombre: 'Plata libre', nodo: h('div.grp.pad',
     h('div', { class: 'cifra' + (state.ocultarMontos ? ' oculto' : '') +
                       (rojo ? ' neg' : '') }, h('em', simbolo), numero),
     h('div.small.mut', { style: { marginTop: '5px', lineHeight: '1.45' } },
@@ -135,7 +136,7 @@ function plataLibre(hoy) {
       style: { marginTop: '10px', color: 'var(--amb)', lineHeight: '1.45' } },
       'La tarjeta te está financiando el mes: lo que consumiste con ella no entra ',
       'en lo que te queda.')
-  );
+  ) };
 }
 
 // ------------------------------------------------- lo que entro solo
@@ -189,8 +190,7 @@ function heroMes(res, hoy, p) {
 
   const { simbolo, numero } = plataPartida(Math.round(res.gastos), 'ARS');
 
-  return h('div.grp.pad',
-    h('div.ghead', { style: { margin: '0 0 5px' } }, 'Este mes'),
+  return { nombre: 'Este mes', nodo: h('div.grp.pad',
     h('div', { style: { display: 'flex', justifyContent: 'space-between',
                         alignItems: 'flex-start', gap: '10px' } },
       h('div',
@@ -222,7 +222,7 @@ function heroMes(res, hoy, p) {
     res.movido > 0 && h('div', {
       style: { marginTop: '10px', fontSize: '12.5px', color: 'var(--tx3)' } },
       `${plata(Math.round(res.movido))} movidos entre tus cuentas — no cuentan como gasto.`)
-  );
+  ) };
 }
 
 const topeDelMes = p => state.budgets.filter(b => b.periodo === p && b.moneda !== 'USD')
@@ -246,8 +246,7 @@ function heroDolares() {
   const ref = Number(state.settings?.usd_ref) || 0;
   const { simbolo, numero } = plataPartida(res.gastos, 'USD');
 
-  return h('div.grp.pad',
-    h('div.ghead', { style: { margin: '0 0 5px' } }, 'Dólares'),
+  return { nombre: 'Dólares', nodo: h('div.grp.pad',
     h('div.cifra', h('em', simbolo), numero),
     h('div.small.mut', { style: { marginTop: '5px' } },
       res.ingresos > 0 ? `gastados este mes · entraron ${plata(res.ingresos, 'USD')}`
@@ -268,7 +267,7 @@ function heroDolares() {
     res.movido > 0 && h('div', {
       style: { marginTop: '10px', fontSize: '12.5px', color: 'var(--tx3)' } },
       `${plata(res.movido, 'USD')} movidos entre tus cuentas — no cuentan como gasto.`)
-  );
+  ) };
 }
 
 // ---------------------------------------------------- lo que se viene
@@ -314,18 +313,22 @@ function loQueSeViene(hoy) {
 
   if (!items.length) return null;
   items.sort((a, b) => a.vence - b.vence);
+  // En Hoy van los tres primeros y el total. La lista completa es la pestaña
+  // Pagar: repetirla acá era la mitad de la pantalla y la misma información
+  // dos veces.
+  const MUESTRA = 3;
+  const totales = {};
+  for (const it of items) totales[it.moneda] = (totales[it.moneda] || 0) + it.monto;
 
   return h('section',
     h('div.ghead', 'Lo que se viene',
       h('button', { onclick: () => irA('/mes') }, 'Ver todo')),
-    h('div.grp', items.slice(0, 5).map(it => {
-      const d = diasHasta(it.vence instanceof Date
-        ? `${it.vence.getFullYear()}-${String(it.vence.getMonth() + 1).padStart(2, '0')}-${String(it.vence.getDate()).padStart(2, '0')}`
-        : it.vence, hoy);
-      const sev = d < 0 ? 'sev sev-neg' : d <= 3 ? 'sev sev-amb' : '';
+    h('div.grp', items.slice(0, MUESTRA).map(it => {
       const iso = it.vence instanceof Date
         ? `${it.vence.getFullYear()}-${String(it.vence.getMonth() + 1).padStart(2, '0')}-${String(it.vence.getDate()).padStart(2, '0')}`
         : it.vence;
+      const d = diasHasta(iso, hoy);
+      const sev = d < 0 ? 'sev sev-neg' : d <= 3 ? 'sev sev-amb' : '';
       return h('div.li', { class: `li ${sev}` },
         h('button', { style: { display: 'flex', alignItems: 'center', gap: '12px',
                                flex: '1', minWidth: '0', background: 'none', border: '0',
@@ -336,17 +339,33 @@ function loQueSeViene(hoy) {
             h('div.s', cuandoVence(iso, hoy) + (it.nota ? ` · ${it.nota}` : ''))),
           h('div.v', plata(it.moneda === 'USD' ? it.monto : Math.round(it.monto), it.moneda))),
         // Anotar el pago desde acá: es donde uno lo mira, y si hay que ir a
-        // buscarlo a otra pantalla se anota después, o nunca. Vale para las
-        // dos cosas que se pagan: el resumen y el gasto fijo.
-        (it.tarjeta || it.recurrente) ? h('button.iconbtn', {
-          'aria-label': `Pagar ${it.nombre}`, style: { flex: 'none' },
+        // buscarlo a otra pantalla se anota después, o nunca.
+        //
+        // Antes era un tilde solo. Un tilde quiere decir "hecho" en todas las
+        // pantallas del mundo, y esto es un botón para pagar: decía lo
+        // contrario de lo que hace. Ahora lo dice con la palabra.
+        (it.tarjeta || it.recurrente) ? h('button.pagar', {
+          'aria-label': `Anotar el pago de ${it.nombre}`, style: { flex: 'none' },
           onclick: () => it.tarjeta ? formPagoTarjeta(it.tarjeta, it.ciclo, it.monto, it.moneda)
                                     : formPago(it.recurrente, it.periodo) },
-          icono('check', 18)) : null);
-    }))
+          'Pagar') : null);
+    })),
+    // El total es la pregunta real: no "cuánto es el colegio" sino "cuánto
+    // tengo que juntar". Faltaba, y estaba una pantalla más adentro.
+    h('button.li', { style: { marginTop: '8px' }, onclick: () => irA('/mes') },
+      h('div.m', h('div.t', 'En total hay que pagar'),
+        h('div.s', items.length > MUESTRA
+          ? `${items.length} cosas este mes · ${items.length - MUESTRA} no entran acá`
+          : `${items.length} ${items.length === 1 ? 'cosa' : 'cosas'} este mes`)),
+      // Cada moneda en su renglón: en una sola línea "$ 1.827.185 + US$ 850"
+      // no entra en un teléfono y se comía el nombre de la fila.
+      h('div.v', ...Object.entries(totales).map(([m, v], i) => {
+        const txt = plata(m === 'USD' ? v : Math.round(v), m);
+        return i === 0 ? txt : h('small', txt);
+      })),
+      h('span.chev', icono('chev', 15)))
   );
 }
-
 
 /** 'hoy', 'mañana', 'el jueves 10', y de ahí en más los días que faltan. */
 const DIAS_LARGOS = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
@@ -406,9 +425,13 @@ function tiraBishu(hoy) {
   const dibujo = h('div', { style: { flex: 'none' } });
   const linea = h('div', { style: { fontSize: '14.5px', lineHeight: '1.45',
                                     color: 'var(--tx2)' } });
-  const accion = h('button', { style: { background: 'none', border: '0', padding: '6px 0 0',
-                                        fontSize: '12.5px', cursor: 'pointer',
-                                        minHeight: '0', textAlign: 'left' } });
+  const accion = h('button', { style: { background: 'none', border: '0', padding: '0 14px 0 0',
+                                        fontSize: '13px', fontWeight: '600', cursor: 'pointer',
+                                        minHeight: '44px', textAlign: 'left' } });
+  // "algo más (5)" no decía qué era ese algo ni se podía tocar sin apuntar.
+  const otra = h('button', { style: { background: 'none', border: '0', padding: '0',
+                                      color: 'var(--tx3)', fontSize: '13px', cursor: 'pointer',
+                                      minHeight: '44px' } });
   const pintar = () => {
     const { animo, texto, ir } = frases[i % frases.length];
     dibujo.replaceChildren(bishu(animo, 46));
@@ -418,6 +441,7 @@ function tiraBishu(hoy) {
     accion.textContent = ir ? 'Ver' : 'Elegí de qué te aviso';
     accion.style.color = ir ? 'var(--brand)' : 'var(--tx3)';
     accion.onclick = () => irA(ir || '/ajustes');
+    otra.textContent = `Otra cosa · ${(i % frases.length) + 1} de ${frases.length}`;
   };
   pintar();
 
@@ -442,135 +466,10 @@ function tiraBishu(hoy) {
         h('div', { style: { fontWeight: '600', fontSize: '14.5px', letterSpacing: '-.015em',
                             marginBottom: '2px' } }, '¡Hola! Soy Bishu'),
         linea,
-        h('div', { style: { display: 'flex', alignItems: 'center', gap: '12px' } },
+        h('div', { style: { display: 'flex', alignItems: 'center', gap: '4px',
+                            marginTop: '2px' } },
           accion,
-          frases.length > 1 ? h('button', {
-            style: { background: 'none', border: '0', padding: '6px 0 0', minHeight: '0',
-                     color: 'var(--tx3)', fontSize: '12.5px', cursor: 'pointer' },
-            onclick: seguir }, `algo más (${frases.length - 1})`) : null))));
-}
-
-// ------------------------------------------------------- proximo sueldo
-/**
- * Lo que se cobra la proxima vez, en banco y en sobre, con la razon del
- * cambio. Un sueldo puede BAJAR aun con aumento —si el mes anterior tenia
- * vacaciones o un bono que no se repite—, y sin explicacion esa caida
- * parece un error de la app.
- */
-function proximoSueldo() {
-  const recibos = (state.recibos || []).map(r => ({
-    periodo: r.periodo, basico: Number(r.basico) || 0,
-    remunerativo: Number(r.remunerativo) || 0,
-    noRemunerativo: Number(r.no_remunerativo ?? r.noRemunerativo) || 0,
-    deducciones: Number(r.deducciones) || 0, neto: Number(r.neto) || 0,
-    sobre: Number(r.sobre) || 0, conceptos: r.conceptos || []
-  }));
-  if (recibos.length < 2) return null;
-
-  const ult = recibos[recibos.length - 1];
-  const cobro = S.proximoCobro(recibos, {
-    diaCobro: Number(state.settings?.dia_cobro) || 1,
-    sobre: ult.sobre || Number(state.settings?.sobre_estimado) || 0,
-    sobreDesde: ult.periodo,
-    // El acuerdo sale de los que estan cargados en Sueldo. Sin ninguno que
-    // cubra el periodo, se proyecta con el ritmo aprendido y se avisa.
-    acuerdo: S.acuerdoVigente(state.paritarias, S.sumarMeses(ult.periodo, 1)),
-    sumas: S.sumasDeclaradas(state.sumas_nr)
-  });
-  if (!cobro) return null;
-
-  const baja = cobro.diferencia < 0;
-  const razones = cobro.porque.slice(0, 2);
-
-  return h('section',
-    h('div.ghead', 'El mes que viene',
-      h('span.pill.mut', { style: { textTransform: 'none', letterSpacing: '0' } },
-        cobro.conAcuerdo ? 'con paritaria firmada' : 'estimado')),
-    h('button.grp.pad', { style: { width: '100%', textAlign: 'left', border: '0',
-                                   cursor: 'pointer', display: 'block' },
-                          onclick: () => irA('/sueldo') },
-      h('div', { style: { display: 'flex', justifyContent: 'space-between',
-                          alignItems: 'flex-start', gap: '10px' } },
-        h('div',
-          // 24 y no 30: es una proyección del mes que viene, y a 30 le ganaba
-          // por tamaño al número del mes en curso, que es el que decide hoy.
-          h('div', { class: 'cifra' + (state.ocultarMontos ? ' oculto' : ''),
-                     style: { fontSize: '24px' } }, plata(Math.round(cobro.total))),
-          h('div.small.mut', { style: { marginTop: '4px' } },
-            `entrarían el ${diaMes(cobro.fecha)}`)),
-        h('span', { class: `pill ${baja ? 'amb' : 'pos'}` },
-          h('span', { style: { display: 'grid', transform: baja ? 'rotate(180deg)' : 'none' } },
-            icono('sube', 11)),
-          `${cobro.porcentaje > 0 ? '+' : ''}${cobro.porcentaje.toFixed(1)} %`)),
-
-      // Banco y sobre, separados: el sobre es casi la mitad de lo que entra.
-      h('div', { style: { display: 'flex', gap: '3px', marginTop: '14px', height: '7px' } },
-        h('div', { style: { flex: String(Math.max(1, cobro.banco)), background: 'var(--tx)',
-                            borderRadius: '99px 0 0 99px' } }),
-        cobro.sobre > 0 && h('div', { style: { flex: String(cobro.sobre), background: 'var(--tx3)',
-                                               borderRadius: '0 99px 99px 0' } })),
-      h('div.legend', { style: { marginTop: '9px' } },
-        h('span', 'banco ', h('b', { class: state.ocultarMontos ? 'oculto' : '' },
-          plata(Math.round(cobro.banco)))),
-        cobro.sobre > 0 && h('span', 'sobre ', h('b', { class: state.ocultarMontos ? 'oculto' : '' },
-          plata(Math.round(cobro.sobre))))),
-
-      razones.length ? h('div', {
-        style: { marginTop: '13px', paddingTop: '13px', borderTop: '1px solid var(--line)',
-                 fontSize: '13px', color: 'var(--tx2)', lineHeight: '1.45' } },
-        baja ? 'Da menos que este mes porque ' : 'Cambia porque ',
-        razones.map((r, i) => frag(i > 0 ? ', y ' : '',
-          r.conMonto ? `${r.texto} (${plata(Math.round(r.monto))})` : r.texto)), '.') : null,
-
-      h('div', { style: { display: 'flex', alignItems: 'center', gap: '5px', marginTop: '9px',
-                          fontSize: '12.5px', color: cobro.conAcuerdo ? 'var(--tx3)' : 'var(--amb)' } },
-        h('span', cobro.conAcuerdo
-          ? 'Cálculo estimativo, con el aumento ya acordado.'
-          : 'Sin paritaria cargada para ese mes: cargala para afinar el número.'),
-        icono('chev', 13)))
-  );
-}
-
-const diaMes = iso => {
-  const [, m, d] = iso.split('-').map(Number);
-  return `${d}/${m}`;
-};
-
-// ------------------------------------------------------- presupuesto
-function presupuesto(res, p) {
-  const budgets = state.budgets.filter(b => b.periodo === p);
-  if (!budgets.length) return null;
-  const est = F.estadoPresupuesto(budgets, res, Number(state.settings?.alert_pct) || 80);
-
-  return h('section',
-    h('div.ghead', 'Presupuesto',
-      h('button', { onclick: () => irA('/mes') }, 'Ajustar')),
-    h('div.grp', est.map(b => {
-      const nom = nombreDe('categories', b.category_id, 'Sin categoría');
-      const excedido = b.gastado > b.tope;
-      const dentro = Math.min(b.gastado, b.tope);
-      const exceso = Math.max(0, b.gastado - b.tope);
-      return h('div', { style: { padding: '13px 14px', position: 'relative' } },
-        h('div', { style: { display: 'flex', justifyContent: 'space-between',
-                            alignItems: 'baseline', gap: '10px' } },
-          h('span', { style: { fontSize: '14.5px', fontWeight: '500', letterSpacing: '-.012em' } }, nom),
-          h('span.small.mut', h('b', { style: { color: 'var(--tx)' } }, plata(Math.round(b.gastado))),
-            ` de ${plata(b.tope)}`)),
-        // Avance en tinta, exceso en ambar. Nunca verde ni rojo: el tablero
-        // en rojo hace que uno se autodefina como malo con la plata.
-        h('div.mini',
-          dentro > 0 && h('b', { class: b.pct >= 80 ? 'al' : '',
-                                 style: { flex: String(dentro) } }),
-          exceso > 0 && h('s', { style: { flex: String(exceso) } }),
-          // sin este tramo vacio el unico hijo ocupa todo y la barra se ve llena
-          b.restante > 0 && h('span', { style: { flex: String(b.restante) } })),
-        excedido && h('div', {
-          style: { display: 'flex', alignItems: 'center', gap: '5px', fontSize: '12.5px',
-                   color: 'var(--amb)', fontWeight: '600', marginTop: '7px' } },
-          `${plata(Math.round(exceso))} de más`, icono('chev', 13))
-      );
-    }))
-  );
+          frases.length > 1 ? (otra.onclick = seguir, otra) : null))));
 }
 
 // --------------------------------------------------- antes de comprar
@@ -587,6 +486,14 @@ function antesDeComprar() {
         h('div.av', icono('monedas', 17)),
         h('div.m', h('div.t', 'Dónde está la plata'),
           h('div.s', 'Saldo por cuenta, en pesos y en dólares')),
+        h('span.chev', icono('chev', 15))),
+      // Promos salió de la barra de abajo: acá es donde uno la busca, justo
+      // antes de comprar. También está el pin de la cabecera y lo que avise
+      // Bishu.
+      h('button.li', { onclick: () => irA('/promos') },
+        h('div.av', icono('pin', 17)),
+        h('div.m', h('div.t', 'Promos de hoy'),
+          h('div.s', 'Descuentos y reintegros con tus tarjetas')),
         h('span.chev', icono('chev', 15))))
   );
 }

@@ -5,7 +5,7 @@
 // Es la unica forma honesta de probar esto sin un telefono: si la derivacion
 // tuviera un byte de diferencia, el aviso saldria igual y no llegaria nunca.
 import assert from 'node:assert/strict';
-import { cifrar, firmaVapid, b64uABytes, bytesAB64u } from './push.ts';
+import { cifrar, firmaVapid, parValido, b64uABytes, bytesAB64u } from './push.ts';
 
 let ok = 0, mal = 0;
 const t = async (n: string, fn: () => void | Promise<void>) => {
@@ -110,6 +110,34 @@ await t('la firma VAPID la puede verificar quien recibe', async () => {
   assert.equal(claims.sub, 'mailto:yo@ejemplo.com');
   assert.ok(claims.exp > Math.floor(Date.now() / 1000));
   assert.ok(claims.exp <= Math.floor(Date.now() / 1000) + 12 * 3600);
+});
+
+/** Un par de claves VAPID, como el que genera la función. */
+async function parVapid() {
+  const par = await crypto.subtle.generateKey({ name: 'ECDSA', namedCurve: 'P-256' },
+                                              true, ['sign', 'verify']);
+  const jwk = await crypto.subtle.exportKey('jwk', par.privateKey);
+  const pub = new Uint8Array(await crypto.subtle.exportKey('raw', par.publicKey));
+  return { publica: bytesAB64u(pub), privada: jwk.d!, contacto: 'mailto:yo@ejemplo.com' };
+}
+
+await t('un par que va junto se reconoce', async () => {
+  assert.equal(await parValido(await parVapid()), true);
+});
+
+await t('una pública de una generación con una privada de otra NO pasa', async () => {
+  // La falla que no se ve: las dos claves están puestas y el aviso sale
+  // firmado igual, pero el servicio de push lo rechaza y no llega nada.
+  const a = await parVapid(), b = await parVapid();
+  assert.equal(await parValido({ ...a, privada: b.privada }), false);
+  assert.equal(await parValido({ ...b, publica: a.publica }), false);
+});
+
+await t('una clave con basura tampoco pasa, y no explota', async () => {
+  const a = await parVapid();
+  assert.equal(await parValido({ ...a, publica: 'no-es-una-clave' }), false);
+  assert.equal(await parValido({ ...a, privada: '' }), false);
+  assert.equal(await parValido({ ...a, publica: '' }), false);
 });
 
 console.log(`\n${ok} pruebas OK${mal ? `, ${mal} FALLAN` : ''}\n`);

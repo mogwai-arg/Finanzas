@@ -52,6 +52,10 @@
   --f-display: -apple-system, "SF Pro Display", var(--f);
 
   --t-cifra:  38px;  --t-cifra-w: 800;  --t-cifra-ls: -.038em;
+  /* La cifra de una ficha de adentro, no la de la pantalla. Dos escalones y
+     no seis: antes habia 38, 30, 29, 26, 24 y 22 sueltos por las vistas y
+     ninguna pantalla tenia un solo protagonista. */
+  --t-cifra2: 28px;
   --t-titulo: 30px;  --t-titulo-w: 800; --t-titulo-ls: -.032em;
   --t-sec:    17px;  --t-sec-w: 700;    --t-sec-ls: -.022em;
   --t-fila:   15.5px;--t-fila-w: 500;   --t-fila-ls: -.014em;

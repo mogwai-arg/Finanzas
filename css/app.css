@@ -41,7 +41,10 @@ h1,h2,h3,h4{margin:0;font-family:var(--f-display)}
 .ghead{font-size:var(--t-label);font-weight:600;letter-spacing:.06em;text-transform:uppercase;
        color:var(--tx2);margin:0 4px 8px;display:flex;justify-content:space-between;align-items:center}
 .ghead button,.ghead a{background:none;border:0;color:var(--brand);font-size:13px;font-weight:600;
-  letter-spacing:0;text-transform:none;cursor:pointer;padding:4px;margin:-4px}
+  letter-spacing:0;text-transform:none;cursor:pointer;
+  /* Se ve del alto del texto y se toca 44: el padding es transparente y el
+     margen negativo lo devuelve, asi el encabezado no crece por el boton. */
+  padding:13px 10px;margin:-13px -10px;min-height:44px;display:inline-flex;align-items:center}
 
 /* --------------------------------------------------------------- fila */
 .li{display:flex;align-items:center;gap:12px;padding:11px 14px;position:relative;
@@ -91,7 +94,7 @@ button.li:active{background:var(--fill)}
 /* --------------------------------------------------------- segmentado */
 .seg{display:flex;background:var(--fill);border-radius:10px;padding:2px;gap:2px}
 .seg button{flex:1;border:0;background:none;font-size:13.5px;font-weight:600;color:var(--tx2);
-            padding:7px 4px;border-radius:8px;letter-spacing:-.01em;cursor:pointer;min-height:0}
+            padding:10px 4px;border-radius:8px;letter-spacing:-.01em;cursor:pointer;min-height:40px}
 .seg button[aria-selected="true"]{background:var(--card);color:var(--tx);box-shadow:0 1px 3px rgba(0,0,0,.12)}
 :root[data-tema="oscuro"] .seg button[aria-selected="true"]{background:#3A3E49;color:#fff}
 @media (prefers-color-scheme:dark){
@@ -229,6 +232,12 @@ input[type=checkbox]{width:auto;min-height:0}
 .heroes::-webkit-scrollbar{display:none}
 .heroes>*{flex:0 0 100%;scroll-snap-align:start;scroll-snap-stop:always}
 .puntos{display:flex;justify-content:center;gap:2px;margin-top:-14px}
+/* --------------------------------------------------- anotar un pago
+   Un tilde suelto dice "listo"; esto es un boton para pagar. Con la palabra
+   no hay que adivinar, y de paso se toca sin apuntar. */
+.pagar{border:0;background:none;color:var(--brand);font-size:14px;font-weight:650;
+       padding:0 4px 0 14px;min-height:44px;min-width:0;cursor:pointer;letter-spacing:-.01em}
+.pagar:active{opacity:.55}
 /* El punto se ve chico pero se toca grande: el área es de 28, el dibujo de 7.
    Con el mínimo de 44 que llevan todos los botones, dos puntos ocupaban media
    pantalla. */
