@@ -14,7 +14,7 @@
 import { h, frag, icono, hoja, aviso, campo, select } from '../ui.js';
 import { state, guardar, guardarVarios } from '../db.js';
 import { parseExtracto, revisarExtracto, aMovimientos, cargosDelBanco,
-         queCargo, conciliar } from '../extracto.js';
+         queCargo, conciliar, cargosRepetidos } from '../extracto.js';
 import { plata } from '../formato.js';
 
 // El formulario se pide recién cuando se toca la fila. Cargarlo arriba deja
@@ -218,6 +218,7 @@ export function formImportarExtracto(yaBajado = null) {
     await guardarVarios('transactions', listas);
     cerrar();
     aviso(`${listas.length} ${listas.length === 1 ? 'movimiento cargado' : 'movimientos cargados'}`);
+    proponerFijos(destino, cat);
   }
 
   async function categoriaBancarios() {
@@ -352,4 +353,76 @@ export function formImportarExtracto(yaBajado = null) {
     h('div.small.mut', { style: { lineHeight: '1.5' } }, txt));
 
   return cerrar;
+}
+
+/**
+ * "Esto se repite todos los meses, ¿lo hago gasto fijo?"
+ *
+ * El seguro de cuenta y el mantenimiento se cobran siempre, con nombre y
+ * todo. Como gastos sueltos quedan afuera de la detección de aumentos, que es
+ * justo donde más valen: un seguro que sube 40 % cuando el resto sube 6 % es
+ * una llamada al banco.
+ *
+ * Lo que hace que esto sirva desde el primer día no es crear el gasto fijo
+ * —eso es una fila vacía— sino traerle la historia: cada mes que el cargo
+ * aparece en el extracto se guarda como un pago hecho. Sin eso, la detección
+ * de aumentos no tiene con qué comparar y habría que esperar tres meses.
+ *
+ * Van como débito automático, que es lo que son: nadie los paga, caen. Así no
+ * ensucian "lo que se viene" con cosas que no hay que hacer.
+ */
+function proponerFijos(cuentaId, categoria) {
+  const repes = cargosRepetidos(state.transactions);
+  // Los que ya son gasto fijo no se vuelven a proponer.
+  const yaEs = n => (state.recurrings || []).some(r =>
+    r.activo !== false && (r.nombre || '').toLowerCase() === n.toLowerCase());
+  const nuevos = repes.filter(c => !yaEs(c.nombre));
+  if (!nuevos.length) return;
+
+  const tildes = new Map(nuevos.map(c => [c.id, h('input', { type: 'checkbox', checked: true })]));
+
+  const fila = c => h('label.li', { style: { alignItems: 'flex-start' } },
+    h('div.av.amb', { style: { marginTop: '2px' } }, icono('banco', 15)),
+    h('div.m',
+      h('div.t', c.nombre),
+      h('div.s', { style: { whiteSpace: 'normal', lineHeight: '1.45' } },
+        `${c.meses.length} meses seguidos · último ${plata(Math.round(c.ultimo.monto))} · `,
+        h('b', plata(c.alAno)), ' por año')),
+    tildes.get(c.id));
+
+  const cerrarProp = hoja('Esto se repite todos los meses', h('div',
+    h('div.small.mut', { style: { lineHeight: '1.55', marginBottom: '14px' } },
+      'Como gastos sueltos no se pueden vigilar. Como gastos fijos entran en ',
+      'la detección de aumentos: cuando uno sube más que el resto, la app te ',
+      'avisa. Los meses que ya están en el extracto se guardan como historia, ',
+      'así sirve desde hoy y no dentro de tres meses.'),
+    h('div.grp', nuevos.map(fila)),
+    h('button.btn', { style: { marginTop: '16px' }, onclick: async () => {
+      const elegidos = nuevos.filter(c => tildes.get(c.id).checked);
+      if (!elegidos.length) { cerrarProp(); return; }
+      for (const c of elegidos) {
+        const r = await guardar('recurrings', {
+          nombre: c.nombre, monto_estimado: Math.round(c.ultimo.monto), moneda: 'ARS',
+          dia_vencimiento: c.dia, category_id: categoria?.id || null,
+          account_id: cuentaId || null,
+          // Nadie los paga: caen. Como débito automático no aparecen en "lo
+          // que se viene", que es una lista de cosas para hacer.
+          debito_automatico: true,
+          // El monto cambia todos los meses —la retención de ingresos brutos
+          // no se parece a la del mes pasado— y marcarlo fijo mentiría.
+          variable: true,
+          activo: true, orden: (state.recurrings.length || 0) + 1
+        });
+        // La historia. Sin esto el gasto fijo nace sin nada con qué comparar.
+        await guardarVarios('recurring_payments', c.meses.map(m => ({
+          recurring_id: r.id, periodo: m.periodo, monto: Math.round(m.monto),
+          transaction_id: m.tx?.id || null,
+          pagado_at: new Date(`${m.tx?.fecha || m.periodo + '-01'}T12:00:00`).toISOString()
+        })));
+      }
+      cerrarProp();
+      aviso(`${elegidos.length} ${elegidos.length === 1 ? 'gasto fijo creado' : 'gastos fijos creados'}`);
+    } }, 'Hacerlos gastos fijos'),
+    h('button.btn.sec', { style: { marginTop: '9px' }, onclick: () => cerrarProp() },
+      'Ahora no')));
 }

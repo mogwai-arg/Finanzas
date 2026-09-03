@@ -499,5 +499,87 @@ t('un extracto sin periodo no descarta nada por fecha', () => {
   assert.equal(c.coinciden, 1);
 });
 
+
+// ---------------------------------------------------------------------
+// Los cargos que se repiten: candidatos a gasto fijo
+// ---------------------------------------------------------------------
+console.log('\nCARGOS REPETIDOS');
+
+const REF = new Date(2026, 7, 20); // agosto 2026
+const conCargos = (...filas) => filas.map(([fecha, comercio, monto]) =>
+  ({ tipo: 'gasto', moneda: 'ARS', fecha, comercio, monto }));
+
+const TRES_MESES = conCargos(
+  ['2026-06-05', 'COMISION MANTENIMIENTO PAQUETE', 17000],
+  ['2026-07-05', 'COM.MANTEN.PAQUETE', 17400],
+  ['2026-08-05', 'COMISION MANTENIMIENTO PAQUETE', 18500],
+  ['2026-06-10', 'SEGURO BOLSO PROTEGIDO', 4000],
+  ['2026-07-10', 'SEGURO BOLSO PROTEGIDO', 4100],
+  ['2026-08-10', 'SEGURO BOLSO PROTEGIDO', 4200],
+  ['2026-08-12', 'SELLADO UNICO', 900]);
+
+t('agrupa por concepto y no por como lo escribio el banco', () => {
+  // "COMISION MANTENIMIENTO PAQUETE" y "COM.MANTEN.PAQUETE" son el mismo
+  // cargo. Como texto son dos cosas distintas y saldrian dos gastos fijos.
+  const r = E.cargosRepetidos(TRES_MESES, { ref: REF });
+  const man = r.find(c => c.id === 'mantenimiento');
+  assert.equal(man.meses.length, 3);
+});
+
+t('lo que aparecio una sola vez no es un gasto fijo', () => {
+  const r = E.cargosRepetidos(TRES_MESES, { ref: REF });
+  assert.ok(!r.some(c => c.id === 'sellado'));
+});
+
+t('ordena por lo que cuesta hoy, no por cuantas veces aparece', () => {
+  const r = E.cargosRepetidos(TRES_MESES, { ref: REF });
+  assert.equal(r[0].id, 'mantenimiento');
+  assert.equal(r[0].ultimo.monto, 18500);
+});
+
+t('el numero para discutir el paquete es lo que sale por ano', () => {
+  const r = E.cargosRepetidos(TRES_MESES, { ref: REF });
+  assert.equal(r[0].alAno, 222000);
+});
+
+t('el dia es el tipico, no el promedio', () => {
+  const r = E.cargosRepetidos(conCargos(
+    ['2026-06-05', 'SEGURO BOLSO PROTEGIDO', 4000],
+    ['2026-07-05', 'SEGURO BOLSO PROTEGIDO', 4100],
+    ['2026-08-28', 'SEGURO BOLSO PROTEGIDO', 4200]), { ref: REF });
+  assert.equal(r[0].dia, 5);
+});
+
+t('cada mes trae la transaccion mas cara, que es la que representa el mes', () => {
+  const r = E.cargosRepetidos(conCargos(
+    ['2026-07-05', 'SEGURO BOLSO PROTEGIDO', 4100],
+    ['2026-08-05', 'SEGURO BOLSO PROTEGIDO', 4200],
+    ['2026-08-06', 'SEGURO BOLSO PROTEGIDO', 300]), { ref: REF });
+  assert.equal(r[0].ultimo.monto, 4500);
+  assert.equal(r[0].ultimo.tx.monto, 4200);
+});
+
+t('un gasto normal no es un cargo del banco', () => {
+  const r = E.cargosRepetidos(conCargos(
+    ['2026-07-05', 'COTO ABASTO', 47000],
+    ['2026-08-05', 'COTO ABASTO', 51000]), { ref: REF });
+  assert.equal(r.length, 0);
+});
+
+t('los ingresos no cuentan aunque digan comision', () => {
+  const r = E.cargosRepetidos([
+    { tipo: 'ingreso', moneda: 'ARS', fecha: '2026-07-05', comercio: 'DEVOLUCION COMISION', monto: 900 },
+    { tipo: 'ingreso', moneda: 'ARS', fecha: '2026-08-05', comercio: 'DEVOLUCION COMISION', monto: 900 }
+  ], { ref: REF });
+  assert.equal(r.length, 0);
+});
+
+t('lo viejo queda afuera de la ventana', () => {
+  const r = E.cargosRepetidos(conCargos(
+    ['2025-01-05', 'SEGURO BOLSO PROTEGIDO', 4000],
+    ['2025-02-05', 'SEGURO BOLSO PROTEGIDO', 4100]), { ref: REF });
+  assert.equal(r.length, 0);
+});
+
 console.log(`\n${ok} pruebas OK${mal ? `, ${mal} FALLAN` : ''}\n`);
 process.exit(mal ? 1 : 0);

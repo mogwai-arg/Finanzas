@@ -574,6 +574,11 @@ export function recurrentesDelMes(recurrings, pagos, per, ref = hoy()) {
  * es el de todos los meses anteriores.
  */
 export function saldoRecurrente(recurring, pagos, hasta = null) {
+  // Un gasto variable no arrastra nada: la luz de este mes no es "de mas" ni
+  // "de menos" contra la del anterior, es lo que salio. El monto estimado es
+  // una expectativa, no una deuda, y restarselo daba cosas como "$ 26.220 a
+  // favor" en una retencion de ingresos brutos.
+  if (recurring.variable) return 0;
   const valor = Number(recurring.monto_estimado) || 0;
   let saldo = 0;
   for (const p of pagos) {

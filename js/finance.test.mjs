@@ -1248,4 +1248,23 @@ t('lo que suele entrar es la mediana, no el promedio', () => {
   assert.equal(F.ingresoTipico(txs, new Date(2026, 8, 3)), 3000000);
 });
 
+
+t('un gasto variable no arrastra saldo: la luz no se debe ni se tiene a favor', () => {
+  // El alquiler vale 850 y pagar 900 deja 50 a favor. La luz no vale nada
+  // fijo: lo que salio es lo que salio. Sin esto, una retencion de ingresos
+  // brutos de $ 980 contra un estimado de $ 27.200 decia "$ 26.220 a favor".
+  const r = { id: 'x', monto_estimado: 27200, variable: true };
+  const pagos = [{ recurring_id: 'x', periodo: '2026-07', monto: 980, pagado_at: 'x' },
+                 { recurring_id: 'x', periodo: '2026-08', monto: 1100, pagado_at: 'x' }];
+  assert.equal(F.saldoRecurrente(r, pagos, '2026-09'), 0);
+  assert.equal(F.aPagarRecurrente(r, pagos, '2026-09').sugerido, 27200);
+});
+
+t('pero uno de monto fijo sigue arrastrando', () => {
+  const r = { id: 'a', monto_estimado: 850 };
+  const pagos = [{ recurring_id: 'a', periodo: '2026-07', monto: 900, pagado_at: 'x' }];
+  assert.equal(F.saldoRecurrente(r, pagos, '2026-09'), 50);
+  assert.equal(F.aPagarRecurrente(r, pagos, '2026-09').sugerido, 800);
+});
+
 console.log(`\n${ok} pruebas OK`);

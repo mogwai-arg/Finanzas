@@ -599,3 +599,71 @@ export function conciliar(ext, txs, cuentaId, { dias = 3, cerca = 0.05 } = {}) {
     })()
   };
 }
+
+/**
+ * Los cargos del banco que se repiten mes a mes: los candidatos a gasto fijo.
+ *
+ * El seguro de cuenta y el mantenimiento se cobran todos los meses con
+ * nombre y todo: son gastos fijos con todas las letras. Quedaban como gastos
+ * sueltos, y eso los deja afuera de la deteccion de aumentos, que es justo
+ * donde mas valen —un seguro que sube 40 % cuando el resto sube 6 % es una
+ * llamada al banco, y sin historia no hay con que compararlo—.
+ *
+ * Se agrupa por concepto y no por descripcion literal: el banco escribe
+ * "COMISION MANTENIMIENTO PAQUETE" un mes y "COM.MANTEN.PAQUETE" al otro, y
+ * como texto son dos cosas distintas.
+ *
+ * Devuelve solo lo que aparecio en `minMeses` meses distintos: con un mes
+ * solo no es un gasto fijo, es un cargo.
+ */
+export function cargosRepetidos(txs, { meses = 6, minMeses = 2, ref = new Date() } = {}) {
+  const desde = new Date(ref.getFullYear(), ref.getMonth() - (meses - 1), 1);
+  const desdePer = `${desde.getFullYear()}-${String(desde.getMonth() + 1).padStart(2, '0')}`;
+  const hastaPer = `${ref.getFullYear()}-${String(ref.getMonth() + 1).padStart(2, '0')}`;
+
+  const por = new Map();
+  for (const t of txs || []) {
+    if (t.tipo !== 'gasto' || (t.moneda || 'ARS') !== 'ARS') continue;
+    const per = String(t.fecha).slice(0, 7);
+    if (per < desdePer || per > hastaPer) continue;
+    const id = queCargo(t.comercio || t.descripcion || '');
+    if (!id) continue;
+    const c = por.get(id) || { id, nombre: CARGOS.find(x => x.id === id).nombre,
+                               porMes: new Map(), txs: [] };
+    const m = c.porMes.get(per) || { periodo: per, monto: 0, cuantos: 0, tx: null };
+    m.monto = Math.round((m.monto + (Number(t.monto) || 0)) * 100) / 100;
+    m.cuantos++;
+    // El mas caro del mes es el que se enlaza al pago: si el banco cobro el
+    // seguro y ademas un ajuste, el que representa el mes es el grande.
+    if (!m.tx || Number(t.monto) > Number(m.tx.monto)) m.tx = t;
+    c.porMes.set(per, m);
+    c.txs.push(t);
+    por.set(id, c);
+  }
+
+  return [...por.values()]
+    .map(c => {
+      const meses = [...c.porMes.values()].sort((a, b) => a.periodo.localeCompare(b.periodo));
+      const dias = c.txs.map(t => Number(String(t.fecha).slice(8, 10))).filter(Boolean);
+      return {
+        id: c.id, nombre: c.nombre, meses,
+        ultimo: meses[meses.length - 1],
+        // El dia tipico, no el promedio: un cargo que cae el 5 y una vez
+        // cayo el 28 sigue siendo del 5.
+        dia: mediana(dias) ? Math.round(mediana(dias)) : 1,
+        // Lo que cuesta por ano si sigue asi. Es el numero con el que se
+        // discute un paquete.
+        alAno: Math.round((meses[meses.length - 1].monto || 0) * 12)
+      };
+    })
+    .filter(c => c.meses.length >= minMeses)
+    .sort((a, b) => b.ultimo.monto - a.ultimo.monto);
+}
+
+/** La mediana, para el dia tipico. */
+function mediana(nums) {
+  const l = [...nums].sort((a, b) => a - b);
+  if (!l.length) return null;
+  const m = Math.floor(l.length / 2);
+  return l.length % 2 ? l[m] : (l[m - 1] + l[m]) / 2;
+}
