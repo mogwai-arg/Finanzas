@@ -1,63 +1,102 @@
 # Qué queda
 
-Estado al 3 de septiembre. El backlog viejo está en `manana.md`: casi todo lo
-de ahí ya está hecho, y se deja como registro de por qué se decidió cada cosa.
-
-Los cuatro puntos que estaban acá (conciliar el extracto, plegar Números, los
-cargos del banco como gastos fijos, y el aviso de "lo que viene") están
-hechos. Lo que sigue es lo que apareció haciéndolos.
+Estado al 4 de septiembre. El backlog viejo está en `manana.md`.
 
 ---
 
-## Antes de nada: correr la migración 016
+## Lo primero: mirar el pago de la tarjeta
 
-`supabase/migrations/016_proyeccion.sql` agrega una columna a `settings`.
-Hasta que no se corra, la app va a intentar guardar la proyección y la base la
-va a rechazar —se ve en el cajón de cambios pendientes— y el aviso del día 10
-no va a salir nunca.
+Cuando pagues el resumen, hay que verificar tres cosas y en este orden:
 
-## 1. Categorías en masa para los consumos del resumen
+1. **Que entre como movida y no como gasto.** Se ve en Gastos: si aparece el
+   pago entero como un gasto más, el mes está inflado.
+2. **Que el resumen quede pagado** en Pagar, y que salga de "lo que se viene".
+3. **Que el monto de la tarjeta baje** en la sección de tarjetas, y que las
+   cuotas futuras sigan ahí.
 
-Lo pediste vos: los consumos de tarjeta cargados por resumen entran sin
-categoría, y el gráfico de "en qué se fue" queda con un pozo grande. Hoy hay
-que abrir uno por uno.
+El código está y probado, pero es la primera vez que entra un pago de verdad
+por esa puerta. Los tres derivan de lo mismo: si la fila entró bien, los tres
+salen bien.
 
-Lo que haría falta es una pantalla de "poner categorías" que agrupe por
-comercio —los seis COTO de un resumen son una fila, no seis— y que se acuerde:
-la próxima vez que aparezca COTO, va sola a Supermercado. Esa memoria ya
-existe a medias en `reglas`; falta la pantalla que la llene sin fricción.
+---
 
-Es lo que más mueve el gráfico de categorías, y encima mejora el matcheo
-futuro.
+## Del chat
 
-## 2. La conciliación solo se ve al importar
+### 1. Solo se acuerda del último
+
+"Ay, la pagué con efectivo" corrige el último movimiento. Si querés corregir
+el anteúltimo hay que buscarlo en Gastos. Sería natural decir "el café iba en
+efectivo" y que encuentre cuál.
+
+No es urgente: uno corrige lo que acaba de cargar.
+
+### 2. Solo carga gastos e ingresos sueltos
+
+No sabe cargar un gasto fijo ("el alquiler es de 850 dólares todos los 5"), ni
+una promo, ni marcar un resumen como pagado. Todo eso es cargable a mano y son
+pantallas que ya existen; la pregunta es si vale la pena que también entren
+por el chat.
+
+### 3. No contesta preguntas
+
+"¿Cuánto gasté este mes?" no lo entiende. Los números ya están todos
+calculados en `finance.js`, así que responder cinco o seis preguntas fijas
+—cuánto gasté, cuánto me queda, en qué se fue, qué se viene, cuánto tengo— es
+barato y haría que el chat se sienta menos una ventanita de carga.
+
+Es lo que más lo acercaría a la sensación de las apps por WhatsApp.
+
+### 4. El dictado corta al primer silencio
+
+`continuous: false`: dice una frase y para. Para cargar un gasto está bien.
+Para dictar una corrección atrás de otra, obliga a tocar el micrófono cada vez.
+
+### 5. El hilo no sobrevive a cerrar la app
+
+Vive en memoria. Si cerrás y volvés, arranca de cero. Guardarlo sería fácil
+—las últimas veinte burbujas en `localStorage`— pero hay que decidir si un
+historial viejo suma o es ruido.
+
+---
+
+## De la app
+
+### 6. Categorías en masa para los consumos del resumen
+
+Lo pediste vos y sigue pendiente. Ahora está la mitad difícil: la memoria de
+comercios (`reglas.js`) ya existe, se lee y se aprende. Falta la pantalla que
+la llene de a muchos: agrupar por comercio —los seis COTO de un resumen son
+una fila, no seis— y elegir una categoría para todo el grupo.
+
+Es lo que más mueve el gráfico de en qué se fue.
+
+### 7. La conciliación solo se ve al importar
 
 `conciliar()` corre cuando subís el resumen y nada más. Si querés volver a
-verla —"¿me faltaba algo de agosto?"— hay que volver a pegar el texto. El
-extracto ya se guarda como movimientos; lo que no se guarda es el resultado
-del cotejo.
+verla —"¿me faltaba algo de agosto?"— hay que volver a pegar el texto.
+Podría vivir en la ficha de la cuenta.
 
-Podría vivir en la ficha de la cuenta, con lo último que se cotejó.
-
-## 3. Los cargos del banco ya son gastos fijos, pero solo desde el resumen
+### 8. Los cargos del banco como gastos fijos, solo desde el resumen
 
 La propuesta sale al importar. Si nunca subís un resumen, los cargos que
-entraron por los avisos del banco no se proponen nunca. Un botón en "lo que
-cobra el banco" de Números resolvería eso, y es donde uno los está mirando.
+entraron por los avisos no se proponen nunca. Un botón en "lo que cobra el
+banco" de Números lo resolvería, y es donde uno los está mirando.
 
-## 4. La foto de la proyección envejece en silencio
+### 9. La foto de la proyección envejece en silencio
 
 `js/proyeccion.js` la guarda al abrir la app. Si pasás veinte días sin abrirla,
 el cron deja de avisar —que es lo correcto— pero nadie se entera de que dejó
-de avisar. No es urgente: veinte días sin abrir la app es un problema más
-grande que el aviso.
+de avisar.
 
-## 5. Lo de siempre
+---
 
-- El aviso de "lo que viene" sale último de la lista y al teléfono van dos: si
-  el día 10 hay dos avisos antes, no llega. Es el orden correcto —lo que tiene
-  multa va primero— pero conviene mirarlo después de un mes de uso.
-- `avisos.ts` y `finance.js` tienen la misma lógica escrita dos veces, a
-  propósito. La proyección se resolvió al revés —la calcula el navegador y el
-  servidor la lee— para no escribir la parte difícil por tercera vez. Si
-  aparece otro aviso que necesite cuotas, ese es el camino.
+## Lo que hay que mirar en el uso, no en el código
+
+- **El dictado en el iPhone.** Anda, dijiste. Falta ver qué pasa con el
+  permiso del micrófono la primera vez y si `es-AR` le pega a "lucas" y
+  "palos".
+- **Mercado Pago.** Puede que conecte bien y entre poco: la API está pensada
+  para cobrar. Ver qué trae de verdad antes de decidir si vale la pena.
+- **El aviso del día 10.** Es el único que todavía no salió nunca.
+- **Las categorías creadas desde el chat.** Si a fin de mes hay tres que no
+  usás, los candados están flojos.
