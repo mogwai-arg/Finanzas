@@ -17,6 +17,14 @@ const QUERY = `from:(${REMITENTES.join(' OR ')}) newer_than:14d`;
 const QUERY_ANCHA = 'from:(galicia OR bancogalicia OR modo OR mercadopago OR mercadolibre OR ' +
   'personalpay OR naranja OR uala OR brubank) newer_than:30d';
 
+// El resumen de la tarjeta llega una vez por mes, con el PDF adjunto. Es otra
+// busqueda que la de los consumos: los consumos son avisos sueltos de los
+// ultimos catorce dias, el resumen es un adjunto del ultimo mes y medio.
+const QUERY_RESUMEN = 'has:attachment filename:pdf newer_than:45d ' +
+  'from:(bancogalicia.com.ar OR galicia.ar OR naranja OR visa OR amex OR santander OR ' +
+  'bbva OR macro OR icbc OR hsbc OR patagonia OR supervielle OR comafi)';
+const ES_RESUMEN = /resumen|estado de cuenta|liquidacion|liquidación|tu cuenta|cierre/i;
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS });
   const sb = admin();
@@ -25,6 +33,22 @@ Deno.serve(async (req) => {
   let q = sb.from('integrations').select('*').eq('proveedor', 'gmail').eq('activo', true);
   if (body.user_id) q = q.eq('user_id', body.user_id);
   const { data: integraciones } = await q;
+
+  // Bajar el PDF de un resumen. Va aca y no en una funcion aparte para que
+  // no haya una segunda cosa que pegar en Supabase, y porque el token de
+  // Gmail ya se resuelve en este archivo.
+  //
+  // Los bytes se devuelven tal cual: quien los lee es el navegador, con el
+  // mismo parser que ya usa Importar. Portar pdf.js a Deno para hacer del
+  // lado del servidor lo que ya funciona del lado del telefono seria escribir
+  // dos veces la parte dificil.
+  if (body.adjunto) {
+    const it = (integraciones ?? [])[0];
+    if (!it) return json({ error: 'no hay Gmail conectado' }, 400);
+    const token = await accessToken(sb, it);
+    const a = await api(`messages/${body.adjunto.mensaje}/attachments/${body.adjunto.id}`, token);
+    return json({ data: a.data, tamano: a.size ?? null });
+  }
 
   // Modo diagnostico: mira que llega y por que se descarta, sin cargar nada.
   if (body.solo_ver) {
@@ -167,7 +191,14 @@ async function sincronizar(sb: any, it: any) {
       cuerpo: nuevos.slice(0, 4).join(' · ')
     });
   }
-  return { user: it.user_id, cargados, ignorados, adoptados, aumentos };
+
+  // Los resumenes van aparte y no frenan lo demas: si esta busqueda falla,
+  // los consumos ya se cargaron igual.
+  let resumenes = 0;
+  try { resumenes = await buscarResumenes(sb, it, token); }
+  catch (e) { console.warn('resumenes', e); }
+
+  return { user: it.user_id, cargados, ignorados, adoptados, aumentos, resumenes };
 }
 
 // ---------------------------------------------------------------------
@@ -308,6 +339,61 @@ async function accessToken(sb: any, it: any) {
   await sb.from('integrations').update({ access_token: r.access_token,
     expira_at: new Date(Date.now() + r.expires_in * 1000).toISOString() }).eq('id', it.id);
   return r.access_token;
+}
+
+/**
+ * Los resumenes de tarjeta que llegaron con PDF adjunto.
+ *
+ * No se leen aca: se anotan para que el telefono los abra con el parser que
+ * ya existe y ya esta probado, y para que la conciliacion —completar lo
+ * anotado a mano, agregar lo que falta, no duplicar nada— pase por la misma
+ * pantalla de Importar y no por dos caminos distintos.
+ */
+async function buscarResumenes(sb: any, it: any, token: string) {
+  const lista = await api(`messages?q=${encodeURIComponent(QUERY_RESUMEN)}&maxResults=10`, token);
+  let nuevos = 0;
+
+  for (const m of lista.messages ?? []) {
+    // Ya anotado: el aviso se manda una vez por resumen, no una por corrida.
+    const { data: visto } = await sb.from('notificaciones').select('id')
+      .eq('user_id', it.user_id).eq('tipo', 'resumen')
+      .eq('datos->>mensaje', m.id).maybeSingle();
+    if (visto) continue;
+
+    const msg = await api(`messages/${m.id}?format=full`, token);
+    const cab = (n: string) => msg.payload?.headers?.find((h: any) =>
+      h.name.toLowerCase() === n)?.value ?? '';
+    const asunto = cab('subject'), remitente = cab('from');
+    if (!ES_RESUMEN.test(asunto + ' ' + remitente)) continue;
+
+    const pdf = buscarPdf(msg.payload);
+    if (!pdf) continue;
+
+    const fecha = new Date(Number(msg.internalDate || Date.now())).toISOString().slice(0, 10);
+    await sb.from('notificaciones').insert({
+      user_id: it.user_id, tipo: 'resumen',
+      titulo: `Llegó ${asunto.slice(0, 70)}`,
+      cuerpo: 'Tocá para leerlo: los consumos, las cuotas y las fechas del ciclo.',
+      datos: { mensaje: m.id, adjunto: pdf.id, archivo: pdf.nombre,
+               asunto, remitente, fecha, tamano: pdf.tamano }
+    });
+    nuevos++;
+  }
+  return nuevos;
+}
+
+/** El primer adjunto PDF de un mail, mirando las partes MIME. */
+function buscarPdf(payload: any): { id: string; nombre: string; tamano: number } | null {
+  if (!payload) return null;
+  const nombre = payload.filename || '';
+  if (/\.pdf$/i.test(nombre) && payload.body?.attachmentId) {
+    return { id: payload.body.attachmentId, nombre, tamano: payload.body.size ?? 0 };
+  }
+  for (const p of payload.parts ?? []) {
+    const r = buscarPdf(p);
+    if (r) return r;
+  }
+  return null;
 }
 
 async function api(path: string, token: string) {

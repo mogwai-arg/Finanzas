@@ -12,12 +12,13 @@
 // una decisión de hoy. Hoy tiene que leerse de una sola mirada.
 // =====================================================================
 import { h, frag, icono, iconoDe, hoja, campo, select, aviso } from '../ui.js';
-import { state, guardar, fallidas, sincronizar } from '../db.js';
+import { state, guardar, fallidas, sincronizar, bajarAdjunto } from '../db.js';
 import * as F from '../finance.js';
 import { plataPartida, plata, cuandoVence, diasHasta, hoyISO, aFecha, nombreDe,
          aNumero, etiquetaCuenta } from '../formato.js';
 import { irA } from '../ruteo.js';
 import { formPago } from './mes.js';
+import { formImportarResumen } from './importar.js';
 import { bishu, frasesDeBishu as F_frases } from '../bishu.js';
 import { nombreDelMes } from './cierre.js';
 
@@ -36,6 +37,7 @@ export function vistaHoy(root, { arranca = 0 } = {}) {
   root.append(
     h('div.flow',
       noSeGuardo(),
+      llegoElResumen(),
       cerroElMes(hoy),
       sinRevisar(),
       conexionCaida(),
@@ -220,6 +222,46 @@ function noSeGuardo() {
         'puede volver atrás solo hasta que se guarde de verdad.'),
       motivos.length ? h('div.small.mut', { style: { marginTop: '8px', lineHeight: '1.5' } },
         motivos.map(m => h('div', { style: { marginTop: '4px' } }, '· ', m))) : null,
+      btn));
+}
+
+/**
+ * El resumen de la tarjeta llegó por mail y está listo para leerse.
+ *
+ * Es el paso que faltaba: el PDF ya está en tu correo, la app ya lo sabe leer,
+ * y hasta ahora había que bajarlo, buscarlo y elegirlo a mano. El resumen es
+ * el documento que más ordena el mes —trae los consumos que uno no anotó, las
+ * cuotas con su número y las seis fechas del ciclo— y es el que más se
+ * posterga justamente por ese trámite.
+ */
+function llegoElResumen() {
+  const n = (state.notificaciones || [])
+    .filter(x => x.tipo === 'resumen' && !x.leida && x.datos?.mensaje)
+    .sort((a, b) => (a.created_at < b.created_at ? 1 : -1))[0];
+  if (!n) return null;
+
+  const btn = h('button.btn', 'Leerlo ahora');
+  btn.onclick = async () => {
+    btn.disabled = true; btn.textContent = 'Bajándolo…';
+    try {
+      const bytes = await bajarAdjunto(n.datos.mensaje, n.datos.adjunto);
+      // Se marca leído al abrirlo, no al importarlo: si lo mirás y decidís
+      // que no, tampoco tiene que seguir insistiendo.
+      await guardar('notificaciones', { ...n, leida: true });
+      bytes.name = n.datos.archivo || 'resumen.pdf';
+      formImportarResumen(bytes);
+    } catch (e) {
+      aviso(e.message || 'No pude bajarlo');
+    } finally { btn.disabled = false; btn.textContent = 'Leerlo ahora'; }
+  };
+
+  return h('div.aviso.bra',
+    h('div.av.bra', icono('recibo', 17)),
+    h('div.txt',
+      h('div.tt', n.titulo || 'Llegó un resumen'),
+      h('div.ds', n.datos.archivo
+        ? `${n.datos.archivo} · lo abro y te muestro qué falta cargar.`
+        : 'Lo abro y te muestro qué falta cargar.'),
       btn));
 }
 

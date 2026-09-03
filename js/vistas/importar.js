@@ -14,7 +14,11 @@ import { plata, aFecha } from '../formato.js';
 
 const MARCAS = { visa: 'Visa', mastercard: 'Mastercard', amex: 'Amex' };
 
-export function formImportarResumen() {
+/**
+ * `archivo` opcional: cuando el resumen ya vino del correo, se abre con el
+ * PDF adentro y no hay nada que elegir.
+ */
+export function formImportarResumen(yaBajado = null) {
   const texto = h('textarea', {
     rows: '7', placeholder: 'Pegá acá el texto del resumen…',
     // 16px o mas: por debajo de eso iOS hace zoom al tocar el campo y hay que
@@ -33,10 +37,17 @@ export function formImportarResumen() {
                                onchange: e => leerArchivo(e.target.files[0]) });
   const estado = h('div.small.mut', { style: { marginTop: '10px', lineHeight: '1.45' } });
 
-  async function leerArchivo(f) {
+  // La clave del PDF vive en ESTE teléfono y no en la base: es un dato
+  // personal —casi siempre el DNI— y no hace falta que viaje a ningún lado
+  // para abrir un archivo que ya está acá.
+  const CLAVE_KEY = 'bishusha.clavePdf';
+  const claveGuardada = () => { try { return localStorage.getItem(CLAVE_KEY) || ''; }
+                                catch { return ''; } };
+
+  async function leerArchivo(f, { clave } = {}) {
     if (!f) return;
     salida.replaceChildren(); pie.replaceChildren();
-    if (/\.txt$/i.test(f.name)) {
+    if (f.name && /\.txt$/i.test(f.name)) {
       texto.value = await f.text();
       estado.textContent = `${f.name} · listo`;
       leer(); return;
@@ -45,15 +56,35 @@ export function formImportarResumen() {
     try {
       const { textoDePDF } = await import('../pdf.js');
       texto.value = await textoDePDF(f, {
+        clave: clave ?? claveGuardada(),
         alAvanzar: (n, total) => { estado.textContent = `Leyendo página ${n} de ${total}…`; }
       });
-      estado.textContent = `${f.name} · ${texto.value.split('\n').length} líneas leídas`;
+      if (clave) { try { localStorage.setItem(CLAVE_KEY, clave); } catch { /* modo privado */ } }
+      estado.textContent = `${f.name || 'El resumen'} · ${texto.value.split('\n').length} líneas leídas`;
       leer();
     } catch (e) {
-      estado.textContent = 'No pude abrir el PDF. Si tiene contraseña, todavía no sé abrirlo; ' +
-                           'podés abrirlo vos, copiar el texto y pegarlo acá.';
+      if (e?.name === 'PideClave') { pedirClave(f); return; }
+      estado.textContent = 'No pude abrir el PDF. Podés abrirlo vos, copiar el texto y ' +
+                           'pegarlo acá abajo.';
       console.warn('pdf', e);
     }
+  }
+
+  /** El resumen viene con clave: se pide una vez y queda en este teléfono. */
+  function pedirClave(f) {
+    const inp = h('input', { type: 'password', inputmode: 'numeric',
+                             placeholder: 'Suele ser tu DNI, sin puntos',
+                             value: claveGuardada() });
+    const btn = h('button.btn', { style: { marginTop: '14px' } }, 'Abrir el resumen');
+    btn.onclick = () => { cerrarClave(); leerArchivo(f, { clave: inp.value.trim() }); };
+    inp.addEventListener('keydown', ev => { if (ev.key === 'Enter') btn.click(); });
+
+    const cerrarClave = hoja('El resumen tiene clave', h('div',
+      h('div.small.mut', { style: { lineHeight: '1.55', marginBottom: '14px' } },
+        'Los bancos protegen el PDF, casi siempre con el DNI sin puntos. ',
+        'Queda guardada en este teléfono nada más: no viaja a ningún lado.'),
+      campo('Contraseña del PDF', inp), btn));
+    estado.textContent = 'El PDF tiene contraseña.';
   }
 
   const cerrar = hoja('Importar un resumen', h('div',
@@ -69,6 +100,10 @@ export function formImportarResumen() {
     h('button.btn.sec', { style: { marginTop: '10px' }, onclick: () => leer() },
       icono('buscar', 16), 'Leer lo pegado'),
     salida, pie));
+
+  // Si el resumen llegó por correo, se lee solo: el paso de elegir el archivo
+  // es justamente el que la app se ahorra.
+  if (yaBajado) setTimeout(() => leerArchivo(yaBajado), 0);
 
   function leer() {
     salida.replaceChildren(); pie.replaceChildren();

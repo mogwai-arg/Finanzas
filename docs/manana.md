@@ -85,11 +85,21 @@ Los dos cargados son atípicos (junio trae aguinaldo, agosto vacaciones) y la
 proyección del sueldo estima en vez de calcular. Con uno solo típico se
 afina, y el aviso debajo del número deja de aparecer.
 
-## 5. Etapa 2 del resumen por mail
+## 5. Etapa 2 del resumen por mail — HECHO (3/9)
 
-Que `gmail-sync` baje el PDF del adjunto, lo lea con el mismo parser que
-Importar y lo cruce con lo ya cargado: corregir lo que difiere, agregar lo
-que falta y no duplicar lo que ya está.
+`gmail-sync` busca los correos con PDF adjunto que parecen un resumen y anota
+uno por resumen, no uno por corrida. En Hoy aparece un cartel —"Llegó tu
+resumen de Galicia Visa"— y con un toque la app baja el adjunto y lo abre.
+
+La decisión que ahorró la mitad del trabajo: **el PDF se lee en el teléfono,
+no en el servidor.** El parser ya existe y está probado, la conciliación
+—completar lo anotado a mano, agregar lo que falta, no duplicar— ya la hace
+la pantalla de Importar, y así hay un solo camino y no dos. De paso, la clave
+del PDF —que suele ser el DNI— no tiene por qué salir del teléfono.
+
+Y ahora los PDF con contraseña se abren: antes eran el final del camino
+("copialo a mano"). La clave se pide una vez y queda en ese teléfono, en
+localStorage, nunca en la base.
 
 
 ---

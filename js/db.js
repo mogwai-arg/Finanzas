@@ -238,6 +238,34 @@ export async function desconectar(proveedor) {
 }
 
 /** Pide una lectura ahora mismo, sin esperar al cron. */
+/**
+ * Baja el PDF de un resumen que llego por correo.
+ *
+ * Los bytes vuelven en base64 y se leen ACA, con el mismo parser que ya usa
+ * Importar. Portar pdf.js al servidor para hacer del lado de alla lo que ya
+ * funciona del lado de aca seria escribir dos veces la parte dificil, y
+ * ademas la clave del PDF —que suele ser el DNI— no tiene por que salir del
+ * telefono.
+ */
+export async function bajarAdjunto(mensaje, id) {
+  if (!FUNCTIONS_URL) throw new Error('Falta FUNCTIONS_URL en la configuración.');
+  const t = await token();
+  const r = await fetch(`${FUNCTIONS_URL}/gmail-sync`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${t}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ adjunto: { mensaje, id } })
+  });
+  if (!r.ok) throw new Error((await r.text()).slice(0, 200) || `Error ${r.status}`);
+  const d = await r.json();
+  if (!d?.data) throw new Error('El correo ya no tiene ese adjunto.');
+  // Gmail devuelve base64url, que no es lo que entiende atob.
+  const b64 = String(d.data).replace(/-/g, '+').replace(/_/g, '/');
+  const bin = atob(b64 + '='.repeat((4 - b64.length % 4) % 4));
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return bytes;
+}
+
 export async function leerAhora(proveedor) {
   if (!FUNCTIONS_URL) throw new Error('Falta FUNCTIONS_URL en la configuración.');
   const t = await token();

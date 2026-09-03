@@ -33,12 +33,35 @@ function huecoEntre(anterior, x) {
   return ' '.repeat(Math.min(30, Math.max(1, Math.round(hueco / 4))));
 }
 
+/**
+ * Si el PDF pide contraseña.
+ *
+ * Los resúmenes de los bancos argentinos suelen venir con el DNI de clave, y
+ * hasta ahora eso era el final del camino: "no puedo abrirlo, copiá el texto
+ * a mano". Distinguir este error del resto es lo que permite pedirla en vez
+ * de rendirse.
+ */
+export class PideClave extends Error {
+  constructor() { super('El PDF está protegido con contraseña.'); this.name = 'PideClave'; }
+}
+
 /** Texto de un PDF, con las líneas rearmadas por posición vertical. */
-export async function textoDePDF(archivo, { alAvanzar } = {}) {
+export async function textoDePDF(archivo, { alAvanzar, clave } = {}) {
   const pdfjs = await cargar();
-  const datos = new Uint8Array(await archivo.arrayBuffer());
-  const tarea = pdfjs.getDocument({ data: datos, isEvalSupported: false });
-  const doc = await tarea.promise;
+  const datos = archivo instanceof Uint8Array ? archivo
+    : new Uint8Array(await archivo.arrayBuffer());
+  const tarea = pdfjs.getDocument({ data: datos, isEvalSupported: false,
+                                    password: clave || undefined });
+  let doc;
+  try {
+    doc = await tarea.promise;
+  } catch (e) {
+    // pdf.js avisa con un nombre propio, y con un código distinto según sea
+    // "falta la clave" o "la clave está mal". Para quien la escribe es lo
+    // mismo: la que puso no sirve.
+    if (e?.name === 'PasswordException') throw new PideClave();
+    throw e;
+  }
 
   const paginas = [];
   for (let n = 1; n <= doc.numPages; n++) {

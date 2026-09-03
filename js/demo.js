@@ -262,7 +262,13 @@ export const DEMO = {
 
   notificaciones: [
     { id: id('n1'), tipo: 'carga_auto', titulo: '6 movimientos para revisar',
-      cuerpo: 'Entraron solos desde Gmail', leida: false, created_at: '2026-09-01T14:02:00Z' }
+      cuerpo: 'Entraron solos desde Gmail', leida: false, created_at: '2026-09-01T14:02:00Z' },
+    // El resumen que llego por correo, esperando que lo abras.
+    { id: id('n2'), tipo: 'resumen', titulo: 'Llegó tu resumen de Galicia Visa',
+      cuerpo: 'Tocá para leerlo: los consumos, las cuotas y las fechas del ciclo.',
+      leida: false, created_at: '2026-09-02T09:10:00Z',
+      datos: { mensaje: 'demo-msg', adjunto: 'demo-att', archivo: 'resumen-visa-0926.pdf',
+               asunto: 'Tu resumen de cuenta', fecha: '2026-09-02', tamano: 184320 } }
   ],
 
   integrations: [],

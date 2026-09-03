@@ -253,6 +253,8 @@ var REMITENTES = [
 ];
 var QUERY = `from:(${REMITENTES.join(" OR ")}) newer_than:14d`;
 var QUERY_ANCHA = "from:(galicia OR bancogalicia OR modo OR mercadopago OR mercadolibre OR personalpay OR naranja OR uala OR brubank) newer_than:30d";
+var QUERY_RESUMEN = "has:attachment filename:pdf newer_than:45d from:(bancogalicia.com.ar OR galicia.ar OR naranja OR visa OR amex OR santander OR bbva OR macro OR icbc OR hsbc OR patagonia OR supervielle OR comafi)";
+var ES_RESUMEN = /resumen|estado de cuenta|liquidacion|liquidación|tu cuenta|cierre/i;
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
   const sb = admin();
@@ -260,6 +262,13 @@ Deno.serve(async (req) => {
   let q = sb.from("integrations").select("*").eq("proveedor", "gmail").eq("activo", true);
   if (body.user_id) q = q.eq("user_id", body.user_id);
   const { data: integraciones } = await q;
+  if (body.adjunto) {
+    const it = (integraciones ?? [])[0];
+    if (!it) return json({ error: "no hay Gmail conectado" }, 400);
+    const token = await accessToken(sb, it);
+    const a = await api(`messages/${body.adjunto.mensaje}/attachments/${body.adjunto.id}`, token);
+    return json({ data: a.data, tamano: a.size ?? null });
+  }
   if (body.solo_ver) {
     const it = (integraciones ?? [])[0];
     if (!it) return json({ error: "no hay Gmail conectado" }, 400);
@@ -376,7 +385,13 @@ async function sincronizar(sb, it) {
       cuerpo: nuevos.slice(0, 4).join(" \xB7 ")
     });
   }
-  return { user: it.user_id, cargados, ignorados, adoptados, aumentos };
+  let resumenes = 0;
+  try {
+    resumenes = await buscarResumenes(sb, it, token);
+  } catch (e) {
+    console.warn("resumenes", e);
+  }
+  return { user: it.user_id, cargados, ignorados, adoptados, aumentos, resumenes };
 }
 async function buscarAumentos(sb, it, token) {
   const { data: fijos } = await sb.from("recurrings").select("*").eq("user_id", it.user_id).eq("activo", true);
@@ -486,6 +501,50 @@ async function accessToken(sb, it) {
     expira_at: new Date(Date.now() + r.expires_in * 1e3).toISOString()
   }).eq("id", it.id);
   return r.access_token;
+}
+async function buscarResumenes(sb, it, token) {
+  const lista = await api(`messages?q=${encodeURIComponent(QUERY_RESUMEN)}&maxResults=10`, token);
+  let nuevos = 0;
+  for (const m of lista.messages ?? []) {
+    const { data: visto } = await sb.from("notificaciones").select("id").eq("user_id", it.user_id).eq("tipo", "resumen").eq("datos->>mensaje", m.id).maybeSingle();
+    if (visto) continue;
+    const msg = await api(`messages/${m.id}?format=full`, token);
+    const cab = (n) => msg.payload?.headers?.find((h) => h.name.toLowerCase() === n)?.value ?? "";
+    const asunto = cab("subject"), remitente = cab("from");
+    if (!ES_RESUMEN.test(asunto + " " + remitente)) continue;
+    const pdf = buscarPdf(msg.payload);
+    if (!pdf) continue;
+    const fecha = new Date(Number(msg.internalDate || Date.now())).toISOString().slice(0, 10);
+    await sb.from("notificaciones").insert({
+      user_id: it.user_id,
+      tipo: "resumen",
+      titulo: `Lleg\xF3 ${asunto.slice(0, 70)}`,
+      cuerpo: "Toc\xE1 para leerlo: los consumos, las cuotas y las fechas del ciclo.",
+      datos: {
+        mensaje: m.id,
+        adjunto: pdf.id,
+        archivo: pdf.nombre,
+        asunto,
+        remitente,
+        fecha,
+        tamano: pdf.tamano
+      }
+    });
+    nuevos++;
+  }
+  return nuevos;
+}
+function buscarPdf(payload) {
+  if (!payload) return null;
+  const nombre = payload.filename || "";
+  if (/\.pdf$/i.test(nombre) && payload.body?.attachmentId) {
+    return { id: payload.body.attachmentId, nombre, tamano: payload.body.size ?? 0 };
+  }
+  for (const p of payload.parts ?? []) {
+    const r = buscarPdf(p);
+    if (r) return r;
+  }
+  return null;
 }
 async function api(path, token) {
   const r = await fetch(
