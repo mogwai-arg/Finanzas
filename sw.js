@@ -15,6 +15,9 @@
 // =====================================================================
 const V = 'bishusha-v2';
 
+// Esta lista la REESCRIBE build-web.mjs con los archivos que existen de
+// verdad. La de aca abajo es la que se usa sirviendo la carpeta a mano, en
+// desarrollo; en produccion no queda ni una linea de ella.
 const SHELL = [
   './', './index.html', './config.js', './manifest.webmanifest',
   './css/app.css', './css/tokens.css',

@@ -49,8 +49,27 @@ const version = (process.env.CF_PAGES_COMMIT_SHA || '').slice(0, 8) || String(Da
 // La version tambien va a la configuracion del navegador. Sin poder verla no
 // hay forma de saber si un arreglo llego al telefono o si el service worker
 // sigue sirviendo lo viejo, y eso convierte cada prueba en una adivinanza.
+//
+// Y la lista de lo que guarda se arma ACA, mirando los archivos que existen,
+// en vez de mantenerse a mano. Escrita a mano se atrasa sola: cada pantalla
+// nueva —fondos, categorizar, la ficha de una cuenta— quedaba afuera, y sin
+// senal se ve igual que si estuviera, porque online se baja igual. El dia que
+// no hay senal esa pantalla no abre y nadie sabe por que.
+//
+// pdf.mjs y su worker siguen afuera a proposito: pesan 1,7 MB entre los dos y
+// solo hacen falta al importar un resumen. Se guardan solos la primera vez.
+const paraElCache = [
+  './', './index.html', './config.js', './manifest.webmanifest',
+  ...readdirSync('css').filter(f => f.endsWith('.css')).map(f => `./css/${f}`),
+  ...readdirSync('js').filter(f => f.endsWith('.js')).map(f => `./js/${f}`),
+  ...readdirSync('js/vistas').filter(f => f.endsWith('.js')).map(f => `./js/vistas/${f}`),
+  './vendor/supabase.js', './marca/isotipo.svg', './icons/icon-192.png'
+];
 writeFileSync(join(OUT, 'sw.js'),
-  readFileSync('sw.js', 'utf8').replace(/const V = '[^']*'/, `const V = 'bishusha-${version}'`));
+  readFileSync('sw.js', 'utf8')
+    .replace(/const V = '[^']*'/, `const V = 'bishusha-${version}'`)
+    .replace(/const SHELL = \[[\s\S]*?\n\];/,
+             `const SHELL = ${JSON.stringify(paraElCache, null, 2)};`));
 
 // js/ sin las pruebas ni los fixtures.
 mkdirSync(join(OUT, 'js/vistas'), { recursive: true });
