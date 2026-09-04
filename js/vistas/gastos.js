@@ -93,7 +93,19 @@ export function vistaGastos(root) {
           entro > 0 ? h('div.tabnum', { style: { color: 'var(--tx3)', fontSize: '11.5px' } },
             `entraron ${plata(Math.round(entro), moneda)}`) : null)));
 
-      for (const [fecha, items] of dias) {
+      // La cuenta remunerada acredita TODOS los dias: treinta filas de
+      // doscientos pesos que tapan los cinco movimientos que uno vino a
+      // buscar. Sumadas en una sola dicen mas —"rindio $ 6.150 en 30 dias"—
+      // y siguen estando enteras abajo si se tocan.
+      //
+      // Se pliegan por mes y no por dia porque hay una por dia: plegar
+      // adentro del dia no sacaria ninguna.
+      const rinde = todos.filter(it => F.esRendimiento(it.tx));
+      const plegar = rinde.length >= 3;
+
+      for (const [fecha, items0] of dias) {
+        const items = plegar ? items0.filter(it => !rinde.includes(it)) : items0;
+        if (!items.length) continue;
         const gastoDelDia = salida(items);
         lista.append(h('section',
           h('div.ghead', { style: { margin: '0 4px 8px' } }, diaDeLaSemana(fecha),
@@ -110,7 +122,30 @@ export function vistaGastos(root) {
             }
           })))));
       }
+
+      if (plegar) lista.append(plegado(rinde, moneda));
     }
+  }
+
+  /** Los rendimientos del mes en una fila que se abre. */
+  function plegado(rinde, moneda) {
+    const total = rinde.reduce((s, it) => s + it.monto, 0);
+    const dias = new Set(rinde.map(it => String(it.tx.fecha).slice(0, 10))).size;
+    const adentro = h('div.grp', { hidden: true },
+      ...rinde.map(it => fila(it, moneda)));
+    const cabeza = h('button.li', {
+      'aria-expanded': 'false',
+      onclick: () => {
+        adentro.hidden = !adentro.hidden;
+        cabeza.setAttribute('aria-expanded', String(!adentro.hidden));
+      }
+    },
+      h('div.av.pos', icono('tendencia', 17)),
+      h('div.m', h('div.t', 'Rendimientos'),
+        h('div.s', `${dias} ${dias === 1 ? 'día' : 'días'} · tocá para verlos`)),
+      h('div.v.pos', plata(Math.round(total), moneda, { signo: true })),
+      h('span.chev', icono('chev', 15)));
+    return h('section', h('div.grp', cabeza), adentro);
   }
 
   function fila({ tx: t, entrante, monto }, moneda) {

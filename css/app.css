@@ -53,10 +53,17 @@ button.li{cursor:pointer}
 button.li:active{background:var(--fill)}
 .li+.li::before{content:"";position:absolute;left:14px;right:0;top:0;height:1px;background:var(--line)}
 .li .m{flex:1;min-width:0}
+/* Dos renglones y despues si, puntos suspensivos. Con uno solo, la mitad de
+   los nombres que manda el banco quedaban cortados justo donde importa
+   —"SEGURO BOLSO PROTEGI...", "COMISION MANTENIMIEN..."— y dos cargos
+   distintos se leian iguales. Los nombres cortos no cambian: el segundo
+   renglon solo aparece cuando hace falta. */
 .li .t{font-size:var(--t-fila);font-weight:var(--t-fila-w);letter-spacing:var(--t-fila-ls);
-       white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+       display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;
+       overflow:hidden;overflow-wrap:anywhere}
 .li .s{font-size:var(--t-apoyo);color:var(--tx2);margin-top:1px;
-       white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+       display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;
+       overflow:hidden;overflow-wrap:anywhere}
 .li .v{font-variant-numeric:tabular-nums;font-weight:600;font-size:var(--t-fila);
        text-align:right;white-space:nowrap;letter-spacing:-.02em}
 .li .v small{display:block;font-size:11.5px;font-weight:500;color:var(--tx2);margin-top:1px;letter-spacing:0}

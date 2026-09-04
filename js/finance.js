@@ -1465,7 +1465,20 @@ export function rindioEnElMes(cuenta, txs, per, ref = hoy()) {
  * vieja, la diferencia lo grita sola y no hay que salir a buscarla.
  */
 const DICE_RENDIMIENTO =
-  /rendimiento|remunerad|intereses|inter[eé]s ganado|ganancia|fima|fondo com[uú]n|rescate/i;
+  /rendimiento|remunerad|intereses|inter[eé]s|ganancia|fima|fondo com[uú]n|rescate/i;
+
+/**
+ * Si esta fila es un rendimiento de cuenta remunerada.
+ *
+ * Vive aca y no en cada pantalla porque las tres que lo necesitan tenian su
+ * propia lista de palabras, ligeramente distinta: una reconocia "intereses"
+ * y otra no, y el mismo movimiento se plegaba en una pantalla y en la otra
+ * no.
+ */
+export function esRendimiento(tx) {
+  return tx?.tipo === 'ingreso' &&
+    DICE_RENDIMIENTO.test(`${tx.comercio || ''} ${tx.descripcion || ''}`);
+}
 
 export function acreditadoEnElMes(cuenta, txs, per) {
   let total = 0;

@@ -219,9 +219,6 @@ function movimientos(filas, moneda, cuenta) {
   }));
 }
 
-/** Cuánto rindió la plata quieta ese mes: una fila, no treinta. */
-const ES_RENDIMIENTO = /rendimiento|remunerad|inter[eé]s|inter[eé]ses|ganancia del d[ií]a/i;
-
 /**
  * Las filas del mes, con los rendimientos plegados en una sola.
  *
@@ -234,8 +231,7 @@ const ES_RENDIMIENTO = /rendimiento|remunerad|inter[eé]s|inter[eé]ses|ganancia
  * sueltos que escondidos atrás de un desplegable.
  */
 function agrupados(items, moneda, cuenta) {
-  const rinde = items.filter(f => f.entra &&
-    ES_RENDIMIENTO.test(`${f.tx.comercio || ''} ${f.tx.descripcion || ''}`));
+  const rinde = items.filter(f => f.entra && F.esRendimiento(f.tx));
   const resto = items.filter(f => !rinde.includes(f));
   const solo = f => deslizable(fila(f.tx, f.entra, f.monto, moneda, cuenta), {
     alEditar: () => formMovimiento(f.tx),
