@@ -1,7 +1,9 @@
 # Qué queda
 
 Estado al 4 de septiembre. Lo que hay que probar usándolo está aparte, en
-[`por-probar.md`](por-probar.md).
+[`por-probar.md`](por-probar.md), y la pasada completa de auditoría —lo que se
+arregló, lo que se miró y está bien, y lo que quedó abierto— en
+[`auditoria.md`](auditoria.md).
 
 ---
 
