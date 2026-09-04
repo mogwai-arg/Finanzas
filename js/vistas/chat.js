@@ -23,9 +23,11 @@ import { state, guardar, borrar } from '../db.js';
 import { leerFrase } from '../frase.js';
 import { categoriaPara, comoRegla, reglaQueChoca } from '../reglas.js';
 import { leerCorreccion, categoriaNueva, MARCA_CORRECCION } from '../correccion.js';
+import { quePregunta, contestar } from '../preguntas.js';
 import { bishu } from '../bishu.js';
 import { plata, nombreDe, hoyISO } from '../formato.js';
 import { dictado } from '../voz.js';
+import { irA } from '../ruteo.js';
 
 const MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun',
                'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
@@ -247,6 +249,26 @@ export function vistaChat(root) {
       aprendio ? aprendio.nota : null));
   }
 
+  /**
+   * Contestar una pregunta, con el número y con dónde se ve entero.
+   *
+   * Una cifra sola invita a preguntar "¿de qué?", y la respuesta a eso ya
+   * existe y es una pantalla, no otro renglón de chat.
+   */
+  function responder(id) {
+    const r = contestar(id, state);
+    if (!r) {
+      decir('bishu', 'Eso todavía no lo sé calcular.', { animo: 'pensando' });
+      return;
+    }
+    decir('bishu', h('div',
+      h('div', { style: { fontSize: '15.5px' } }, r.titulo),
+      r.detalle ? h('div.small.mut', { style: { marginTop: '5px', lineHeight: '1.5' } },
+        r.detalle) : null,
+      r.ir ? h('div', { style: { marginTop: '8px' } },
+        enlace('Verlo entero', () => irA(r.ir))) : null));
+  }
+
   async function mandar() {
     const dicho = entrada.value.trim();
     if (!dicho) return;
@@ -260,6 +282,11 @@ export function vistaChat(root) {
       await anotar(m);
       return;
     }
+
+    // Preguntar va antes que cargar: "cuánto me queda de los 50000" tiene un
+    // número, y sin esto se anotaba un gasto de cincuenta mil que nadie hizo.
+    const preg = quePregunta(dicho);
+    if (preg) { responder(preg); return; }
 
     const m = leerFrase(dicho, { cuentas: state.accounts });
 
@@ -355,7 +382,12 @@ export function vistaChat(root) {
       h('div', h('b', 'coto 47310')),
       h('div', h('b', '45 lucas de nafta')),
       h('div', h('b', 'café 800 ayer')),
-      h('div', h('b', 'zapatillas 120000 en 6 cuotas con la visa')))));
+      h('div', h('b', 'zapatillas 120000 en 6 cuotas con la visa'))),
+    h('div', { style: { marginTop: '9px' } }, 'O preguntame:'),
+    h('div.small.mut', { style: { marginTop: '5px', lineHeight: '1.6' } },
+      h('div', h('b', '¿cuánto me queda?')),
+      h('div', h('b', '¿en qué se me fue?')),
+      h('div', h('b', '¿qué se viene?')))));
 }
 
 const enlace = (txt, fn) => h('button', {
