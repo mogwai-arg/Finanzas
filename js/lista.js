@@ -30,6 +30,34 @@ const FECHA = /^\s*(\d{1,2})[/\-](\d{1,2})[/\-](\d{2,4})\s*$/;
 /** "Cuota 1 de 3", "1/3", "Cuota 2/6". */
 const CUOTA = /(?:cuota\s*)?(\d{1,2})\s*(?:de|\/)\s*(\d{1,2})/i;
 
+// ---------------------------------------------------------------------
+// El otro formato: la fecha como titulo de seccion.
+//
+// Mercado Pago y las billeteras no ponen la fecha en cada renglon: la ponen
+// una vez arriba —"Hoy", "3 de septiembre"— y abajo van los movimientos de
+// ese dia, cada uno con su hora. Es la pantalla donde estan los rendimientos
+// diarios, que por la API no vienen: /v1/payments/search devuelve PAGOS, y un
+// rendimiento no es un pago.
+// ---------------------------------------------------------------------
+const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio',
+               'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+
+/** "Hoy", "Ayer", "3 de septiembre", "3 de septiembre de 2026". */
+const TITULO_FECHA = new RegExp(
+  `^\\s*(hoy|ayer|anteayer|(\\d{1,2})\\s+de\\s+(${MESES.join('|')})(?:\\s+de\\s+(\\d{4}))?)\\s*$`, 'i');
+
+/** "00:47". Una hora no es una fecha ni un importe: es ruido con numeros. */
+const HORA = /^\s*\d{1,2}:\d{2}(?::\d{2})?\s*$/;
+
+/**
+ * "Disponible $ 399.280,61", "Saldo del dia $ 399.075,31".
+ *
+ * Son saldos, no movimientos. Sin sacarlos, el nombre del primer movimiento de
+ * cada dia seria "Disponible $ 399.280,61" y el dia tendria un movimiento
+ * inventado del tamano del saldo entero.
+ */
+const ES_SALDO = /^\s*(disponible|saldo(\s+(del\s+d[ií]a|total|actual|en\s+cuenta))?)\b/i;
+
 function aNumero(s) {
   const t = String(s).replace(/\./g, '').replace(',', '.');
   const n = Number(t);
@@ -42,8 +70,11 @@ function aISO(d, m, a) {
 }
 
 /** Lo que una linea es, si es algo. */
-function queEs(linea) {
+function queEs(linea, hoy = new Date()) {
   let m;
+  if (HORA.test(linea)) return { que: 'hora' };
+  if (ES_SALDO.test(linea)) return { que: 'saldo' };
+  if ((m = linea.match(TITULO_FECHA))) return { que: 'titulo', valor: deTitulo(m, hoy) };
   if ((m = linea.match(FECHA))) return { que: 'fecha', valor: aISO(m[1], m[2], m[3]) };
   if ((m = linea.match(IMPORTE))) {
     const n = aNumero(m[3]);
@@ -57,6 +88,26 @@ function queEs(linea) {
   return null;
 }
 
+/** La fecha de un titulo de seccion. */
+function deTitulo(m, hoy) {
+  const iso = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const correr = n => { const d = new Date(hoy); d.setDate(d.getDate() - n); return d; };
+  const t = m[1].toLowerCase();
+  if (/^hoy/.test(t)) return iso(hoy);
+  if (/^ayer/.test(t)) return iso(correr(1));
+  if (/^anteayer/.test(t)) return iso(correr(2));
+
+  const dia = Number(m[2]);
+  const mes = MESES.indexOf(m[3].toLowerCase());
+  if (!(dia >= 1 && dia <= 31) || mes < 0) return null;
+  if (m[4]) return iso(new Date(Number(m[4]), mes, dia));
+  // Sin ano es de este ano, salvo que caiga adelante: nadie mira los
+  // movimientos del mes que viene.
+  let f = new Date(hoy.getFullYear(), mes, dia);
+  if (f > hoy) f = new Date(hoy.getFullYear() - 1, mes, dia);
+  return iso(f);
+}
+
 /**
  * ¿Esto es una lista de movimientos?
  *
@@ -64,17 +115,22 @@ function queEs(linea) {
  * titulo distinto, y una captura recortada puede no traerlo. Lo que ninguna
  * otra cosa tiene es la terna nombre + fecha + importe con signo, repetida.
  */
-export function pareceLista(texto) {
+export function pareceLista(texto, hoy = new Date()) {
   const l = String(texto || '').split('\n').map(x => x.trim()).filter(Boolean);
-  let fechas = 0, importes = 0;
+  let fechas = 0, titulos = 0, importes = 0;
   for (const x of l) {
-    const q = queEs(x);
+    const q = queEs(x, hoy);
     if (q?.que === 'fecha') fechas++;
+    if (q?.que === 'titulo' && q.valor) titulos++;
     if (q?.que === 'importe') importes++;
   }
   // Dos movimientos completos. Con uno solo, cualquier cosa con una fecha y un
   // precio pasaria: una promo, un ticket, media pantalla de otra cosa.
-  return fechas >= 2 && importes >= 2;
+  //
+  // Con titulos de seccion alcanza UNO: "Hoy" seguido de tres movimientos es
+  // una lista perfectamente valida, y pedir dos dias dejaria afuera la captura
+  // mas comun de todas.
+  return (fechas >= 2 || titulos >= 1) && importes >= 2;
 }
 
 /**
@@ -86,14 +142,20 @@ export function pareceLista(texto) {
  * texto sale en un orden o en el otro. Copiar de la captura con el dedo, de
  * la app o del navegador da tres ordenes distintos y los tres son validos.
  */
-export function parseLista(texto) {
+export function parseLista(texto, hoy = new Date()) {
   const crudas = String(texto || '').split('\n').map(x => x.trim());
   const lineas = crudas.filter(Boolean);
-  if (!pareceLista(lineas.join('\n'))) return null;
+  if (!pareceLista(lineas.join('\n'), hoy)) return null;
 
-  const tipos = lineas.map(queEs);
+  const tipos = lineas.map(l => queEs(l, hoy));
   const usadas = new Set();
   const movimientos = [];
+
+  // La fecha por titulo de seccion manda cuando esta: es el formato de las
+  // billeteras y no se mezcla con el otro.
+  if (tipos.some(t => t?.que === 'titulo' && t.valor)) {
+    return porSecciones(lineas, tipos, hoy);
+  }
 
   for (let i = 0; i < lineas.length; i++) {
     if (tipos[i]?.que !== 'fecha') continue;
@@ -155,6 +217,57 @@ export function parseLista(texto) {
     // dejar creer que se comprobo algo.
     cuadra: null
   };
+}
+
+/**
+ * La lista con la fecha arriba, como la muestran las billeteras.
+ *
+ *   Hoy
+ *   Disponible $ 399.280,61      <- saldo, no movimiento
+ *   Rendimientos
+ *   + $ 205,30
+ *   00:47                        <- hora, no fecha ni importe
+ *   3 de septiembre
+ *   ...
+ *
+ * Se recorre de arriba abajo con la fecha corriente: cada titulo la cambia, y
+ * todo lo de abajo es de ese dia. Un movimiento es un nombre seguido de su
+ * importe; la hora y los saldos se saltean.
+ */
+function porSecciones(lineas, tipos, hoy) {
+  const movimientos = [];
+  let fecha = null, nombre = null;
+
+  for (let i = 0; i < lineas.length; i++) {
+    const t = tipos[i];
+    if (t?.que === 'titulo') { if (t.valor) fecha = t.valor; nombre = null; continue; }
+    if (t?.que === 'hora' || t?.que === 'saldo') continue;
+    if (t?.que === 'fecha') { fecha = t.valor; nombre = null; continue; }
+
+    if (t?.que === 'importe') {
+      // Un importe sin nombre arriba no es un movimiento: es el saldo del dia
+      // escrito en dos renglones, o una cifra suelta de la captura.
+      if (!fecha || !nombre) { nombre = null; continue; }
+      const cuota = nombre.match(CUOTA);
+      movimientos.push({
+        fecha, descripcion: nombre, comercio: limpiar(nombre),
+        importe: Math.abs(t.valor), entra: t.entra, moneda: t.moneda,
+        clase: queClase(nombre),
+        cuota: cuota ? { nro: Number(cuota[1]), total: Number(cuota[2]) } : null
+      });
+      nombre = null;
+      continue;
+    }
+
+    // Cualquier otra cosa es texto: el nombre del movimiento. Se queda el
+    // ultimo, que es el que esta pegado al importe.
+    nombre = lineas[i];
+  }
+
+  if (!movimientos.length) return null;
+  const fechas = movimientos.map(m => m.fecha).sort();
+  return { movimientos, periodo: { desde: fechas[0], hasta: fechas[fechas.length - 1] },
+           cuadra: null };
 }
 
 /**

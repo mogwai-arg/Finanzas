@@ -152,5 +152,122 @@ Transf. ctas propias`);
   assert.equal(v.nombres, 3);
 });
 
+
+// ---------------------------------------------------------------------
+// El otro formato: la fecha como título de sección (billeteras)
+// ---------------------------------------------------------------------
+console.log('\nLA LISTA DE UNA BILLETERA');
+
+const AHORA = new Date(2026, 8, 4);   // viernes 4 de septiembre
+const MP = `Hoy
+Disponible $ 399.280,61
+Rendimientos
++ $ 205,30
+00:47
+3 de septiembre
+Saldo del día $ 399.075,31
+Rendimientos
++ $ 204,47
+01:18
+2 de septiembre
+Saldo del día $ 398.870,84
+Rendimientos
++ $ 207,07
+00:42`;
+
+t('la fecha del título vale para todo lo que viene abajo', () => {
+  // Mercado Pago no pone la fecha en cada renglón: la pone una vez arriba.
+  const r = L.parseLista(MP, AHORA);
+  assert.equal(r.movimientos.length, 3);
+  assert.equal(r.movimientos[0].fecha, '2026-09-04');
+  assert.equal(r.movimientos[1].fecha, '2026-09-03');
+  assert.equal(r.movimientos[2].fecha, '2026-09-02');
+});
+
+t('"Hoy" y "Ayer" son fechas', () => {
+  const r = L.parseLista(`Hoy
+Rendimientos
++ $ 205,30
+Ayer
+Rendimientos
++ $ 204,47`, AHORA);
+  assert.equal(r.movimientos[0].fecha, '2026-09-04');
+  assert.equal(r.movimientos[1].fecha, '2026-09-03');
+});
+
+t('el saldo del día no es un movimiento', () => {
+  // Sin sacarlo, el primer movimiento de cada día se llamaría "Disponible
+  // $ 399.280,61" y el día tendría un movimiento inventado del tamaño del
+  // saldo entero.
+  const r = L.parseLista(MP, AHORA);
+  assert.ok(!r.movimientos.some(m => /disponible|saldo/i.test(m.descripcion)),
+    'ningún movimiento puede llamarse Disponible');
+  assert.ok(!r.movimientos.some(m => m.importe > 1000), 'ni valer lo que el saldo');
+});
+
+t('la hora tampoco', () => {
+  const r = L.parseLista(MP, AHORA);
+  assert.ok(!r.movimientos.some(m => /^\d{1,2}:\d{2}$/.test(m.descripcion)));
+  assert.equal(r.movimientos.length, 3, 'tres movimientos, no seis');
+});
+
+t('el signo + entra como ingreso', () => {
+  const r = L.parseLista(MP, AHORA);
+  assert.ok(r.movimientos.every(m => m.entra));
+  assert.equal(L.aMovimientos(r, 'mp')[0].tipo, 'ingreso');
+});
+
+t('los rendimientos quedan con un nombre que la app reconoce', () => {
+  // Es lo que cierra el círculo: entran por acá y los levanta
+  // acreditadoEnElMes() para comparar contra lo estimado.
+  const m = L.aMovimientos(L.parseLista(MP, AHORA), 'mp');
+  assert.ok(m.every(x => /rendimiento/i.test(x.comercio)));
+});
+
+t('un día sin año que cae adelante es del año pasado', () => {
+  // Nadie mira los movimientos del mes que viene.
+  const r = L.parseLista(`20 de diciembre
+Rendimientos
++ $ 100,00
+19 de diciembre
+Rendimientos
++ $ 100,00`, AHORA);
+  assert.equal(r.movimientos[0].fecha, '2025-12-20');
+});
+
+t('con año escrito manda el año escrito', () => {
+  const r = L.parseLista(`3 de septiembre de 2024
+Compra
+- $ 100,00
+2 de septiembre de 2024
+Compra
+- $ 200,00`, AHORA);
+  assert.equal(r.movimientos[0].fecha, '2024-09-03');
+});
+
+t('un solo título alcanza: "Hoy" con tres movimientos es una lista', () => {
+  const r = L.parseLista(`Hoy
+Coto
+- $ 47.310,00
+Shell
+- $ 52.000,00`, AHORA);
+  assert.equal(r.movimientos.length, 2);
+});
+
+t('un importe suelto sin nombre arriba no inventa un movimiento', () => {
+  const r = L.parseLista(`Hoy
+Coto
+- $ 47.310,00
+- $ 999,00
+Shell
+- $ 52.000,00`, AHORA);
+  assert.equal(r.movimientos.length, 2);
+  assert.ok(!r.movimientos.some(m => m.importe === 999));
+});
+
+t('el formato viejo sigue andando: no se mezclan', () => {
+  assert.equal(L.parseLista(GALICIA).movimientos.length, 5);
+});
+
 console.log(`\n${ok} pruebas OK${mal ? `, ${mal} FALLAN` : ''}\n`);
 process.exit(mal ? 1 : 0);
