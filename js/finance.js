@@ -1388,3 +1388,143 @@ export function mesQueAprieta(proyeccion, umbral = 70) {
   const peor = conDato.reduce((a, b) => (b.pct > a.pct ? b : a));
   return peor.pct >= umbral ? peor : null;
 }
+
+// ---------------------------------------------------------------------
+// CUENTA REMUNERADA
+// ---------------------------------------------------------------------
+
+/**
+ * Lo que rinde la plata quieta.
+ *
+ * Mercado Pago, Personal Pay y el FIMA de Galicia pagan todos los dias sobre
+ * el saldo. Es plata que se gana sin hacer nada, y con inflacion es la
+ * diferencia entre perder poder de compra despacio o rapido.
+ *
+ * DECISION IMPORTANTE: esto NO crea movimientos.
+ *
+ * Devengar el rendimiento como transacciones haria que el saldo de la app
+ * suba solo, con plata que la app se inventa a partir de una tasa que uno
+ * escribio a mano y que cambia cada semana. Un saldo inventado se cree igual
+ * que uno real, y el dia que no coincide con el banco ya no se sabe cual de
+ * los dos esta mal. El rendimiento de verdad entra como entra todo lo demas:
+ * por el resumen o por el aviso del banco.
+ *
+ * Asi que esto estima y lo dice: cuanto esta rindiendo, cuanto va del mes, y
+ * —lo unico que se puede decidir— cual de tus cuentas rinde mas.
+ */
+export function rinde(cuenta) {
+  const tna = Number(cuenta?.tna);
+  return Number.isFinite(tna) && tna > 0 ? tna : null;
+}
+
+/** Lo que gana por dia un saldo a esa tasa. */
+export function porDia(saldo, tna) {
+  const t = Number(tna);
+  if (!(t > 0) || !(Number(saldo) > 0)) return 0;
+  return round2((Number(saldo) * (t / 100)) / 365);
+}
+
+/**
+ * Lo que rindio en el mes, dia por dia y no sobre el saldo de hoy.
+ *
+ * Importa: si el sueldo entro el 5 y se fue el 20, el saldo de hoy no dice
+ * nada de lo que hubo adentro del mes. Se toma el saldo de cada dia hasta
+ * hoy —el mes que corre no rinde por adelantado— y se suma.
+ */
+export function rindioEnElMes(cuenta, txs, per, ref = hoy()) {
+  const tna = rinde(cuenta);
+  if (!tna) return 0;
+  const [y, m] = per.split('-').map(Number);
+  const ultimo = new Date(y, m, 0).getDate();
+  const corre = periodo(ref) === per;
+  const hasta = corre ? Math.min(ref.getDate(), ultimo) : ultimo;
+
+  let total = 0;
+  for (let d = 1; d <= hasta; d++) {
+    const saldo = saldoDeCuenta(cuenta, txs, new Date(y, m - 1, d),
+                                cuenta.saldo_inicial, cuenta.saldo_al);
+    total += porDia(saldo, tna);
+  }
+  return round2(total);
+}
+
+/**
+ * Lo que de verdad te acreditaron por rendimiento en el mes.
+ *
+ * Es contra esto que se compara la estimacion. Si la tasa que cargaste esta
+ * vieja, la diferencia lo grita sola y no hay que salir a buscarla.
+ */
+const DICE_RENDIMIENTO =
+  /rendimiento|remunerad|intereses|inter[eé]s ganado|ganancia|fima|fondo com[uú]n|rescate/i;
+
+export function acreditadoEnElMes(cuenta, txs, per) {
+  let total = 0;
+  for (const tx of txs || []) {
+    if (tx.tipo !== 'ingreso') continue;
+    if (tx.account_id !== cuenta.id) continue;
+    if (periodo(parseFecha(tx.fecha)) !== per) continue;
+    if (!DICE_RENDIMIENTO.test(`${tx.comercio || ''} ${tx.descripcion || ''}`)) continue;
+    total += Math.abs(Number(tx.monto) || 0);
+  }
+  return round2(total);
+}
+
+/**
+ * Donde esta rindiendo tu plata, y cuanto perdes por tenerla en otro lado.
+ *
+ * Es la unica pregunta accionable de todo esto. Cuanto rindio el mes pasado
+ * lo dice el banco; lo que el banco no te dice nunca es que la misma plata,
+ * en la cuenta de al lado, rendiria el doble.
+ *
+ * La comparacion se hace solo entre cuentas de la misma moneda y solo con
+ * plata que se puede mover: el efectivo no rinde en ningun lado y una tarjeta
+ * no tiene saldo que rinda.
+ */
+export function dondeRinde(cuentas, txs, { moneda = 'ARS', per = null } = {}, ref = hoy()) {
+  const p = per || periodo(ref);
+  const mias = (cuentas || []).filter(c =>
+    c.activo !== false && c.tipo !== 'credito' && (c.moneda || 'ARS') === moneda);
+
+  const filas = mias.map(c => {
+    const saldo = saldoDeCuenta(c, txs, ref, c.saldo_inicial, c.saldo_al);
+    const tna = rinde(c);
+    return {
+      cuenta: c, saldo: round2(saldo), tna,
+      porDia: porDia(saldo, tna),
+      estimado: rindioEnElMes(c, txs, p, ref),
+      acreditado: acreditadoEnElMes(c, txs, p),
+      // Cuando la tasa se cargo. Una de hace tres meses no sirve para decidir
+      // nada, y callarlo seria hacerla pasar por actual.
+      tnaAl: c.tna_al || null
+    };
+  }).sort((a, b) => (b.tna || 0) - (a.tna || 0) || b.saldo - a.saldo);
+
+  const mejor = filas.find(f => f.tna) || null;
+  // Lo que estaria ganando de mas si la plata quieta estuviera en la que mas
+  // rinde. Solo cuenta lo que rinde MENOS que la mejor: mover plata de una
+  // cuenta que rinde igual no cambia nada.
+  // El efectivo queda afuera de la recomendacion. Rinde cero, si, pero uno
+  // tiene efectivo por razones que la app no ve —la feria, el service, lo que
+  // no quiere que pase por ningun lado— y decirle todos los dias que lo
+  // deposite es la clase de consejo que hace apagar la seccion.
+  const quieta = filas.filter(f => mejor && f.cuenta.id !== mejor.cuenta.id &&
+                                   f.cuenta.tipo !== 'efectivo' &&
+                                   f.saldo > 0 && (f.tna || 0) < mejor.tna);
+  const dejasDeGanar = round2(quieta.reduce((s, f) =>
+    s + porDia(f.saldo, mejor.tna) - f.porDia, 0));
+
+  return {
+    filas, mejor, moneda,
+    porDia: round2(filas.reduce((s, f) => s + f.porDia, 0)),
+    estimado: round2(filas.reduce((s, f) => s + f.estimado, 0)),
+    acreditado: round2(filas.reduce((s, f) => s + f.acreditado, 0)),
+    dejasDeGanar,
+    // Las que tendrian la plata mal puesta, de la que mas plata tiene.
+    mover: quieta.sort((a, b) => b.saldo - a.saldo)
+  };
+}
+
+/** Una tasa de hace mucho no sirve para decidir: se avisa en vez de usarla callado. */
+export const tasaVieja = (fila, ref = hoy(), dias = 60) =>
+  !!fila.tna && (!fila.tnaAl ||
+    (ref - parseFecha(fila.tnaAl)) / 86400000 > dias);

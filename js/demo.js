@@ -11,9 +11,9 @@ export const DEMO = {
   accounts: [
     { id: id('gal'), nombre: 'Galicia', tipo: 'cuenta', banco: 'Galicia', moneda: 'ARS',
       color: '#1B3A6B', orden: 1, activo: true, saldo_inicial: 0, saldo_al: '2026-09-01' },
-    { id: id('mpw'), nombre: 'Mercado Pago', tipo: 'billetera', moneda: 'ARS',
+    { id: id('mpw'), nombre: 'Mercado Pago', tipo: 'billetera', moneda: 'ARS', tna: 28, tna_al: '2026-09-02',
       color: '#00A3E0', orden: 2, activo: true, saldo_inicial: 0, saldo_al: '2026-09-01' },
-    { id: id('pp'), nombre: 'Personal Pay', tipo: 'billetera', moneda: 'ARS',
+    { id: id('pp'), nombre: 'Personal Pay', tipo: 'billetera', moneda: 'ARS', tna: 35, tna_al: '2026-09-01',
       color: '#7B2FF7', orden: 3, activo: true, saldo_inicial: 32181.28, saldo_al: '2026-09-01' },
     { id: id('efe'), nombre: 'Efectivo', tipo: 'efectivo', moneda: 'ARS',
       color: '#4B7A5B', orden: 4, activo: true, saldo_inicial: 0, saldo_al: '2026-09-01' },

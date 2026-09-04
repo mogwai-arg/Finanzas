@@ -1267,4 +1267,97 @@ t('pero uno de monto fijo sigue arrastrando', () => {
   assert.equal(F.aPagarRecurrente(r, pagos, '2026-09').sugerido, 800);
 });
 
+
+// ---------------------------------------------------------------------
+// La plata quieta
+// ---------------------------------------------------------------------
+const HOY_R = new Date(2026, 8, 20);   // 20 de septiembre
+const round2 = n => Math.round(n * 100) / 100;
+const CTA = (id, nombre, tna, saldo, extra = {}) =>
+  ({ id, nombre, tipo: 'billetera', moneda: 'ARS', tna,
+     saldo_inicial: saldo, saldo_al: '2026-09-01', ...extra });
+
+t('lo que rinde por día sale de la tasa anual sobre el saldo', () => {
+  assert.equal(F.porDia(500000, 32), 438.36);
+  assert.equal(F.porDia(500000, 0), 0);
+  assert.equal(F.porDia(0, 32), 0);
+  assert.equal(F.porDia(-1000, 32), 0, 'un saldo negativo no rinde');
+});
+
+t('el mes se calcula día por día, no sobre el saldo de hoy', () => {
+  // Si el sueldo entró el 5 y se fue el 20, el saldo de hoy no dice nada de
+  // lo que hubo adentro del mes.
+  const c = CTA('mp', 'Mercado Pago', 32, 500000);
+  const salio = [{ id: 'g', tipo: 'gasto', moneda: 'ARS', monto: 400000,
+                   fecha: '2026-09-10', account_id: 'mp' }];
+  const conMovimiento = F.rindioEnElMes(c, salio, '2026-09', HOY_R);
+  const sinMovimiento = F.rindioEnElMes(c, [], '2026-09', HOY_R);
+  assert.ok(conMovimiento < sinMovimiento, 'sacar plata tiene que rendir menos');
+  // 9 días con 500.000 y 11 con 100.000.
+  assert.equal(conMovimiento, round2(F.porDia(500000, 32) * 9 + F.porDia(100000, 32) * 11));
+});
+
+t('el mes en curso no rinde por adelantado', () => {
+  const c = CTA('mp', 'Mercado Pago', 32, 500000);
+  const hastaHoy = F.rindioEnElMes(c, [], '2026-09', HOY_R);
+  assert.equal(hastaHoy, round2(F.porDia(500000, 32) * 20), 'veinte días, no treinta');
+});
+
+t('una cuenta sin tasa no rinde y no rompe', () => {
+  assert.equal(F.rinde({ nombre: 'Efectivo' }), null);
+  assert.equal(F.rinde({ tna: 0 }), null);
+  assert.equal(F.rindioEnElMes({ id: 'e', tna: null }, [], '2026-09', HOY_R), 0);
+});
+
+t('lo acreditado de verdad se reconoce por el nombre', () => {
+  const txs = [
+    { tipo: 'ingreso', moneda: 'ARS', monto: 8000, fecha: '2026-09-15',
+      account_id: 'mp', comercio: 'Rendimientos' },
+    { tipo: 'ingreso', moneda: 'ARS', monto: 1200, fecha: '2026-09-16',
+      account_id: 'mp', comercio: 'Intereses cuenta remunerada' },
+    { tipo: 'ingreso', moneda: 'ARS', monto: 500000, fecha: '2026-09-05',
+      account_id: 'mp', comercio: 'Transferencia recibida' }
+  ];
+  assert.equal(F.acreditadoEnElMes({ id: 'mp' }, txs, '2026-09'), 9200);
+});
+
+t('dice cuál rinde más y cuánto dejás de ganar', () => {
+  const cuentas = [CTA('pp', 'Personal Pay', 35, 100000),
+                   CTA('mp', 'Mercado Pago', 28, 400000),
+                   CTA('gal', 'Galicia', null, 1000000, { tipo: 'cuenta' })];
+  const r = F.dondeRinde(cuentas, [], { moneda: 'ARS' }, HOY_R);
+  assert.equal(r.mejor.cuenta.id, 'pp', 'gana la de mayor tasa');
+  assert.equal(r.mover.length, 2, 'la de menor tasa y la que no rinde');
+  assert.ok(r.dejasDeGanar > 0);
+  // Lo que ganaría esa plata al 35 %, menos lo que gana hoy.
+  assert.equal(r.dejasDeGanar,
+    round2(F.porDia(400000, 35) - F.porDia(400000, 28) + F.porDia(1000000, 35)));
+});
+
+t('el efectivo no entra en la recomendación', () => {
+  // Uno tiene efectivo por razones que la app no ve. Decirle todos los días
+  // que lo deposite es la clase de consejo que hace apagar la sección.
+  const cuentas = [CTA('pp', 'Personal Pay', 35, 100000),
+                   CTA('ef', 'Efectivo', null, 1500000, { tipo: 'efectivo' })];
+  const r = F.dondeRinde(cuentas, [], { moneda: 'ARS' }, HOY_R);
+  assert.equal(r.mover.length, 0);
+  assert.equal(r.dejasDeGanar, 0);
+});
+
+t('no se mezclan monedas', () => {
+  const cuentas = [CTA('pp', 'Personal Pay', 35, 100000),
+                   { id: 'w', nombre: 'Wallbit', tipo: 'billetera', moneda: 'USD',
+                     tna: 4, saldo_inicial: 5000, saldo_al: '2026-09-01' }];
+  const r = F.dondeRinde(cuentas, [], { moneda: 'ARS' }, HOY_R);
+  assert.equal(r.filas.length, 1);
+});
+
+t('una tasa vieja se avisa en vez de usarla callado', () => {
+  // Cambian seguido: con una de hace tres meses el cálculo miente sin decirlo.
+  assert.equal(F.tasaVieja({ tna: 32, tnaAl: '2026-09-01' }, HOY_R), false);
+  assert.equal(F.tasaVieja({ tna: 32, tnaAl: '2026-05-01' }, HOY_R), true);
+  assert.equal(F.tasaVieja({ tna: 32, tnaAl: null }, HOY_R), true);
+  assert.equal(F.tasaVieja({ tna: null, tnaAl: null }, HOY_R), false, 'sin tasa no hay nada viejo');
+});
+
 console.log(`\n${ok} pruebas OK`);

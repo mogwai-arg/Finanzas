@@ -22,7 +22,7 @@
 const COLUMNAS = {
   accounts: ['id', 'user_id', 'nombre', 'tipo', 'banco', 'marca', 'ultimos4', 'moneda',
              'cierre_dia', 'vencimiento_dia', 'limite', 'color', 'orden', 'activo',
-             'saldo_inicial', 'saldo_al', 'ciclos', 'updated_at'],
+             'saldo_inicial', 'saldo_al', 'ciclos', 'tna', 'tna_al', 'updated_at'],
   transactions: ['id', 'user_id', 'fecha', 'descripcion', 'comercio', 'monto', 'moneda',
                  'tipo', 'account_id', 'destino_account_id', 'monto_destino', 'moneda_destino',
                  'category_id', 'cuotas', 'reintegro', 'promo_id', 'notas', 'origen',

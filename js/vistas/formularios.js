@@ -44,7 +44,9 @@ export function formCuenta(a = null) {
     venc: selectorDeDia(a?.vencimiento_dia, { titulo: '¿Qué día vence?' }),
     saldo: h('input', { type: 'text', inputmode: 'decimal',
                         value: a?.saldo_inicial ? String(a.saldo_inicial) : '' }),
-    saldoAl: h('input', { type: 'date', value: a?.saldo_al || hoyISO() })
+    saldoAl: h('input', { type: 'date', value: a?.saldo_al || hoyISO() }),
+    tna: h('input', { type: 'text', inputmode: 'decimal', placeholder: '32',
+                      value: a?.tna != null ? String(a.tna) : '' })
   };
 
   // ---- ciclos leidos del resumen
@@ -104,7 +106,14 @@ export function formCuenta(a = null) {
     h('div.small.mut', { style: { marginTop: '6px', lineHeight: '1.45' } },
       'El que ves ahora en el banco o en la billetera. Los movimientos anteriores a la fecha ',
       'de abajo no se vuelven a sumar: ya están adentro de este número.')),
-    campo('Ese saldo es del', c.saldoAl));
+    campo('Ese saldo es del', c.saldoAl),
+    h('div.f',
+      h('label', 'Rinde al año (%)'), c.tna,
+      h('div.small.mut', { style: { marginTop: '6px', lineHeight: '1.45' } },
+        'Mercado Pago, Personal Pay y el FIMA de Galicia pagan todos los días sobre el ',
+        'saldo. Poné la tasa nominal anual: 32 quiere decir 32 %. Vacío = no rinde.',
+        a?.tna_al ? h('div', { style: { marginTop: '5px' } },
+          `Cargada el ${a.tna_al}. Cambian seguido: si está vieja, el cálculo miente.`) : null)));
 
   actualizar();
 
@@ -149,6 +158,13 @@ export function formCuenta(a = null) {
           ciclos: esCredito ? ciclos.filter(x => x.cierre && x.vence) : [],
           saldo_inicial: esCredito ? 0 : num(c.saldo.value),
           saldo_al: esCredito ? null : (c.saldoAl.value || hoyISO()),
+          tna: esCredito ? null : (num(c.tna.value) || null),
+          // La fecha se pone sola y solo cuando la tasa cambia: es lo que
+          // permite avisar que está vieja en vez de seguir calculando con un
+          // número de hace tres meses como si fuera de hoy.
+          tna_al: esCredito ? null
+                : (num(c.tna.value) || null) == null ? null
+                : (num(c.tna.value) === Number(a?.tna) ? (a?.tna_al || hoyISO()) : hoyISO()),
           activo: true, orden: a?.orden ?? (state.accounts.length + 1) });
         cerrar(); aviso(nuevo ? 'Cuenta creada' : 'Actualizada');
       } }, nuevo ? 'Guardar' : 'Guardar cambios'))));
