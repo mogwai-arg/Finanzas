@@ -4,67 +4,55 @@ Estado al 4 de septiembre, después de un día largo.
 
 ---
 
-## Hecho hoy
+## Hecho
 
-El presupuesto ahora se hereda del último mes que lo tenga, la cotización del
-dólar se puede cargar y traer sola, y Bishu contesta ocho preguntas.
-
-Falta de tu lado: **correr la migración 018** y **subir la función `dolar`**.
+Todo lo que estaba anotado. Queda esto, que salió mirando qué hacen otras
+apps y de lo que se ve usándola.
 
 ---
 
-## Del chat
+## 1. Fondos para lo que no es mensual
 
-### 1. Solo se acuerda del último
+Es lo que más piden en todos lados y lo que la app no tiene: el seguro del
+auto, la patente, la matrícula del colegio, las vacaciones. Cosas que no caen
+todos los meses pero que se pagan igual, y que cuando llegan aparecen como una
+sorpresa aunque se supieran desde enero.
 
-Corregir el anteúltimo obliga a buscarlo en Gastos. Sería natural decir "el
-café iba en efectivo" y que encuentre cuál. No es urgente: uno corrige lo que
-acaba de cargar.
+La idea: un fondo con un objetivo y una fecha —"patente, $ 480.000, marzo"— y
+la app dice cuánto habría que apartar por mes, cuánto va y si estás atrasado.
+Lo que hoy hace "lo que se viene" con las cuotas, pero para lo que todavía no
+tiene fecha de vencimiento cargada.
 
-### 2. El dictado corta al primer silencio
+Encaja con lo que ya hay: la plata quieta que rinde es justamente donde
+conviene tenerlo.
 
-`continuous: false`. Para cargar un gasto está bien; para dictar una
-corrección atrás de otra, obliga a tocar el micrófono cada vez.
+## 2. Lo que sobra del tope, ¿se lleva al mes siguiente?
 
-### 3. El hilo no sobrevive a cerrar la app
+Es el método de sobres: si te sobraron $ 40.000 de supermercado, el mes que
+viene tenés $ 440.000. Hoy los topes arrancan de cero cada mes.
 
-Vive en memoria. Guardar las últimas veinte burbujas en `localStorage` es
-fácil; falta decidir si un historial viejo suma o es ruido.
+No estoy seguro de que sirva acá. Con inflación alta, arrastrar un sobrante en
+pesos de hace tres meses no quiere decir nada. Y a la inversa —arrastrar lo
+que te pasaste— es honesto pero desalienta. Habría que probarlo con un tope
+solo antes de ponerlo en todos.
 
----
+## 3. La conciliación no se guarda
 
-## De la app
+Ya se llega desde la ficha de la cuenta, pero el resultado no queda: hay que
+pegar el texto otra vez. Guardar el último cotejo por cuenta —cuándo fue, qué
+faltaba— dejaría ver "la última vez que cotejaste Galicia fue el 4 de
+septiembre y faltaban 3".
 
-### 4. Categorías en masa para los consumos del resumen
-
-Lo pediste vos y sigue pendiente. La mitad difícil ya está: la memoria de
-comercios (`reglas.js`) se lee, se aprende y se corrige. Falta la pantalla que
-la llene de a muchos: agrupar por comercio —los seis COTO de un resumen son
-una fila, no seis— y elegir una categoría para todo el grupo.
-
-Es lo que más mueve el gráfico de en qué se fue.
-
-### 5. Los rendimientos son treinta renglones por mes
-
-Entran bien y son ingresos, así que no ensucian los gastos. Pero en los
-movimientos de la cuenta son treinta filas de doscientos pesos. Agruparlos por
-mes en un solo renglón —abrible— sería mejor. Hay que verlo con un mes entero
-cargado antes de decidir.
-
-### 6. La conciliación solo se ve al importar
-
-Si querés volver a verla hay que pegar el texto de nuevo. Podría vivir en la
-ficha de la cuenta.
-
-### 7. Los cargos del banco como fijos, solo desde el resumen
-
-Si nunca subís un resumen, los cargos que entraron por los avisos no se
-proponen nunca. Un botón en "lo que cobra el banco" de Números lo resolvería.
-
-### 8. La foto de la proyección envejece en silencio
+## 4. La foto de la proyección envejece en silencio
 
 Si pasás veinte días sin abrir la app, el cron deja de avisar —que es
 correcto— pero nadie se entera de que dejó de avisar.
+
+## 5. Los avisos al teléfono son dos por vez
+
+El de "lo que viene" sale último de la lista. Si el día 10 hay dos avisos
+antes, no llega. Es el orden correcto —lo que tiene multa va primero— pero
+conviene mirarlo después de un mes de uso.
 
 ---
 

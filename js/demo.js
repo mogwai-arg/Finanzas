@@ -118,6 +118,16 @@ export const DEMO = {
       moneda: 'ARS', tipo: 'gasto', account_id: id('gal'), category_id: id('c4'),
       cuotas: 1, fuente: 'banco', revisado: true },
 
+    // ---- la cuenta remunerada acredita todos los dias. Son treinta filas de
+    // doscientos pesos: por eso en la ficha de la cuenta van plegadas en una.
+    ...Array.from({ length: 12 }, (_, i) => ({
+      id: id('r' + i),
+      fecha: `2026-09-${String(i + 1).padStart(2, '0')}`,
+      descripcion: 'Rendimientos', comercio: 'Rendimientos',
+      monto: 195 + (i % 5) * 6, moneda: 'ARS', tipo: 'ingreso',
+      account_id: id('mpw'), cuotas: 1, fuente: 'lista-cuenta', revisado: true
+    })),
+
     // ---- consumos que entraron por el resumen y todavia no tienen categoria.
     // Es como entran de verdad: el resumen no dice de que es cada compra.
     { id: id('s1'), fecha: '2026-09-03', descripcion: 'COTO CICSA 3456', comercio: 'COTO CICSA 3456',

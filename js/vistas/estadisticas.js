@@ -25,8 +25,8 @@ import { plata, plataPartida, hoyISO, buscar, nombreDe, tituloTx } from '../form
 import { barrasHorizontales, barrasPorMes, leyenda } from '../graficos.js';
 import { irA } from '../ruteo.js';
 import { formPresupuesto } from './formularios.js';
-import { formImportarExtracto } from './extracto.js';
-import { cargosPorMes } from '../extracto.js';
+import { formImportarExtracto, proponerFijos } from './extracto.js';
+import { cargosPorMes, cargosRepetidos } from '../extracto.js';
 import { sinCategoria } from '../reglas.js';
 import { nombreDelMes } from './cierre.js';
 
@@ -419,13 +419,36 @@ function loQueCobraElBanco(hoy) {
         h('div.av', icono('banco', 15)),
         h('div.m', h('div.t', c.nombre),
           h('div.s', `${c.cuantos} ${c.cuantos === 1 ? 'cargo' : 'cargos'} este mes`)),
-        h('div.v', plata(Math.round(c.monto)))))) : null],
+        h('div.v', plata(Math.round(c.monto)))))) : null,
+
+    // La propuesta de hacerlos fijos salía solo al importar un resumen. Si los
+    // cargos entraron por los avisos del banco y nunca subiste uno, no se
+    // proponían nunca. Acá es donde uno los está mirando.
+    proponibles(),
+  ],
     { recordar: 'cobraElBanco',
       resumen: plata(Math.round(ultimo.total)),
       // Un mes que se salió de lo habitual por más de un tercio no se
       // esconde: es el cargo nuevo que apareció sin que nadie avisara.
       atencion: promedio > 0 && ultimo.total > promedio * 1.34,
       accion: h('button', { onclick: () => formImportarExtracto() }, 'Subir resumen') });
+}
+
+/** Los cargos que se repiten y todavía no son gastos fijos. */
+function proponibles() {
+  const yaEs = n => (state.recurrings || []).some(r =>
+    r.activo !== false && (r.nombre || '').toLowerCase() === n.toLowerCase());
+  const faltan = cargosRepetidos(state.transactions).filter(c => !yaEs(c.nombre));
+  if (!faltan.length) return null;
+
+  const cuenta = (state.accounts || []).find(a =>
+    a.activo !== false && a.tipo !== 'credito' && (a.moneda || 'ARS') === 'ARS');
+  const cat = (state.categories || []).find(c => /banc/i.test(c.nombre || ''));
+
+  return h('button.btn.sec', { style: { marginTop: '12px' },
+                               onclick: () => proponerFijos(cuenta?.id || null, cat) },
+    icono('mas', 16),
+    `Hacer fijos ${faltan.length} que se repiten`);
 }
 
 /** El cierre del último mes completo, desde acá también y todo el mes. */

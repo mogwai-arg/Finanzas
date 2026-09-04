@@ -68,6 +68,17 @@ export function vistaCuenta(root, params) {
           h('h3', 'Sin movimientos'),
           h('p', 'Todavía no hay nada cargado en esta cuenta.')),
 
+    // "¿Me faltaba algo de agosto?" se pregunta acá, mirando los movimientos
+    // de esta cuenta, y no en la pantalla de importar. El cotejo vive del otro
+    // lado; lo que faltaba era el camino desde donde nace la duda.
+    c.tipo !== 'credito' ? h('button.btn.sec', { style: { marginTop: '16px' },
+                                                 // Se pide al tocar: arriba
+                                                 // deja dos módulos
+                                                 // esperándose entre sí.
+                                                 onclick: () => import('./extracto.js')
+                                                   .then(m => m.formImportarExtracto()) },
+      icono('buscar', 16), 'Cotejar con el resumen del banco') : null,
+
     // Saldo inicial e ingreso se parecen y no son lo mismo, y la diferencia
     // no se ve hasta que un mes no cierra: el saldo inicial es la plata que ya
     // estaba cuando empezaste a usar la app, y no entró en ningún mes. Un
@@ -169,16 +180,56 @@ function movimientos(filas, moneda, cuenta) {
           [entro ? plata(Math.round(entro), moneda, { signo: true }) : null,
            salio ? plata(Math.round(-salio), moneda, { signo: true }) : null]
             .filter(Boolean).join(' · '))),
-      h('div.grp', items.map(({ tx, entra, monto }) => deslizable(
-        fila(tx, entra, monto, moneda, cuenta), {
-          alEditar: () => formMovimiento(tx),
-          alBorrar: async () => {
-            if (!await confirmar(`¿Borrar "${tituloTx(tx)}"?`)) return;
-            await borrar('transactions', tx.id);
-            aviso('Borrado'); irA(`/cuenta/${cuenta.id}`);
-          }
-        }))));
+      h('div.grp', ...agrupados(items, moneda, cuenta)));
   }));
+}
+
+/** Cuánto rindió la plata quieta ese mes: una fila, no treinta. */
+const ES_RENDIMIENTO = /rendimiento|remunerad|inter[eé]s|inter[eé]ses|ganancia del d[ií]a/i;
+
+/**
+ * Las filas del mes, con los rendimientos plegados en una sola.
+ *
+ * La cuenta remunerada acredita todos los días: son treinta filas de
+ * doscientos pesos que tapan los cinco movimientos que uno vino a buscar.
+ * Sumados en una sola dicen más —"rindió $ 6.150 en 30 días"— y siguen
+ * estando enteros abajo si se tocan.
+ *
+ * Se pliegan solo si son varios: dos rendimientos sueltos se leen mejor
+ * sueltos que escondidos atrás de un desplegable.
+ */
+function agrupados(items, moneda, cuenta) {
+  const rinde = items.filter(f => f.entra &&
+    ES_RENDIMIENTO.test(`${f.tx.comercio || ''} ${f.tx.descripcion || ''}`));
+  const resto = items.filter(f => !rinde.includes(f));
+  const solo = f => deslizable(fila(f.tx, f.entra, f.monto, moneda, cuenta), {
+    alEditar: () => formMovimiento(f.tx),
+    alBorrar: async () => {
+      if (!await confirmar(`¿Borrar "${tituloTx(f.tx)}"?`)) return;
+      await borrar('transactions', f.tx.id);
+      aviso('Borrado'); irA(`/cuenta/${cuenta.id}`);
+    }
+  });
+
+  if (rinde.length < 3) return items.map(solo);
+
+  const total = rinde.reduce((s, f) => s + f.monto, 0);
+  const dias = new Set(rinde.map(f => String(f.tx.fecha).slice(0, 10))).size;
+  const adentro = h('div', { hidden: true }, ...rinde.map(solo));
+  const cabeza = h('button.li', {
+    'aria-expanded': 'false',
+    onclick: () => {
+      adentro.hidden = !adentro.hidden;
+      cabeza.setAttribute('aria-expanded', String(!adentro.hidden));
+    }
+  },
+    h('div.av.pos', icono('tendencia', 17)),
+    h('div.m', h('div.t', 'Rendimientos'),
+      h('div.s', `${dias} ${dias === 1 ? 'día' : 'días'} · tocá para verlos`)),
+    h('div.v.pos', plata(Math.round(total), moneda, { signo: true })),
+    h('span.chev', icono('chev', 15)));
+
+  return [...resto.map(solo), cabeza, adentro];
 }
 
 function fila(tx, entra, monto, moneda, cuenta) {

@@ -449,13 +449,13 @@ export function formImportarExtracto(yaBajado = null) {
  * Van como débito automático, que es lo que son: nadie los paga, caen. Así no
  * ensucian "lo que se viene" con cosas que no hay que hacer.
  */
-function proponerFijos(cuentaId, categoria) {
+export function proponerFijos(cuentaId, categoria) {
   const repes = cargosRepetidos(state.transactions);
   // Los que ya son gasto fijo no se vuelven a proponer.
   const yaEs = n => (state.recurrings || []).some(r =>
     r.activo !== false && (r.nombre || '').toLowerCase() === n.toLowerCase());
   const nuevos = repes.filter(c => !yaEs(c.nombre));
-  if (!nuevos.length) return;
+  if (!nuevos.length) { aviso('Ya están todos como gastos fijos'); return; }
 
   const tildes = new Map(nuevos.map(c => [c.id, h('input', { type: 'checkbox', checked: true })]));
 
