@@ -9,22 +9,31 @@ const MESES = ['enero','febrero','marzo','abril','mayo','junio','julio',
 
 /** $ 612.400 · US$ 4.820. Sin centavos cuando el monto es redondo. */
 export function plata(n, moneda = 'ARS', { signo = false } = {}) {
+  const p = partes(n, moneda, { signo });
+  // Espacios duros y no comunes: en un renglon angosto, "− $ 1.077.538"
+  // partia justo despues del menos y el numero caia solo en la linea de
+  // abajo, que se lee como un numero positivo.
+  return `${p.simbolo}\u00A0${p.numero}`;
+}
+
+/** Las piezas de un importe, para poder mostrarlas por separado. */
+function partes(n, moneda = 'ARS', { signo = false } = {}) {
   const v = Number(n) || 0;
   const dec = Math.abs(v % 1) > 0.004 ? 2 : 0;
-  const num = new Intl.NumberFormat('es-AR', { minimumFractionDigits: dec,
-                                               maximumFractionDigits: dec }).format(Math.abs(v));
+  const numero = new Intl.NumberFormat('es-AR', { minimumFractionDigits: dec,
+                                                  maximumFractionDigits: dec }).format(Math.abs(v));
   const sim = moneda === 'USD' ? 'US$' : '$';
   // Cero no sube ni baja: "+ $ 0" se lee como si hubiera entrado algo.
-  const sg = signo && v !== 0 ? (v < 0 ? '−' : '+') + ' ' : (v < 0 ? '−' : '');
-  return `${sg}${sim} ${num}`;
+  const sg = signo && v !== 0 ? (v < 0 ? '−' : '+') + '\u00A0' : (v < 0 ? '−' : '');
+  // El signo menos es un lugar donde el navegador puede cortar el renglón, y
+  // no alcanza con no poner espacio: "−$ 1.077.538" se partía igual, y el
+  // número solo en la línea de abajo se lee como si fuera positivo. El
+  // juntapalabras prohíbe el corte ahí.
+  return { simbolo: sg ? sg + '\u2060' + sim : sim, numero };
 }
 
 /** Separa el simbolo para poder mostrarlo mas chico que la cifra. */
-export function plataPartida(n, moneda = 'ARS') {
-  const t = plata(n, moneda);
-  const i = t.indexOf(' ');
-  return { simbolo: t.slice(0, i), numero: t.slice(i + 1) };
-}
+export const plataPartida = (n, moneda = 'ARS') => partes(n, moneda);
 
 export const fechaISO = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 export const hoyISO = () => fechaISO(new Date());

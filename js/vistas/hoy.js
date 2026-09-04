@@ -301,23 +301,43 @@ function estaElExtracto() {
 /**
  * El mes cerró: acá está cómo.
  *
- * Aparece los primeros días y después se va sola. Es lo único que la app le
- * devuelve a treinta días de cargar gastos, así que va arriba de todo; pero
+ * Aparece los primeros siete días y después se va sola. Es lo único que la app
+ * le devuelve a treinta días de cargar gastos, así que va arriba de todo; pero
  * el día 12 ya no es noticia y estorbaría.
+ *
+ * Y se puede cerrar antes. Siete días de un cartel que ya leíste, arriba de
+ * todo y ocupando media pantalla, es de las cosas que hacen abandonar una app:
+ * el que ya lo miró no tiene por qué seguir viéndolo. Se acuerda por mes, así
+ * que el mes que viene vuelve a aparecer.
  */
+const CERRADO_KEY = 'bishusha.cierreVisto';
+const yaLoVio = per => { try { return localStorage.getItem(CERRADO_KEY) === per; }
+                         catch { return false; } };
+
 function cerroElMes(hoy) {
   if (hoy.getDate() > 7) return null;
   const per = F.ultimoMesCerrado(hoy);
+  if (yaLoVio(per)) return null;
   const hubo = state.transactions.some(t => String(t.fecha).slice(0, 7) === per);
   if (!hubo) return null;
 
-  return h('button.aviso.bra', { style: { width: '100%', textAlign: 'left' },
-                                 onclick: () => irA(`/cierre/${per}`) },
-    h('div', { style: { flex: 'none', color: 'var(--bra)' } }, bishu('contento', 34)),
-    h('div.txt',
-      h('div.tt', `Cerró ${nombreDelMes(per).toLowerCase()}`),
-      h('div.ds', 'Cuánto quedó, en qué se te fue y qué cambió contra el mes anterior.')),
-    h('span.chev', icono('chev', 15)));
+  const caja = h('div.aviso.bra', { style: { position: 'relative' } },
+    h('button', { 'aria-label': `Ver cómo cerró ${nombreDelMes(per).toLowerCase()}`,
+                  style: { display: 'flex', alignItems: 'center', gap: '13px', flex: '1',
+                           minWidth: '0', background: 'none', border: '0', padding: '0',
+                           textAlign: 'left', cursor: 'pointer', color: 'inherit' },
+                  onclick: () => irA(`/cierre/${per}`) },
+      h('div', { style: { flex: 'none', color: 'var(--bra)' } }, bishu('contento', 34)),
+      h('div.txt',
+        h('div.tt', `Cerró ${nombreDelMes(per).toLowerCase()}`),
+        h('div.ds', 'Cuánto quedó, en qué se te fue y qué cambió contra el mes anterior.'))),
+    h('button.iconbtn', { 'aria-label': 'No mostrarlo más',
+                          style: { flex: 'none', marginRight: '-6px', color: 'var(--tx3)' },
+                          onclick: () => {
+                            try { localStorage.setItem(CERRADO_KEY, per); } catch { /* privado */ }
+                            caja.remove();
+                          } }, icono('cerrar', 17)));
+  return caja;
 }
 
 // -------------------------------------------------------- hero del mes

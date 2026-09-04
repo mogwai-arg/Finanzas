@@ -309,6 +309,35 @@ var ES_CONSUMO = new RegExp([
   "\\*{2,} *\\d{4}"
 ].join("|"), "i");
 
+// supabase/functions/_shared/clasificar.ts
+var ES_RESUMEN = /resumen|estado de cuenta|liquidacion|liquidación|tu cuenta|cierre/i;
+var ES_EXTRACTO = /resumen de cuenta|extracto de cuenta|resumen de tu cuenta|movimientos de tu cuenta/i;
+var ES_TARJETA = /tarjeta|visa|mastercard|master\b|amex|cr[eé]dito/i;
+var ES_VENCIMIENTO = /vencimiento|vence (hoy|mañana|el)|pr[oó]ximo vencimiento|recordatorio de pago|no te olvides de pagar/i;
+function queHagoCon(asunto, remitente, cuerpo = "") {
+  const enTitulo = `${asunto} ${remitente}`;
+  const todo = `${asunto} ${cuerpo}`.slice(0, 900);
+  if (ES_VENCIMIENTO.test(todo)) {
+    return {
+      via: "vencimiento",
+      porQue: "los vencimientos los calculo solo, del ciclo de cada tarjeta"
+    };
+  }
+  if (ES_RUIDO.test(todo)) {
+    return { via: "ruido", porQue: "parece publicidad o una invitaci\xF3n a comprar" };
+  }
+  if (ES_RESUMEN.test(enTitulo) && ES_TARJETA.test(enTitulo)) {
+    return { via: "resumen", porQue: "es el resumen de una tarjeta" };
+  }
+  if (ES_EXTRACTO.test(asunto) && !ES_TARJETA.test(asunto)) {
+    return { via: "extracto", porQue: "avisa que est\xE1 el resumen de la cuenta" };
+  }
+  if (!ES_CONSUMO.test(todo)) {
+    return { via: "nada", porQue: "no dice que algo ya pas\xF3" };
+  }
+  return { via: "movimiento", porQue: "cuenta una operaci\xF3n" };
+}
+
 // supabase/functions/gmail-sync/index.ts
 var REMITENTES = [
   "bancogalicia.com.ar",
@@ -323,11 +352,8 @@ var REMITENTES = [
 ];
 var QUERY = `from:(${REMITENTES.join(" OR ")}) newer_than:14d`;
 var QUERY_ANCHA = "from:(galicia OR bancogalicia OR modo OR mercadopago OR mercadolibre OR personalpay OR naranja OR uala OR brubank) newer_than:30d";
-var QUERY_RESUMEN = "has:attachment filename:pdf newer_than:45d from:(bancogalicia.com.ar OR galicia.ar OR naranja OR visa OR amex OR santander OR bbva OR macro OR icbc OR hsbc OR patagonia OR supervielle OR comafi)";
-var ES_RESUMEN = /resumen|estado de cuenta|liquidacion|liquidación|tu cuenta|cierre/i;
-var QUERY_CUENTA = "newer_than:45d from:(bancogalicia.com.ar OR galicia.ar OR santander OR bbva OR macro OR nacion OR brubank OR uala)";
-var ES_EXTRACTO = /resumen de cuenta|extracto de cuenta|resumen de tu cuenta|movimientos de tu cuenta/i;
-var ES_TARJETA = /tarjeta|visa|mastercard|amex|cr[eé]dito/i;
+var QUERY_RESUMEN = "newer_than:45d from:(bancogalicia.com.ar OR galicia.ar OR mensajesgalicia.com.ar OR mail.galicia.ar OR naranja OR visa OR amex OR santander OR bbva OR macro OR icbc OR hsbc OR patagonia OR supervielle OR comafi)";
+var QUERY_CUENTA = "newer_than:45d from:(bancogalicia.com.ar OR galicia.ar OR mensajesgalicia.com.ar OR mail.galicia.ar OR santander OR bbva OR macro OR nacion OR brubank OR uala)";
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
   const sb = admin();
@@ -369,10 +395,18 @@ async function mirar(sb, it) {
     const cuerpo = textoDe(msg.payload);
     const muestra = asunto + " " + cuerpo.slice(0, 600);
     const fecha = new Date(Number(msg.internalDate || Date.now())).toISOString().slice(0, 10);
+    const q = queHagoCon(asunto, remitente, cuerpo);
     let veredicto;
-    if (ES_RUIDO.test(muestra)) veredicto = "descartado \xB7 parece publicidad o aviso";
-    else if (!ES_CONSUMO.test(muestra)) veredicto = "descartado \xB7 no dice que algo ya pas\xF3";
-    else {
+    if (q.via === "resumen") {
+      const pdf = buscarPdf(msg.payload);
+      veredicto = pdf ? `TE AVISO \xB7 resumen de tarjeta, con el PDF adjunto: lo abro yo` : `TE AVISO \xB7 resumen de tarjeta, sin adjunto: hay que bajarlo y subirlo`;
+    } else if (q.via === "extracto") {
+      veredicto = "TE AVISO \xB7 resumen de cuenta: bajalo del banco y subilo";
+    } else if (q.via === "vencimiento") {
+      veredicto = `no hace falta \xB7 ${q.porQue}`;
+    } else if (q.via !== "movimiento") {
+      veredicto = `descartado \xB7 ${q.porQue}`;
+    } else {
       const mov = parsearMail(remitente, asunto, cuerpo, fecha);
       veredicto = !mov ? "descartado \xB7 ninguna regla lo entiende" : mov.confianza < 75 ? `descartado \xB7 poca confianza (${mov.confianza})` : `SE CARGA \xB7 ${mov.tipo} ${mov.moneda} ${mov.monto} \xB7 ${mov.comercio}`;
     }
@@ -594,23 +628,23 @@ async function buscarResumenes(sb, it, token) {
     const msg = await api(`messages/${m.id}?format=full`, token);
     const cab = (n) => msg.payload?.headers?.find((h) => h.name.toLowerCase() === n)?.value ?? "";
     const asunto = cab("subject"), remitente = cab("from");
-    if (!ES_RESUMEN.test(asunto + " " + remitente)) continue;
+    if (queHagoCon(asunto, remitente, textoDe(msg.payload).slice(0, 600)).via !== "resumen") continue;
     const pdf = buscarPdf(msg.payload);
-    if (!pdf) continue;
     const fecha = new Date(Number(msg.internalDate || Date.now())).toISOString().slice(0, 10);
     await sb.from("notificaciones").insert({
       user_id: it.user_id,
       tipo: "resumen",
-      titulo: `Lleg\xF3 ${asunto.slice(0, 70)}`,
-      cuerpo: "Toc\xE1 para leerlo: los consumos, las cuotas y las fechas del ciclo.",
+      titulo: pdf ? `Lleg\xF3 ${asunto.slice(0, 70)}` : `Est\xE1 ${asunto.slice(0, 70)}`,
+      cuerpo: pdf ? "Toc\xE1 para leerlo: los consumos, las cuotas y las fechas del ciclo." : "No vino adjunto: bajalo de la app del banco y subilo ac\xE1, y te separo los consumos, las cuotas y lo que te cobr\xF3 de m\xE1s.",
       datos: {
         mensaje: m.id,
-        adjunto: pdf.id,
-        archivo: pdf.nombre,
+        adjunto: pdf?.id ?? null,
+        archivo: pdf?.nombre ?? null,
         asunto,
         remitente,
         fecha,
-        tamano: pdf.tamano
+        tamano: pdf?.tamano ?? null,
+        sinAdjunto: !pdf
       }
     });
     nuevos++;
@@ -626,7 +660,7 @@ async function buscarAvisosDeCuenta(sb, it, token) {
     const msg = await api(`messages/${m.id}?format=metadata&metadataHeaders=subject&metadataHeaders=from`, token);
     const cab = (n) => msg.payload?.headers?.find((h) => h.name.toLowerCase() === n)?.value ?? "";
     const asunto = cab("subject");
-    if (!ES_EXTRACTO.test(asunto) || ES_TARJETA.test(asunto)) continue;
+    if (queHagoCon(asunto, cab("from")).via !== "extracto") continue;
     const fecha = new Date(Number(msg.internalDate || Date.now())).toISOString().slice(0, 10);
     await sb.from("notificaciones").insert({
       user_id: it.user_id,

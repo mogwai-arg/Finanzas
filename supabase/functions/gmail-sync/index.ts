@@ -5,6 +5,7 @@
 // =====================================================================
 import { admin, json, CORS, hoyISO } from '../_shared/comun.ts';
 import { esPagoDeTarjeta, comoPagoDeTarjeta } from '../_shared/pagos.ts';
+import { queHagoCon } from '../_shared/clasificar.ts';
 import { parsearMail, leerAumento, ES_RUIDO, ES_CONSUMO, type Movimiento } from '../_shared/parsers.ts';
 
 const REMITENTES = [
@@ -25,19 +26,22 @@ const QUERY_ANCHA = 'from:(galicia OR bancogalicia OR modo OR mercadopago OR mer
 // El resumen de la tarjeta llega una vez por mes, con el PDF adjunto. Es otra
 // busqueda que la de los consumos: los consumos son avisos sueltos de los
 // ultimos catorce dias, el resumen es un adjunto del ultimo mes y medio.
-const QUERY_RESUMEN = 'has:attachment filename:pdf newer_than:45d ' +
-  'from:(bancogalicia.com.ar OR galicia.ar OR naranja OR visa OR amex OR santander OR ' +
+//
+// Galicia manda desde varios dominios y "mensajesgalicia.com.ar" no estaba en
+// ninguna busqueda: el "Resumen de Cuenta VISA" que sale de ahi no lo veia
+// nadie.
+const QUERY_RESUMEN = 'newer_than:45d ' +
+  'from:(bancogalicia.com.ar OR galicia.ar OR mensajesgalicia.com.ar OR mail.galicia.ar OR ' +
+  'naranja OR visa OR amex OR santander OR ' +
   'bbva OR macro OR icbc OR hsbc OR patagonia OR supervielle OR comafi)';
-const ES_RESUMEN = /resumen|estado de cuenta|liquidacion|liquidación|tu cuenta|cierre/i;
 
 // El resumen de CUENTA es otra cosa que el de tarjeta, y el banco casi nunca
 // lo adjunta: avisa que esta y hay que bajarlo de su app. Asi que este aviso
 // no puede terminar en "lo abro yo" sino en "bajalo y subilo", que es el
 // unico paso que no se puede automatizar.
-const QUERY_CUENTA = 'newer_than:45d from:(bancogalicia.com.ar OR galicia.ar OR santander OR ' +
+const QUERY_CUENTA = 'newer_than:45d from:(bancogalicia.com.ar OR galicia.ar OR ' +
+  'mensajesgalicia.com.ar OR mail.galicia.ar OR santander OR ' +
   'bbva OR macro OR nacion OR brubank OR uala)';
-const ES_EXTRACTO = /resumen de cuenta|extracto de cuenta|resumen de tu cuenta|movimientos de tu cuenta/i;
-const ES_TARJETA = /tarjeta|visa|mastercard|amex|cr[eé]dito/i;
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS });
@@ -103,10 +107,23 @@ async function mirar(sb: any, it: any) {
     const muestra = asunto + ' ' + cuerpo.slice(0, 600);
     const fecha = new Date(Number(msg.internalDate || Date.now())).toISOString().slice(0, 10);
 
+    // La misma decisión que toma la sincronización, contada. Antes esto miraba
+    // un solo camino de cuatro y decía "descartado" de correos que en realidad
+    // sí se procesan, por otro lado.
+    const q = queHagoCon(asunto, remitente, cuerpo);
     let veredicto: string;
-    if (ES_RUIDO.test(muestra)) veredicto = 'descartado · parece publicidad o aviso';
-    else if (!ES_CONSUMO.test(muestra)) veredicto = 'descartado · no dice que algo ya pasó';
-    else {
+    if (q.via === 'resumen') {
+      const pdf = buscarPdf(msg.payload);
+      veredicto = pdf
+        ? `TE AVISO · resumen de tarjeta, con el PDF adjunto: lo abro yo`
+        : `TE AVISO · resumen de tarjeta, sin adjunto: hay que bajarlo y subirlo`;
+    } else if (q.via === 'extracto') {
+      veredicto = 'TE AVISO · resumen de cuenta: bajalo del banco y subilo';
+    } else if (q.via === 'vencimiento') {
+      veredicto = `no hace falta · ${q.porQue}`;
+    } else if (q.via !== 'movimiento') {
+      veredicto = `descartado · ${q.porQue}`;
+    } else {
       const mov = parsearMail(remitente, asunto, cuerpo, fecha);
       veredicto = !mov ? 'descartado · ninguna regla lo entiende'
         : mov.confianza < 75 ? `descartado · poca confianza (${mov.confianza})`
@@ -394,18 +411,28 @@ async function buscarResumenes(sb: any, it: any, token: string) {
     const cab = (n: string) => msg.payload?.headers?.find((h: any) =>
       h.name.toLowerCase() === n)?.value ?? '';
     const asunto = cab('subject'), remitente = cab('from');
-    if (!ES_RESUMEN.test(asunto + ' ' + remitente)) continue;
+    // La misma regla que el diagnóstico, no una parecida. Sin esto un
+    // "Resumen de Cuenta" a secas entraba por los dos lados y avisaba dos
+    // veces la misma cosa, y la publicidad del banco —que habla de cierres y
+    // de "tu cuenta"— se colaba como si fuera un resumen.
+    if (queHagoCon(asunto, remitente, textoDe(msg.payload).slice(0, 600)).via !== 'resumen') continue;
 
     const pdf = buscarPdf(msg.payload);
-    if (!pdf) continue;
-
     const fecha = new Date(Number(msg.internalDate || Date.now())).toISOString().slice(0, 10);
+
+    // Sin adjunto el aviso sirve igual, y era el caso que se perdía entero:
+    // el banco avisa que el resumen está y hay que bajarlo de su app. Lo
+    // único que cambia es el final —"lo abro yo" o "bajalo y subilo"— y ese
+    // paso es el que no se puede automatizar, no una razón para callarse.
     await sb.from('notificaciones').insert({
       user_id: it.user_id, tipo: 'resumen',
-      titulo: `Llegó ${asunto.slice(0, 70)}`,
-      cuerpo: 'Tocá para leerlo: los consumos, las cuotas y las fechas del ciclo.',
-      datos: { mensaje: m.id, adjunto: pdf.id, archivo: pdf.nombre,
-               asunto, remitente, fecha, tamano: pdf.tamano }
+      titulo: pdf ? `Llegó ${asunto.slice(0, 70)}` : `Está ${asunto.slice(0, 70)}`,
+      cuerpo: pdf
+        ? 'Tocá para leerlo: los consumos, las cuotas y las fechas del ciclo.'
+        : 'No vino adjunto: bajalo de la app del banco y subilo acá, y te separo ' +
+          'los consumos, las cuotas y lo que te cobró de más.',
+      datos: { mensaje: m.id, adjunto: pdf?.id ?? null, archivo: pdf?.nombre ?? null,
+               asunto, remitente, fecha, tamano: pdf?.tamano ?? null, sinAdjunto: !pdf }
     });
     nuevos++;
   }
@@ -435,8 +462,8 @@ async function buscarAvisosDeCuenta(sb: any, it: any, token: string) {
       h.name.toLowerCase() === n)?.value ?? '';
     const asunto = cab('subject');
     // Tiene que hablar de la CUENTA y no de la tarjeta: el de tarjeta ya
-    // tiene su propio camino, con el PDF adjunto.
-    if (!ES_EXTRACTO.test(asunto) || ES_TARJETA.test(asunto)) continue;
+    // tiene su propio camino.
+    if (queHagoCon(asunto, cab('from')).via !== 'extracto') continue;
 
     const fecha = new Date(Number(msg.internalDate || Date.now())).toISOString().slice(0, 10);
     await sb.from('notificaciones').insert({
