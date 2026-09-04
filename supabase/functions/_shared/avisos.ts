@@ -93,6 +93,12 @@ export type Datos = {
   movimientosMesCerrado?: number;
   // La foto de los meses que vienen, calculada por la app. Ver proyeccion.js.
   proyeccion?: { calculada?: string; meses?: any[] } | null;
+  // Los topes del mes y lo gastado contra cada uno. Los arma el cron con la
+  // misma regla de herencia que la app: un tope no vence el 31.
+  topes?: { id: string; nombre: string; gastado: number; tope: number }[];
+  // Las claves de tope ya avisadas, para no repetir el mismo todos los días.
+  topesAvisados?: string[];
+  alertPct?: number;
 };
 
 /**
@@ -228,6 +234,43 @@ export function avisosDelDia(d: Datos, ref = new Date()): Mensaje[] {
     }
   }
 
+  // -------------------------------------------------------------- los topes
+  //
+  // Es el aviso que sirve el dia que sirve y ningun otro: enterarse el 30 de
+  // que te pasaste de supermercado no cambia nada; enterarte el 18 de que vas
+  // por el 85 % te deja doce dias para hacer algo.
+  //
+  // Por eso no tiene dia fijo como los demas —se dispara cuando se cruza— y
+  // por eso necesita acordarse de lo que ya dijo: repetir "vas por el 85 %"
+  // todas las mananas durante dos semanas es la forma mas rapida de que
+  // alguien apague los avisos para siempre.
+  if (on('tope')) {
+    const alerta = Number(d.alertPct) || 80;
+    const ya = new Set(d.topesAvisados ?? []);
+    const casos = (d.topes ?? [])
+      .filter(t => t.tope > 0)
+      .map(t => ({ ...t, pct: Math.round((t.gastado / t.tope) * 100) }))
+      .filter(t => t.pct >= alerta)
+      // Uno por vez y el peor: dos avisos de tope el mismo dia son ruido, y
+      // el que importa es el que mas se paso.
+      .sort((a, b) => b.pct - a.pct);
+
+    for (const t of casos) {
+      const paso = t.pct >= 100;
+      const clave = `${per}-${t.id}-${paso ? 'paso' : 'cerca'}`;
+      if (ya.has(clave)) continue;
+      const queda = Math.round(t.tope - t.gastado);
+      out.push(paso
+        ? msg('tope', `Te pasaste de ${t.nombre}`,
+              `Van ${plata(t.gastado)} de ${plata(t.tope)}: ${plata(-queda)} de más.`,
+              clave, './#/estadisticas')
+        : msg('tope', `Vas por el ${t.pct} % de ${t.nombre}`,
+              `Te quedan ${plata(queda)} para lo que falta del mes.`,
+              clave, './#/estadisticas'));
+      break;
+    }
+  }
+
   // -------------------------------------------------------- lo que ya viene
   //
   // El dia 10 y una vez por mes: lejos del sueldo, lejos de los vencimientos y
@@ -321,6 +364,26 @@ export function seDespegoDelResto(recurrings: any[], pagos: any[], per: string,
                  demas: c.hasta - c.desde * (1 + normal / 100) }))
     .sort((a, b) => b.demas - a.demas);
   return casos[0] ?? null;
+}
+
+/**
+ * Los topes que rigen ese mes, heredados incluidos.
+ *
+ * La misma regla que topesDelMes() en finance.js, escrita de nuevo porque de
+ * un lado corre el navegador y del otro Deno. Si cambia una tiene que cambiar
+ * la otra. Sin esto, el aviso de topes se apagaba solo el 1 de cada mes, que
+ * es justo cuando mas sirve.
+ */
+export function topesQueRigen(budgets: any[], per: string, meses = 6) {
+  const propios = (budgets ?? []).filter(b => b.periodo === per);
+  if (propios.length) return propios;
+  let p = per;
+  for (let i = 0; i < meses; i++) {
+    p = mesAnterior(p);
+    const viejos = (budgets ?? []).filter(b => b.periodo === p);
+    if (viejos.length) return viejos;
+  }
+  return [];
 }
 
 const MESES_LARGOS = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio',

@@ -168,6 +168,31 @@ function avisosDelDia(d, ref = /* @__PURE__ */ new Date()) {
       ));
     }
   }
+  if (on("tope")) {
+    const alerta = Number(d.alertPct) || 80;
+    const ya = new Set(d.topesAvisados ?? []);
+    const casos = (d.topes ?? []).filter((t) => t.tope > 0).map((t) => ({ ...t, pct: Math.round(t.gastado / t.tope * 100) })).filter((t) => t.pct >= alerta).sort((a, b) => b.pct - a.pct);
+    for (const t of casos) {
+      const paso = t.pct >= 100;
+      const clave = `${per}-${t.id}-${paso ? "paso" : "cerca"}`;
+      if (ya.has(clave)) continue;
+      const queda = Math.round(t.tope - t.gastado);
+      out.push(paso ? msg(
+        "tope",
+        `Te pasaste de ${t.nombre}`,
+        `Van ${plata(t.gastado)} de ${plata(t.tope)}: ${plata(-queda)} de m\xE1s.`,
+        clave,
+        "./#/estadisticas"
+      ) : msg(
+        "tope",
+        `Vas por el ${t.pct} % de ${t.nombre}`,
+        `Te quedan ${plata(queda)} para lo que falta del mes.`,
+        clave,
+        "./#/estadisticas"
+      ));
+      break;
+    }
+  }
   if (on("viene") && dia === 10) {
     const a = mesApretado(d.proyeccion, hoy);
     if (a) {
@@ -480,7 +505,7 @@ Deno.serve(async (req) => {
   };
   const mesPasado = mesAntesDe(per);
   const hastaHoy = (p) => `${p}-${String(hoy.getDate()).padStart(2, "0")}`;
-  const { data: users } = await sb.from("settings").select("user_id, avisos, saldo_minimo, proyeccion");
+  const { data: users } = await sb.from("settings").select("user_id, avisos, saldo_minimo, proyeccion, alert_pct");
   const salida = [];
   for (const u of users ?? []) {
     const de = (t) => sb.from(t).select("*").eq("user_id", u.user_id);
@@ -492,6 +517,13 @@ Deno.serve(async (req) => {
       sb.from("recurring_payments").select("*").eq("user_id", u.user_id).gte("periodo", mesAntesDe(mesAntesDe(mesAntesDe(mesPasado)))),
       de("promos"),
       sb.from("notificaciones").select("*").eq("user_id", u.user_id).eq("tipo", "aumento").eq("leida", false)
+    ]);
+    const [presu, cats, avisadas] = await Promise.all([
+      de("budgets"),
+      de("categories"),
+      // Lo que ya se avisó de topes, para no repetir "vas por el 85 %" todas
+      // las mañanas durante dos semanas.
+      sb.from("notificaciones").select("datos").eq("user_id", u.user_id).eq("tipo", "tope")
     ]);
     const dosAtras = mesAntesDe(mesPasado);
     const { data: txs } = await sb.from("transactions").select("*").eq("user_id", u.user_id).gte("fecha", `${dosAtras}-01`);
@@ -516,7 +548,15 @@ Deno.serve(async (req) => {
       salioMesAnterior: salioEnTodo(dosAtras),
       movimientosMesCerrado: cuantosEn(mesPasado),
       // La calculó la app: acá solo se lee. Ver js/proyeccion.js.
-      proyeccion: u.proyeccion ?? null
+      proyeccion: u.proyeccion ?? null,
+      alertPct: Number(u.alert_pct) || 80,
+      topes: topesQueRigen(presu.data ?? [], per).filter((b) => b.category_id && Number(b.monto) > 0).map((b) => ({
+        id: b.category_id,
+        nombre: (cats.data ?? []).find((c) => c.id === b.category_id)?.nombre ?? "una categor\xEDa",
+        tope: Number(b.monto),
+        gastado: (txs ?? []).filter((t) => t.tipo === "gasto" && (t.moneda || "ARS") === "ARS" && t.category_id === b.category_id && String(t.fecha).slice(0, 7) === per).reduce((s, t) => s + Number(t.monto), 0)
+      })),
+      topesAvisados: (avisadas.data ?? []).map((n2) => n2.datos?.clave).filter(Boolean)
     }, hoy);
     if (!mensajes.length) continue;
     await sb.from("notificaciones").insert({
@@ -525,6 +565,15 @@ Deno.serve(async (req) => {
       titulo: mensajes[0].titulo,
       cuerpo: mensajes.map((m) => `${m.titulo}: ${m.cuerpo}`).join(" \xB7 ")
     });
+    for (const m of mensajes.filter((x) => x.tipo === "tope")) {
+      await sb.from("notificaciones").insert({
+        user_id: u.user_id,
+        tipo: "tope",
+        titulo: m.titulo,
+        cuerpo: m.cuerpo,
+        datos: { clave: m.tag }
+      });
+    }
     const n = claves ? (await mandar(sb, claves, u.user_id, mensajes.slice(0, MAX_POR_VEZ))).enviados : 0;
     salida.push({ user: u.user_id, avisos: mensajes.map((m) => m.titulo), enviados: n });
   }

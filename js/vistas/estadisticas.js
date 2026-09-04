@@ -22,7 +22,8 @@ import { state } from '../db.js';
 import * as F from '../finance.js';
 import * as S from '../sueldo.js';
 import { plata, plataPartida, hoyISO, buscar, nombreDe, tituloTx } from '../formato.js';
-import { barrasHorizontales, barrasPorMes, leyenda } from '../graficos.js';
+import { barrasHorizontales, barrasPorMes, leyenda,
+         tortaDeCategorias } from '../graficos.js';
 import { irA } from '../ruteo.js';
 import { formPresupuesto } from './formularios.js';
 import { formImportarExtracto, proponerFijos } from './extracto.js';
@@ -261,6 +262,13 @@ function categorias(per, moneda) {
     h('div.ghead', 'En qué se fue',
       h('span.mut', { style: { textTransform: 'none', letterSpacing: '0', fontWeight: '500' } },
         `${cs.length} ${cs.length === 1 ? 'categoría' : 'categorías'}`)),
+    // Las dos formas contestan cosas distintas y por eso están las dos. La
+    // torta dice QUÉ PARTE se lleva cada una —"el supermercado es casi la
+    // mitad"— y las barras dicen cuánto es cada una y cuál le sigue. Con una
+    // sola siempre falta la otra mitad de la respuesta.
+    h('div.grp.pad', { style: { marginBottom: '10px' } },
+      tortaDeCategorias(datos, { moneda, alGajo: () => irA('/gastos') })),
+
     h('div.grp.pad', barrasHorizontales(datos, { moneda,
       alFila: d => irA('/gastos') })),
     cs.length > 8 ? h('div.small.mut', { style: { padding: '10px 4px 0' } },

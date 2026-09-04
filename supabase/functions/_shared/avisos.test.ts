@@ -1,6 +1,7 @@
 // node --experimental-strip-types supabase/functions/_shared/avisos.test.ts
 import assert from 'node:assert/strict';
-import { avisosDelDia, saldoDeCuenta, seDespegoDelResto, mesApretado } from './avisos.ts';
+import { avisosDelDia, saldoDeCuenta, seDespegoDelResto, mesApretado,
+         topesQueRigen } from './avisos.ts';
 
 let ok = 0, mal = 0;
 const t = (n: string, fn: () => void) => { try { fn(); console.log('  ok  ' + n); ok++; }
@@ -274,6 +275,79 @@ t('se puede apagar como cualquier otro', () => {
   const p = foto('2026-09-08T12:00:00Z', [mes('2026-11', 78)]);
   const m = avisosDelDia({ proyeccion: p, prefs: { viene: false } }, DIA10);
   assert.ok(!m.some(x => x.tipo === 'viene'));
+});
+
+
+// ---------------------------------------------------------------------
+// Los topes
+// ---------------------------------------------------------------------
+const DIA18 = new Date(2026, 8, 18);
+const TOPE = (gastado: number) => [{ id: 'c1', nombre: 'Supermercado', tope: 400000, gastado }];
+
+t('avisa al llegar al 80 %, con lo que queda', () => {
+  // Enterarse el 30 de que te pasaste no cambia nada. Enterarte el 18 de que
+  // vas por el 85 % te deja doce días para hacer algo.
+  const m = avisosDelDia({ topes: TOPE(340000) }, DIA18);
+  const a = m.find(x => x.tipo === 'tope')!;
+  assert.ok(a, 'tiene que avisar');
+  assert.match(a.titulo, /85 %/);
+  assert.match(a.titulo, /Supermercado/);
+  assert.match(a.cuerpo, /60\.000/);
+});
+
+t('y otra vez, distinto, cuando se pasa', () => {
+  const m = avisosDelDia({ topes: TOPE(455000) }, DIA18);
+  const a = m.find(x => x.tipo === 'tope')!;
+  assert.match(a.titulo, /Te pasaste/);
+  assert.match(a.cuerpo, /55\.000 de más/);
+});
+
+t('por debajo del umbral no dice nada', () => {
+  assert.equal(avisosDelDia({ topes: TOPE(200000) }, DIA18)
+    .some(x => x.tipo === 'tope'), false);
+});
+
+t('no repite el que ya avisó', () => {
+  // Repetir "vas por el 85 %" todas las mañanas durante dos semanas es la
+  // forma más rápida de que alguien apague los avisos para siempre.
+  const clave = '2026-09-c1-cerca';
+  const m = avisosDelDia({ topes: TOPE(340000), topesAvisados: [clave] }, DIA18);
+  assert.equal(m.some(x => x.tipo === 'tope'), false);
+});
+
+t('pero el de "te pasaste" sale igual, aunque ya haya avisado el de cerca', () => {
+  // Son dos noticias distintas y la segunda importa más.
+  const m = avisosDelDia({ topes: TOPE(455000), topesAvisados: ['2026-09-c1-cerca'] }, DIA18);
+  assert.match(m.find(x => x.tipo === 'tope')!.titulo, /Te pasaste/);
+});
+
+t('uno por vez, y el peor', () => {
+  const m = avisosDelDia({ topes: [
+    { id: 'c1', nombre: 'Supermercado', tope: 400000, gastado: 340000 },
+    { id: 'c2', nombre: 'Gastronomía', tope: 100000, gastado: 150000 }
+  ] }, DIA18);
+  const tops = m.filter(x => x.tipo === 'tope');
+  assert.equal(tops.length, 1, 'dos avisos de tope el mismo día son ruido');
+  assert.match(tops[0].titulo, /Gastronomía/);
+});
+
+t('se puede apagar', () => {
+  assert.equal(avisosDelDia({ topes: TOPE(455000), prefs: { tope: false } }, DIA18)
+    .some(x => x.tipo === 'tope'), false);
+});
+
+t('un tope en cero no divide por cero', () => {
+  const m = avisosDelDia({ topes: [{ id: 'c', nombre: 'X', tope: 0, gastado: 5000 }] }, DIA18);
+  assert.equal(m.some(x => x.tipo === 'tope'), false);
+});
+
+t('los topes se heredan del último mes que los tenga', () => {
+  // Sin esto, el aviso se apagaba solo el 1 de cada mes, que es cuando más
+  // sirve.
+  const b = [{ periodo: '2026-08', category_id: 'c1', monto: 400000 }];
+  assert.equal(topesQueRigen(b, '2026-09').length, 1);
+  assert.equal(topesQueRigen(b, '2026-08').length, 1);
+  assert.equal(topesQueRigen(b, '2027-06').length, 0, 'de hace un año, no');
 });
 
 console.log(`\n${ok} pruebas OK${mal ? `, ${mal} FALLAN` : ''}\n`);

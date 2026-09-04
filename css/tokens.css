@@ -43,6 +43,19 @@
   --dato-out: #2478A6;   /* egresos y cualquier serie de gasto */
   --dato-eje: #E4E5EA;   /* la grilla, que tiene que desaparecer */
 
+  /* Categorias: cinco identidades + un gris para "otras", que NO es una
+     serie sino des-enfasis. Validados con el script de la guia contra
+     --card en claro y en oscuro: banda de luminosidad, piso de croma,
+     separacion para daltonismo y piso de vision normal, todo en verde.
+     El orden es fijo y no se cicla: el sexto no es un color nuevo, es
+     "otras". */
+  --cat-1: #2a78d6;
+  --cat-2: #eb6834;
+  --cat-3: #1baf7a;
+  --cat-4: #eda100;
+  --cat-5: #e87ba4;
+  --cat-otras: #9AA0AD;
+
   /* ---------- elevación ---------- en claro la da la sombra */
   --elev-1: 0 1px 3px rgba(20,22,30,.07), 0 10px 26px -14px rgba(20,22,30,.22);
   --elev-2: 0 6px 24px -8px rgba(20,22,30,.26), 0 0 0 .5px rgba(20,22,30,.09);
@@ -106,6 +119,14 @@
     --dato-in:  #2FA87C;
     --dato-out: #4A96D8;
     --dato-eje: #2A2D37;
+    /* Los pasos de oscuro NO son los de claro aclarados: se eligen y se
+       validan aparte contra la superficie oscura. */
+    --cat-1: #3987e5;
+    --cat-2: #d95926;
+    --cat-3: #199e70;
+    --cat-4: #c98500;
+    --cat-5: #d55181;
+    --cat-otras: #6B7280;
 
     --elev-1: 0 1px 3px rgba(0,0,0,.5), 0 10px 26px -14px rgba(0,0,0,.8);
     --elev-2: 0 6px 24px -8px rgba(0,0,0,.6), 0 0 0 .5px rgba(255,255,255,.07);
@@ -119,6 +140,8 @@
   --amb:#E3A94F; --amb-bg:#2C2211;
   --neg:#FF6E80; --neg-bg:#2E1519;
   --dato-in:#2FA87C; --dato-out:#4A96D8; --dato-eje:#2A2D37;
+  --cat-1:#3987e5; --cat-2:#d95926; --cat-3:#199e70; --cat-4:#c98500;
+  --cat-5:#d55181; --cat-otras:#6B7280;
   --elev-1: 0 1px 3px rgba(0,0,0,.5), 0 10px 26px -14px rgba(0,0,0,.8);
   --elev-2: 0 6px 24px -8px rgba(0,0,0,.6), 0 0 0 .5px rgba(255,255,255,.07);
 }

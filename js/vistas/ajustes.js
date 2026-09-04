@@ -171,7 +171,8 @@ const TIPOS = [
   ['bishu',    'Cómo venís',         'Bishu compara con el mes pasado, una vez por semana'],
   ['cierre',   'Cierre del mes',     'El día 1, cómo cerró el mes que terminó'],
   ['extracto', 'Resumen del banco',  'Cuando llega el de la cuenta, para subirlo'],
-  ['viene',    'Lo que ya viene',    'El día 10, si un mes futuro queda muy comprometido']
+  ['viene',    'Lo que ya viene',    'El día 10, si un mes futuro queda muy comprometido'],
+  ['tope',     'Topes del mes',      'Cuando una categoría llega al 80 % y cuando se pasa']
 ];
 
 /**

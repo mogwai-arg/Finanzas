@@ -116,7 +116,7 @@ Deno.serve(async (req) => {
   const hastaHoy = (p: string) => `${p}-${String(hoy.getDate()).padStart(2, '0')}`;
 
   const { data: users } = await sb.from('settings')
-    .select('user_id, avisos, saldo_minimo, proyeccion');
+    .select('user_id, avisos, saldo_minimo, proyeccion, alert_pct');
   const salida: unknown[] = [];
 
   for (const u of users ?? []) {
@@ -130,6 +130,13 @@ Deno.serve(async (req) => {
       de('promos'),
       sb.from('notificaciones').select('*').eq('user_id', u.user_id)
         .eq('tipo', 'aumento').eq('leida', false)
+    ]);
+
+    const [presu, cats, avisadas] = await Promise.all([
+      de('budgets'), de('categories'),
+      // Lo que ya se avisó de topes, para no repetir "vas por el 85 %" todas
+      // las mañanas durante dos semanas.
+      sb.from('notificaciones').select('datos').eq('user_id', u.user_id).eq('tipo', 'tope')
     ]);
     // Los movimientos solo hacen falta para los saldos y para comparar meses.
     // Dos meses atrás y no uno: el día 1, el cierre compara el mes que
@@ -163,7 +170,20 @@ Deno.serve(async (req) => {
       salioMesCerrado: salioEnTodo(mesPasado), salioMesAnterior: salioEnTodo(dosAtras),
       movimientosMesCerrado: cuantosEn(mesPasado),
       // La calculó la app: acá solo se lee. Ver js/proyeccion.js.
-      proyeccion: u.proyeccion ?? null
+      proyeccion: u.proyeccion ?? null,
+      alertPct: Number(u.alert_pct) || 80,
+      topes: topesQueRigen(presu.data ?? [], per)
+        .filter((b: any) => b.category_id && Number(b.monto) > 0)
+        .map((b: any) => ({
+          id: b.category_id,
+          nombre: (cats.data ?? []).find((c: any) => c.id === b.category_id)?.nombre ?? 'una categoría',
+          tope: Number(b.monto),
+          gastado: (txs ?? [])
+            .filter(t => t.tipo === 'gasto' && (t.moneda || 'ARS') === 'ARS' &&
+                         t.category_id === b.category_id && String(t.fecha).slice(0, 7) === per)
+            .reduce((s, t) => s + Number(t.monto), 0)
+        })),
+      topesAvisados: (avisadas.data ?? []).map((n: any) => n.datos?.clave).filter(Boolean)
     }, hoy);
     if (!mensajes.length) continue;
 
@@ -172,6 +192,14 @@ Deno.serve(async (req) => {
       user_id: u.user_id, tipo: 'aviso',
       titulo: mensajes[0].titulo,
       cuerpo: mensajes.map(m => `${m.titulo}: ${m.cuerpo}`).join(' · ') });
+
+    // El de tope se anota aparte y con su clave: es el único que no tiene día
+    // fijo, así que sin esto volvería a salir mañana y pasado.
+    for (const m of mensajes.filter(x => x.tipo === 'tope')) {
+      await sb.from('notificaciones').insert({
+        user_id: u.user_id, tipo: 'tope', titulo: m.titulo, cuerpo: m.cuerpo,
+        datos: { clave: m.tag } });
+    }
 
     const n = claves
       ? (await mandar(sb, claves, u.user_id, mensajes.slice(0, MAX_POR_VEZ))).enviados : 0;
