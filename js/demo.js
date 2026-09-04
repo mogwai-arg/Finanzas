@@ -326,6 +326,23 @@ export const DEMO = {
     { id: id('g3'), patron: 'pedidosya|mostaza|mcdonald', category_id: id('c2'), prioridad: 8, veces_usada: 22 }
   ],
 
+  fondos: [
+    { id: id('f1'), nombre: 'Patente del auto', objetivo: 480000, moneda: 'ARS',
+      fecha_objetivo: '2027-03-10', account_id: id('mpw'), activo: true, orden: 1,
+      aportes: [{ fecha: '2026-07-05', monto: 40000 }, { fecha: '2026-08-05', monto: 40000 },
+                { fecha: '2026-09-03', monto: 45000 }] },
+    { id: id('f2'), nombre: 'Vacaciones', objetivo: 1200000, moneda: 'ARS',
+      fecha_objetivo: '2027-01-15', account_id: id('pp'), activo: true, orden: 2,
+      aportes: [{ fecha: '2026-08-10', monto: 120000 }] }
+  ],
+
+  deudas: [
+    { id: id('d1'), nombre: 'A mi vieja', monto: 300000, moneda: 'ARS', direccion: 'debo',
+      vence: '2026-10-15', saldada: false, orden: 1 },
+    { id: id('d2'), nombre: 'Martín', monto: 85000, moneda: 'ARS', direccion: 'medeben',
+      saldada: false, orden: 2 }
+  ],
+
   notificaciones: [
     { id: id('n1'), tipo: 'carga_auto', titulo: '6 movimientos para revisar',
       cuerpo: 'Entraron solos desde Gmail', leida: false, created_at: '2026-09-01T14:02:00Z' },

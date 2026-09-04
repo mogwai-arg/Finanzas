@@ -96,7 +96,8 @@ export function contestar(id, estado, hoy = new Date()) {
   }
 
   if (id === 'plataLibre') {
-    const pl = F.plataLibre(accounts, transactions, recurrings, recurring_payments, hoy, 'ARS');
+    const pl = F.plataLibre(accounts, transactions, recurrings, recurring_payments, hoy, 'ARS',
+                            estado?.fondos || []);
     const dias = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0).getDate() - hoy.getDate();
     return {
       titulo: `Te queda ${plata(pl.libre)}.`,

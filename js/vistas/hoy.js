@@ -110,14 +110,18 @@ function carrusel(arranca, ...paneles) {
  */
 function plataLibre(hoy) {
   const pl = F.plataLibre(state.accounts, state.transactions, state.recurrings,
-                          state.recurring_payments, hoy, 'ARS');
+                          state.recurring_payments, hoy, 'ARS', state.fondos);
   if (!pl.enCuentas && !pl.resumenes && !pl.fijos) return null;
 
   const rojo = pl.libre < 0;
   const { simbolo, numero } = plataPartida(Math.round(pl.libre), 'ARS');
   const resta = [
     pl.resumenes > 0 ? `resúmenes ${plata(Math.round(pl.resumenes))}` : null,
-    pl.fijos > 0 ? `fijos ${plata(Math.round(pl.fijos))}` : null
+    pl.fijos > 0 ? `fijos ${plata(Math.round(pl.fijos))}` : null,
+    // Lo apartado va escrito en la misma resta que todo lo demás. Descontarlo
+    // sin decirlo haría bajar el número sin explicación, que es exactamente lo
+    // que hace desconfiar de una app de plata.
+    pl.apartado > 0 ? `apartado ${plata(Math.round(pl.apartado))}` : null
   ].filter(Boolean).join(' − ');
 
   return { nombre: 'Plata libre', nodo: h('div.grp.pad',

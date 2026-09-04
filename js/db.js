@@ -55,7 +55,7 @@ export const sb = DEMO ? stub
 export const TABLAS = ['accounts', 'categories', 'transactions', 'recurrings',
   'recurring_payments', 'budgets', 'promos', 'promo_usos', 'reglas',
   'integrations', 'notificaciones', 'recibos', 'paritarias', 'sumas_nr',
-  'push_subscriptions', 'settings'];
+  'push_subscriptions', 'fondos', 'deudas', 'settings'];
 
 const CACHE_KEY = 'bishusha.cache.v1';
 const COLA_KEY  = 'bishusha.cola.v1';
@@ -67,7 +67,8 @@ export const state = {
   accounts: [], categories: [], transactions: [], recurrings: [],
   recurring_payments: [], budgets: [], promos: [], promo_usos: [],
   reglas: [], integrations: [], notificaciones: [], recibos: [],
-  paritarias: [], sumas_nr: [], push_subscriptions: [], settings: {},
+  paritarias: [], sumas_nr: [], push_subscriptions: [], fondos: [], deudas: [],
+  settings: {},
   online: navigator.onLine, sincronizando: false, ultimaSync: null,
   ocultarMontos: false
 };

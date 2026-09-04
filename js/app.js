@@ -19,6 +19,7 @@ import { vistaTarjetas, vistaTarjeta } from './vistas/tarjetas.js';
 import { vistaPromos } from './vistas/promos.js';
 import { vistaChat } from './vistas/chat.js';
 import { vistaCategorizar } from './vistas/categorizar.js';
+import { vistaFondos } from './vistas/fondos.js';
 import { vistaMes } from './vistas/mes.js';
 import { vistaAjustes } from './vistas/ajustes.js';
 import { vistaSueldo } from './vistas/sueldo.js';
@@ -48,6 +49,7 @@ const RUTAS = [
   ['/tarjetas/:id',   { tab: 'pagar',    titulo: 'Tarjeta',    vista: vistaTarjeta, atras: true }],
   ['/chat',           { tab: 'nuevo',    titulo: 'Contale a Bishu', sub: 'Escribí o dictá y lo anoto', vista: vistaChat, atras: true }],
   ['/categorizar',    { tab: 'gastos',   titulo: 'Poner categorías', sub: 'De a muchos, agrupados por comercio', vista: vistaCategorizar, atras: true }],
+  ['/fondos',         { tab: 'pagar',    titulo: 'Fondos y deudas', sub: 'Lo que no cae todos los meses', vista: vistaFondos, atras: true }],
   ['/promos',         { tab: null,       titulo: 'Promos',     vista: vistaPromos, atras: true }],
   ['/ajustes',        { tab: null,       titulo: 'Ajustes',    vista: vistaAjustes, atras: true }]
 ];

@@ -699,7 +699,8 @@ export function debitosPrevistos(recurrings, txs, tarjeta, ciclo, ref = hoy()) {
  * que viene. Es el numero al que hay que apuntar si uno no quiere que la
  * tarjeta le financie el mes.
  */
-export function plataLibre(cuentas, txs, recurrings, pagos, ref = hoy(), moneda = 'ARS') {
+export function plataLibre(cuentas, txs, recurrings, pagos, ref = hoy(), moneda = 'ARS',
+                           fondos = []) {
   const propias = (cuentas || []).filter(c => c.activo !== false && (c.moneda || 'ARS') === moneda);
   let enCuentas = 0;
   for (const c of propias) {
@@ -728,9 +729,15 @@ export function plataLibre(cuentas, txs, recurrings, pagos, ref = hoy(), moneda 
     fijos += Number(r.monto) || 0;
   }
 
-  const libre = round2(enCuentas - resumenes - fijos);
+  // Lo apartado en fondos ya tiene dueno. Sigue en la cuenta —la app no mueve
+  // nada— pero contarlo como libre es la forma exacta de gastarse la patente:
+  // un fondo que no descuenta es una planilla que no cambia ninguna decision.
+  const guardado = apartado(fondos, moneda);
+
+  const libre = round2(enCuentas - resumenes - fijos - guardado);
   return {
     enCuentas: round2(enCuentas), resumenes: round2(resumenes), fijos: round2(fijos),
+    apartado: guardado,
     libre,
     // Lo que se lleva consumido con tarjeta este ciclo, mas lo que se sabe que
     // va a caer: eso se paga el mes que viene y conviene tenerlo apartado hoy.
@@ -1565,4 +1572,143 @@ export function topesDelMes(budgets, per, { meses = 6 } = {}) {
     }
   }
   return { topes: [], heredados: false, de: null };
+}
+
+// ---------------------------------------------------------------------
+// FONDOS: lo que no cae todos los meses
+// ---------------------------------------------------------------------
+
+/**
+ * Como viene un fondo contra su objetivo.
+ *
+ * El seguro del auto, la patente, la matricula, las vacaciones. Se saben desde
+ * enero y aparecen como una sorpresa igual, porque no hay ningun lugar donde
+ * la plata este esperandolos.
+ *
+ * El numero que importa no es cuanto llevas sino CUANTO POR MES: "faltan
+ * 340.000 y cinco meses" no se puede decidir; "68.000 por mes" si.
+ *
+ * Y no inventa plata: lo guardado son los aportes que anotaste, uno por uno.
+ * La app no mueve nada sola —esa plata sigue en tu cuenta— lo que hace es
+ * decir que ya tiene dueño.
+ */
+export function estadoFondo(fondo, ref = hoy()) {
+  const aportes = Array.isArray(fondo.aportes) ? fondo.aportes : [];
+  const guardado = round2(aportes.reduce((s, a) => s + (Number(a.monto) || 0), 0));
+  const objetivo = Number(fondo.objetivo) || 0;
+  const falta = round2(Math.max(0, objetivo - guardado));
+  const pct = objetivo > 0 ? Math.min(100, Math.round((guardado / objetivo) * 100)) : 0;
+
+  const fecha = fondo.fecha_objetivo ? parseFecha(fondo.fecha_objetivo) : null;
+  // Meses enteros que quedan, contando el que corre: si es 4 de septiembre y
+  // vence en diciembre, hay cuatro sueldos por delante, no tres.
+  const meses = fecha
+    ? Math.max(0, (fecha.getFullYear() - ref.getFullYear()) * 12 +
+                  (fecha.getMonth() - ref.getMonth()) + 1)
+    : null;
+  const porMes = meses && meses > 0 ? round2(falta / meses) : null;
+
+  // Si hubieras venido apartando parejo desde el primer aporte, cuanto
+  // tendrias hoy. Es contra eso que se dice si vas atrasado, y no contra una
+  // regla inventada.
+  const primero = aportes.map(a => String(a.fecha).slice(0, 10)).sort()[0] || null;
+  let deberia = null;
+  if (fecha && primero && objetivo > 0) {
+    const desde = parseFecha(primero);
+    const total = Math.max(1, (fecha.getFullYear() - desde.getFullYear()) * 12 +
+                              (fecha.getMonth() - desde.getMonth()) + 1);
+    const pasados = Math.min(total, Math.max(0,
+      (ref.getFullYear() - desde.getFullYear()) * 12 + (ref.getMonth() - desde.getMonth()) + 1));
+    deberia = round2((objetivo / total) * pasados);
+  }
+
+  return {
+    fondo, guardado, objetivo, falta, pct, meses, porMes, deberia,
+    listo: objetivo > 0 && guardado >= objetivo,
+    // Atrasado solo si hay con que compararlo. Sin fecha o sin aportes no se
+    // opina: decir "vas atrasado" sin saberlo es peor que no decir nada.
+    atraso: deberia != null ? round2(Math.max(0, deberia - guardado)) : null,
+    // Se paso la fecha y no llego.
+    vencido: !!(fecha && fecha < ref && objetivo > 0 && guardado < objetivo)
+  };
+}
+
+/**
+ * Lo apartado en fondos, que ya no es plata libre.
+ *
+ * Es toda la idea del sobre: la plata sigue en la cuenta, pero tiene dueno.
+ * Si no se descuenta, el fondo es una planilla que mira uno y no cambia
+ * ninguna decision.
+ */
+export function apartado(fondos, moneda = 'ARS') {
+  return round2((fondos || [])
+    .filter(f => f.activo !== false && (f.moneda || 'ARS') === moneda)
+    .reduce((s, f) => s + estadoFondo(f).guardado, 0));
+}
+
+// ---------------------------------------------------------------------
+// DEUDAS: lo que se debe, en las dos direcciones
+// ---------------------------------------------------------------------
+
+/**
+ * Lo que debes y lo que te deben, en una moneda.
+ *
+ * Solo deudas: los bienes quedan afuera a proposito. Un auto tasado a mano
+ * envejece mal y termina inflando un patrimonio que nadie puede gastar. Una
+ * deuda, en cambio, es un numero exacto que alguien mas tambien conoce.
+ */
+export function estadoDeudas(deudas, moneda = 'ARS', ref = hoy()) {
+  const vivas = (deudas || []).filter(d => !d.saldada && (d.moneda || 'ARS') === moneda);
+  const debo = vivas.filter(d => d.direccion !== 'medeben');
+  const meDeben = vivas.filter(d => d.direccion === 'medeben');
+  const suma = l => round2(l.reduce((s, d) => s + (Number(d.monto) || 0), 0));
+
+  const vencidas = vivas.filter(d => d.vence && parseFecha(d.vence) < ref);
+  return {
+    debo: suma(debo), meDeben: suma(meDeben),
+    neto: round2(suma(meDeben) - suma(debo)),
+    lista: [...debo, ...meDeben].sort((a, b) =>
+      (a.vence || '9999') < (b.vence || '9999') ? -1 : 1),
+    vencidas
+  };
+}
+
+/**
+ * Suscripciones que conviene revisar, sin adivinar si las usas.
+ *
+ * Es el negocio entero de las apps que "cancelan suscripciones por vos", y la
+ * parte que ninguna puede resolver: la app ve que pagas Netflix todos los
+ * meses; lo que no puede ver es si lo mirás. Adivinarlo por el monto o por la
+ * antiguedad seria inventar.
+ *
+ * Asi que no adivina: pregunta, una vez por ano por cada una, y se acuerda de
+ * la respuesta. Preguntar una vez al ano es un costo bajisimo; equivocarse
+ * diciendo "esto no lo usas" es la clase de cosa que hace desinstalar.
+ *
+ * `revisadas` es { [id]: 'YYYY-MM-DD' }, la ultima vez que se contesto.
+ */
+export function suscripcionesARevisar(recurrings, pagos, revisadas = {}, ref = hoy(),
+                                      { meses = 12 } = {}) {
+  const per = periodo(ref);
+  const out = [];
+  for (const r of recurrings || []) {
+    if (r.activo === false) continue;
+    // Solo las que parecen suscripcion: un alquiler no se "deja de usar".
+    if (!/suscrip|streaming|netflix|spotify|disney|hbo|max\b|prime|youtube|icloud|dropbox|gym|gimnasio|club|revista|diario|plan\b/i
+        .test(`${r.nombre || ''}`)) continue;
+
+    const ultima = revisadas[r.id] ? parseFecha(revisadas[r.id]) : null;
+    const meses12 = new Date(ref.getFullYear(), ref.getMonth() - meses, ref.getDate());
+    if (ultima && ultima > meses12) continue;
+
+    // Cuanto sale por ano, que es el numero con el que uno decide de verdad:
+    // "9.000 por mes" no suena a nada, "108.000 por ano" si.
+    const ultimoPago = pagadoEn(r.id, pagos || [], per) ??
+                       pagadoEn(r.id, pagos || [], mesAnterior(per));
+    const mensual = Number(ultimoPago ?? r.monto_estimado) || 0;
+    out.push({ recurring: r, nombre: r.nombre, mensual,
+               alAno: round2(mensual * 12), moneda: r.moneda || 'ARS',
+               desdeUltimaRevision: ultima ? Math.round((ref - ultima) / 86400000) : null });
+  }
+  return out.sort((a, b) => b.alAno - a.alAno);
 }

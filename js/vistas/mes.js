@@ -31,6 +31,7 @@ export function vistaMes(root) {
   root.append(h('div.flow',
     ...aumentos(),
     subioDeMas(p),
+    revisarSuscripcion(hoy),
 
     (faltan.length || esteMes.length) ? h('div.grp.pad',
       h('div.ghead', { style: { margin: '0' } }, 'Falta pagar'),
@@ -82,6 +83,14 @@ export function vistaMes(root) {
           h('div.av', icono('tarjeta', 17)),
           h('div.m', h('div.t', 'Ver las tarjetas'),
             h('div.s', 'Límite disponible, ciclos y cuotas comprometidas')),
+          h('span.chev', icono('chev', 15))),
+
+        // Va acá y no en Números porque es de la familia de "lo que hay que
+        // pagar": lo que pasa es que todavía no llegó.
+        h('button.li', { onclick: () => irA('/fondos') },
+          h('div.av', icono('hucha', 17)),
+          h('div.m', h('div.t', 'Fondos y deudas'),
+            h('div.s', pieFondos())),
           h('span.chev', icono('chev', 15)))))
     // El presupuesto se fue a Números: es la pantalla de "dónde estoy
     // parado", no de "qué tengo que pagar". Estaba acá y también en Hoy, con
@@ -227,6 +236,59 @@ export function formPago(r, periodo) {
       aviso(queda ? `${r.nombre} pagado · ${plata(Math.abs(queda), r.moneda)} ${queda > 0 ? 'a favor' : 'en contra'}`
                   : `${r.nombre} pagado`);
     } }, 'Marcar pagado')));
+}
+
+/**
+ * "¿Seguís usando esto?", una vez por año y de a una.
+ *
+ * La app ve que pagás el gimnasio todos los meses; lo que no puede ver es si
+ * vas. Adivinarlo por el monto o por la antigüedad sería inventar, y
+ * equivocarse diciendo "esto no lo usás" es la clase de cosa que hace
+ * desinstalar. Así que pregunta, y se acuerda de la respuesta.
+ *
+ * De a una: tres preguntas juntas se contestan todas con "después".
+ */
+function revisarSuscripcion(hoy) {
+  const revisadas = state.settings?.suscripciones || {};
+  const cual = F.suscripcionesARevisar(state.recurrings, state.recurring_payments,
+                                       revisadas, hoy)[0];
+  if (!cual) return null;
+
+  const responder = async (sigue) => {
+    await guardar('settings', { ...(state.settings || {}),
+      suscripciones: { ...revisadas, [cual.recurring.id]: hoyISO() } });
+    if (!sigue) {
+      // No se borra sola: se abre la ficha para que la baja la decida una
+      // persona. Dar de baja algo por una respuesta de un toque es demasiado.
+      formRecurrente(state.recurrings.find(x => x.id === cual.recurring.id));
+      aviso('Dale de baja acá si ya no la usás');
+    } else aviso('Listo, no te pregunto más por un año');
+  };
+
+  return h('div.aviso.bra',
+    h('div.av.bra', icono('reloj', 17)),
+    h('div.txt',
+      h('div.tt', `¿Seguís usando ${cual.nombre}?`),
+      h('div.ds', `Son ${plata(Math.round(cual.alAno), cual.moneda)} por año. `,
+        'Te pregunto una vez al año nomás: si la usás, no te molesto más.'),
+      h('div.fila', { style: { marginTop: '12px' } },
+        h('button.btn.sec', { onclick: () => responder(false) }, 'Ya no'),
+        h('button.btn', { onclick: () => responder(true) }, 'Sí, la uso'))));
+}
+
+/** Qué decir del renglón de fondos sin obligar a entrar. */
+function pieFondos() {
+  const fondos = (state.fondos || []).filter(f => f.activo !== false);
+  const d = F.estadoDeudas(state.deudas, 'ARS');
+  if (!fondos.length && !d.lista.length) {
+    return 'La patente, el seguro, las vacaciones: lo que no cae todos los meses';
+  }
+  const porMes = fondos.map(f => F.estadoFondo(f))
+    .filter(e => e.porMes > 0 && !e.listo)
+    .reduce((s, e) => s + e.porMes, 0);
+  return [porMes > 0 ? `apartar ${plata(Math.round(porMes))} por mes` : null,
+          d.debo > 0 ? `debés ${plata(Math.round(d.debo))}` : null]
+    .filter(Boolean).join(' · ') || `${fondos.length} fondos`;
 }
 
 /** La primera cuenta de esa moneda que no sea una tarjeta de credito. */

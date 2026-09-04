@@ -20,6 +20,10 @@
 // Filtrar y normalizar aca, en el unico lugar por donde pasa todo lo que se
 // guarda, es mas seguro que acordarse en cada vista.
 const COLUMNAS = {
+  fondos: ['id', 'user_id', 'nombre', 'objetivo', 'fecha_objetivo', 'moneda', 'account_id',
+           'aportes', 'icono', 'activo', 'orden', 'updated_at'],
+  deudas: ['id', 'user_id', 'nombre', 'monto', 'moneda', 'direccion', 'vence', 'notas',
+           'saldada', 'orden', 'updated_at'],
   accounts: ['id', 'user_id', 'nombre', 'tipo', 'banco', 'marca', 'ultimos4', 'moneda',
              'cierre_dia', 'vencimiento_dia', 'limite', 'color', 'orden', 'activo',
              'saldo_inicial', 'saldo_al', 'ciclos', 'tna', 'tna_al', 'updated_at'],
