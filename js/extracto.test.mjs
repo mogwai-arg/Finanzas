@@ -594,8 +594,37 @@ SALDO FINAL                                                  0,00`);
   const pago = [{ id: 'p', fecha: '2026-09-04', tipo: 'transferencia', monto: 500000,
                   account_id: 'gal', destino_account_id: 'visa' }];
   assert.equal(E.conciliar(tj, pago, 'visa', { tarjeta: true }).coinciden, 1);
-  // Sin la opcion, el mismo pago no se encuentra.
-  assert.equal(E.conciliar(tj, pago, 'visa').coinciden, 0);
+  // Y tambien sin la opcion: el emparejado por DIRECCION no necesita saber
+  // que es una tarjeta. Lo que entra a la Visa lo pone una transferencia que
+  // TERMINA en la Visa, y eso es lo mismo con o sin la bandera.
+  assert.equal(E.conciliar(tj, pago, 'visa').coinciden, 1);
+  assert.equal(E.conciliar(tj, pago, 'visa').sobran.length, 0);
+});
+
+t('un ingreso del banco matchea la transferencia que ENTRA, no queda como falta', () => {
+  // El caso que rompia: la plata que uno se pasa de otro banco llega como
+  // "Transferencia recibida NOMBRE APELLIDO", que no dice en ningun lado que
+  // sea entre cuentas propias. Leida como ingreso y buscada entre los
+  // ingresos no aparecia, y UN movimiento bien cargado daba DOS errores: uno
+  // que falta en la app y otro que sobra.
+  const ext = E.parseExtracto(`RESUMEN DE CUENTA EN PESOS
+Saldo inicial: $ 21.742,61          Saldo final: $ 394.553,77
+01-09-2026 Rendimientos 1749231444758 $ 11,16 $ 21.753,77
+Transferencia recibida NOMBRE
+01-09-2026                   175732015451 $ 372.800,00 $ 394.553,77
+APELLIDO`);
+  assert.equal(ext.movimientos.length, 2);
+  assert.equal(ext.movimientos[1].descripcion, 'Transferencia recibida NOMBRE APELLIDO');
+
+  const txs = [
+    { id: 'r', fecha: '2026-09-01', tipo: 'ingreso', monto: 11.16, account_id: 'mp' },
+    { id: 't', fecha: '2026-09-01', tipo: 'transferencia', monto: 372800,
+      account_id: 'gal', destino_account_id: 'mp' }
+  ];
+  const c = E.conciliar(ext, txs, 'mp');
+  assert.equal(c.coinciden, 2);
+  assert.equal(c.faltan.length, 0);
+  assert.equal(c.sobran.length, 0);
 });
 
 console.log(`\n${ok} pruebas OK${mal ? `, ${mal} FALLAN` : ''}\n`);

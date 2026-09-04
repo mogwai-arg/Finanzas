@@ -241,43 +241,140 @@ function comercioDe(c) {
  * tarjeta". Mirando el bloque entero, los dos dicen lo mismo.
  */
 function enBloques(lineas) {
-  const out = [];
-  for (const l of lineas) {
+  // Se clasifica cada renglon una vez y despues se camina. Antes se armaba de
+  // corrido, dando por hecho que el nombre del movimiento venia SIEMPRE en la
+  // fila con fecha o debajo; el resumen de Mercado Pago lo parte en tres y
+  // pone la mitad ARRIBA de la fecha:
+  //
+  //   Transferencia recibida JAVIER
+  //   01-09-2026   175732015451   $ 372.800,00   $ 394.553,77
+  //   OLIVEROS
+  //
+  // Leyendolo de corrido, cada movimiento se quedaba con el nombre del
+  // siguiente: los seis salieron corridos un lugar y el mas grande del mes
+  // quedo llamandose "Alberdi".
+  const filas = lineas.map(l => {
     const f = l.match(FILA);
-    if (f) {
-      out.push({ fecha: f[1], titulo: f[2], numeros: [], extra: [], propios: [] });
-      const nums = f[2].match(NUMERO);
-      if (nums) {
-        out[out.length - 1].numeros = nums;
-        // Lo que va antes del primer numero es la descripcion.
-        out[out.length - 1].titulo = f[2].slice(0, f[2].indexOf(nums[0]));
+    const nums = (f ? f[2] : l).match(NUMERO);
+    const sinNums = (f ? f[2] : l).replace(NUMERO, ' ');
+    const palabras = sinNums.match(/[A-Za-zÁÉÍÓÚÜÑáéíóúüñ]{2,}/g) || [];
+    return {
+      linea: l, fecha: f ? f[1] : null,
+      // Lo que queda del renglon sacando la fecha y los numeros.
+      texto: limpiarTitulo(sinNums),
+      numeros: nums || [],
+      // Un renglon de importes tiene a lo sumo un par de palabras; el parrafo
+      // legal del pie tiene veinte y trae numeros —"Ley 24.485"— que colgaban
+      // del ultimo movimiento y le cambiaban el saldo.
+      esImportes: !!nums && nums.length >= 2 && palabras.length <= 3,
+      esPie: PIE.test(l)
+    };
+  });
+
+  const conFecha = filas.map((f, i) => f.fecha ? i : -1).filter(i => i >= 0);
+  const usadas = new Set();
+  const out = [];
+
+  conFecha.forEach((d, k) => {
+    const f = filas[d];
+    const nombre = [];
+
+    // El nombre puede empezar ARRIBA de la fecha, y solo cuando la fila con
+    // fecha no trae texto propio: si lo trae, lo de arriba es de otro.
+    const leFaltaANosotros = !f.texto;
+    if (leFaltaANosotros) {
+      const arriba = [];
+      for (let i = d - 1; i >= 0 && arriba.length < 2; i--) {
+        const a = filas[i];
+        if (usadas.has(i) || a.fecha || a.numeros.length || a.esPie || !a.texto) break;
+        arriba.unshift(a.texto); usadas.add(i);
       }
-      continue;
+      nombre.push(...arriba);
+    } else {
+      nombre.push(f.texto);
     }
-    const b = out[out.length - 1];
-    if (!b) continue;
-    const nums = l.match(NUMERO);
-    // El renglon de los importes: el PRIMERO del bloque con dos o mas, y solo
-    // si es una fila de numeros y no prosa.
-    //
-    // La distincion importa: al pie del resumen hay un parrafo legal que
-    // menciona "Ley 24.485, Decreto N' 540/95", y esos dos numeros colgaban
-    // del ultimo movimiento y le cambiaban el saldo. Un renglon de importes
-    // tiene a lo sumo un par de palabras; un parrafo tiene veinte.
-    const palabras = l.replace(NUMERO, ' ').match(/[A-Za-zÁÉÍÓÚÜÑáéíóúüñ]{2,}/g) || [];
-    if (!b.numeros.length && nums && nums.length >= 2 && palabras.length <= 3) b.numeros = nums;
-    else b.extra.push(l);
-  }
+
+    // Y sigue ABAJO. Con una salvedad: si al siguiente movimiento le falta el
+    // nombre —su fila con fecha no trae texto— el ultimo renglon de aca es de
+    // el, no de este.
+    const sig = conFecha[k + 1];
+    const leFaltaAlSiguiente = sig != null && !filas[sig].texto;
+    const abajo = [];
+    for (let i = d + 1; i < filas.length && i !== sig && abajo.length < 6; i++) {
+      const b = filas[i];
+      if (b.fecha || b.esPie) break;
+      // Los importes pueden venir en su propio renglon, debajo del nombre:
+      // asi los deja copiar y pegar desde un visor de PDF.
+      if (b.esImportes && !f.numeros.length) { f.numeros = b.numeros; usadas.add(i); continue; }
+      if (b.numeros.length) break;
+      // Un renglon de puro codigo —CUIT, cuenta, numero de operacion— no
+      // aporta nombre pero TAMPOCO corta el movimiento: los importes pueden
+      // estar despues de el.
+      abajo.push({ i, texto: b.texto, linea: b.linea });
+    }
+    if (leFaltaAlSiguiente) {
+      // Se lo devuelve sin marcarlo usado, para que lo tome como su "arriba".
+      for (let j = abajo.length - 1; j >= 0; j--) {
+        if (abajo[j].texto) { abajo.splice(j, 1); break; }
+      }
+    }
+
+    // Cuando la fila con fecha trae su nombre, lo de abajo es el detalle
+    // —el comercio, el CUIT, el numero de operacion— y va aparte. Cuando no
+    // lo trae, lo de abajo ES el nombre.
+    const extra = [];
+    for (const a of abajo) {
+      usadas.add(a.i);
+      if (leFaltaANosotros && a.texto) nombre.push(a.texto);
+      else extra.push(a.linea);
+    }
+
+    out.push({ fecha: f.fecha, titulo: nombre.join(' ').trim(),
+               numeros: f.numeros, extra });
+  });
+
   return out.filter(b => b.titulo.trim());
+}
+
+/** Lo que hay al pie de la hoja y no es un movimiento. */
+const PIE = /fecha de generaci[oó]n|cuit\s*\d|www\.|p[aá]gina\s*\d|^\s*\d+\s*\/\s*\d+\s*$|s\.r\.l\.|s\.a\.\b|canales de (consulta|atenci)|inscripto ante|dep[oó]sitos en pesos cuentan/i;
+
+/**
+ * Saca del nombre lo que no es el nombre.
+ *
+ * El numero de operacion —trece digitos— viene pegado al medio: "Rendimientos
+ * 1749231444758". Como nombre no sirve de nada y ademas hace que el mismo
+ * rendimiento de todos los dias sea un comercio distinto.
+ */
+function limpiarTitulo(t) {
+  return String(t || '')
+    .replace(/\b\d{8,}\b/g, ' ')
+    .replace(/\$/g, ' ')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
 }
 
 function buscarSaldo(lineas, re) {
   for (const l of lineas) {
     if (!re.test(l)) continue;
+    // El de al lado del rotulo, no el ultimo del renglon: Mercado Pago
+    // imprime los dos saldos en la MISMA linea —"Saldo inicial: $ 21.742,61
+    // Saldo final: $ 399.075,31"— y tomando el ultimo, el saldo inicial daba
+    // el final y el extracto no cuadraba nunca.
+    const cerca = trasEtiqueta(l, re);
+    if (cerca != null) return cerca;
     const nums = l.match(NUMERO);
     if (nums?.length) return monto(nums[nums.length - 1]);
   }
   return null;
+}
+
+/** El primer importe que viene DESPUES del rotulo, en el mismo renglon. */
+function trasEtiqueta(linea, re) {
+  const m = String(linea).match(re);
+  if (!m) return null;
+  const n = String(linea).slice(m.index + m[0].length).match(NUMERO);
+  return n?.length ? monto(n[0]) : null;
 }
 
 /**
@@ -329,6 +426,25 @@ function totalesDe(lineas) {
     if (a == null || b == null || c == null) continue;
     if (!(a > 0 && b < 0)) continue;
     return { entro: a, salio: Math.abs(b), saldo: c };
+  }
+  return totalesRotulados(lineas);
+}
+
+/**
+ * Los mismos totales cuando el banco los pone en renglones separados y con
+ * nombre: "Entradas: $ 653.222,70" arriba y "Salidas: $ -275.890,00" abajo,
+ * que es como los imprime Mercado Pago. Sin esto no habia contra que
+ * comprobar y un resumen leido entero salia igual marcado como dudoso.
+ */
+const ENTRADAS = /\b(entradas?|cr[eé]ditos|dep[oó]sitos)\b\s*:?/i;
+const SALIDAS = /\b(salidas?|d[eé]bitos|extracciones)\b\s*:?/i;
+function totalesRotulados(lineas) {
+  let entro = null, salio = null;
+  for (const l of lineas) {
+    if (FILA.test(l)) continue;
+    if (entro == null) { const v = trasEtiqueta(l, ENTRADAS); if (v != null) entro = v; }
+    if (salio == null) { const v = trasEtiqueta(l, SALIDAS); if (v != null) salio = Math.abs(v); }
+    if (entro != null && salio != null) return { entro, salio, saldo: null };
   }
   return null;
 }
@@ -547,6 +663,9 @@ export function conciliar(ext, txs, cuentaId, { dias = 3, cerca = 0.05, tarjeta 
     tipo: tarjeta && m.entra ? 'transferencia'
         : m.clase === 'transferencia' ? 'transferencia'
         : m.entra ? 'ingreso' : 'gasto',
+    // Lo unico en lo que los dos lados no pueden discrepar: si el saldo de
+    // ESTA cuenta subio o bajo.
+    suma: !!m.entra,
     cargo: queCargo(`${m.descripcion} ${m.comercio || ''}`)
   }));
 
@@ -559,7 +678,11 @@ export function conciliar(ext, txs, cuentaId, { dias = 3, cerca = 0.05, tarjeta 
       tx: t, fecha: String(t.fecha).slice(0, 10),
       importe: Math.abs(Number(t.destino_account_id === cuentaId && t.monto_destino != null
         ? t.monto_destino : t.monto) || 0),
-      tipo: t.tipo || 'gasto'
+      tipo: t.tipo || 'gasto',
+      // Sube el saldo de esta cuenta: un ingreso, o una transferencia que
+      // TERMINA aca. Una transferencia que sale de aca lo baja.
+      suma: t.tipo === 'transferencia' ? t.destino_account_id === cuentaId
+                                       : t.tipo === 'ingreso'
     }));
 
   const distancia = (a, b) => Math.abs(
@@ -568,20 +691,33 @@ export function conciliar(ext, txs, cuentaId, { dias = 3, cerca = 0.05, tarjeta 
   const usados = new Set();
   const pares = [], difieren = [];
 
+  // El tipo del banco es una lectura del texto y a veces no acierta: una
+  // transferencia entre cuentas propias llega como "Transferencia recibida
+  // JAVIER OLIVEROS", que no dice "entre cuentas propias" en ningun lado y
+  // se lee como ingreso. Buscada entre los ingresos no aparece, y el mismo
+  // movimiento —cargado perfecto— salia contado dos veces mal: uno que falta
+  // en la app y otro que sobra.
+  //
+  // Por eso se busca primero por tipo, que es mas especifico, y despues por
+  // DIRECCION, que es lo unico en lo que el banco y la app no pueden
+  // discrepar: o el saldo de la cuenta subio, o bajo.
+  const buscar = (b, mismo, ok) => app.findIndex((a, k) =>
+    !usados.has(k) && (mismo ? a.tipo === b.tipo : a.suma === b.suma) &&
+    distancia(a.fecha, b.fecha) <= dias && ok(a));
+
   // Primera pasada: importe igual. Es la unica que se puede dar por segura.
   for (const b of banco) {
-    const j = app.findIndex((a, k) => !usados.has(k) && a.tipo === b.tipo &&
-      Math.abs(a.importe - b.importe) <= cerca && distancia(a.fecha, b.fecha) <= dias);
+    const ok = a => Math.abs(a.importe - b.importe) <= cerca;
+    const j = buscar(b, true, ok) >= 0 ? buscar(b, true, ok) : buscar(b, false, ok);
     if (j >= 0) { usados.add(j); pares.push({ banco: b, app: app[j] }); }
   }
 
-  // Segunda: mismo tipo y fecha cercana pero otro importe. No se empareja
-  // solo: se marca, porque uno de los dos numeros esta mal y hay que mirarlo.
+  // Segunda: fecha cercana pero otro importe. No se empareja solo: se marca,
+  // porque uno de los dos numeros esta mal y hay que mirarlo.
   for (const b of banco) {
     if (pares.some(p => p.banco === b)) continue;
-    const j = app.findIndex((a, k) => !usados.has(k) && a.tipo === b.tipo &&
-      distancia(a.fecha, b.fecha) <= dias &&
-      Math.abs(a.importe - b.importe) / Math.max(a.importe, b.importe) <= 0.15);
+    const ok = a => Math.abs(a.importe - b.importe) / Math.max(a.importe, b.importe) <= 0.15;
+    const j = buscar(b, true, ok) >= 0 ? buscar(b, true, ok) : buscar(b, false, ok);
     if (j >= 0) { usados.add(j); difieren.push({ banco: b, app: app[j] }); }
   }
 
