@@ -2,7 +2,7 @@
 // vistas/ajustes.js
 // =====================================================================
 import { h, frag, icono, aviso, confirmar, hoja, campo } from '../ui.js';
-import { state, salir, sincronizar, exportarJSON, pendientes, fallidas, DEMO,
+import { state, salir, sincronizar, exportarJSON, importarJSON, pendientes, fallidas, DEMO,
          traerDolar,
          FUNCTIONS_URL, conectar, desconectar, leerAhora, mirarBandeja,
          guardar, probarAviso, generarClavesAviso } from '../db.js';
@@ -110,6 +110,14 @@ export function vistaAjustes(root) {
           h('div.av', icono('recibo', 17)),
           h('div.m', h('div.t', 'Exportar todo'),
             h('div.s', 'Un archivo con tus movimientos, cuentas y recibos')),
+          h('span.chev', icono('chev', 15))),
+        // La vuelta. Estaba escrita en db.js desde el principio y no la
+        // llamaba nadie: se podia bajar la copia y no habia forma de volver
+        // a subirla, que es justo el dia en que la copia sirve para algo.
+        !DEMO && h('button.li', { onclick: restaurar },
+          h('div.av', icono('nube', 17)),
+          h('div.m', h('div.t', 'Restaurar una copia'),
+            h('div.s', 'Agrega lo que falte del archivo. No borra nada de lo que ya está')),
           h('span.chev', icono('chev', 15))),
         !DEMO && h('button.li', { onclick: async () => {
           if (await confirmar('¿Cerrar sesión en este aparato?', 'Salir')) { await salir(); location.reload(); }
@@ -476,6 +484,52 @@ function seccionAvisos() {
 
   pintar();
   return sec;
+}
+
+/**
+ * Volver a subir una copia.
+ *
+ * Agrega, no reemplaza: cada fila se guarda con su id, asi que lo que ya
+ * esta se pisa con lo del archivo y lo que no esta se crea. Nada se borra,
+ * que es lo que uno quiere el dia que restaura —recuperar lo perdido, no
+ * perder lo que sobrevivio—.
+ */
+function restaurar() {
+  const input = h('input', { type: 'file', accept: 'application/json,.json',
+                             style: { display: 'none' } });
+  input.onchange = async () => {
+    const f = input.files?.[0];
+    input.remove();
+    if (!f) return;
+    let texto;
+    try { texto = await f.text(); }
+    catch (e) { return aviso(`No pude leer el archivo: ${e.message || e}`); }
+
+    let d;
+    try { d = JSON.parse(texto); }
+    catch { return aviso('Ese archivo no es una copia de BISHUSHA: no es JSON'); }
+    if (d?.app !== 'bishusha') {
+      return aviso('Ese archivo no parece una copia de BISHUSHA');
+    }
+    // Cuantas filas trae, ANTES de tocar nada: "restaurar 1.482 movimientos"
+    // es una decision distinta de "restaurar 3".
+    const cuantas = Object.values(d).filter(Array.isArray)
+      .reduce((s, a) => s + a.length, 0);
+    const cuando = d.exportado ? ` del ${String(d.exportado).slice(0, 10)}` : '';
+    if (!await confirmar(
+      `La copia${cuando} trae ${cuantas} filas. Se agregan a lo que ya tenés; ` +
+      'nada se borra.', 'Restaurar')) return;
+
+    aviso('Restaurando…');
+    try {
+      const n = await importarJSON(texto);
+      aviso(`Listo: ${n} filas`);
+    } catch (e) {
+      aviso(`Se cortó a mitad de camino: ${e.message || e}`);
+    }
+  };
+  document.body.append(input);
+  input.click();
 }
 
 function exportar() {

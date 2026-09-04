@@ -140,8 +140,6 @@ export const fallidas = () => [...leer(ROTAS_KEY),
 const opcionesUpsert = tabla =>
   CLAVE_NATURAL[tabla] ? { onConflict: CLAVE_NATURAL[tabla] } : undefined;
 
-/** Lo último que la base rechazó, para que la app lo pueda decir en voz alta. */
-export const rechazos = new Set();
 function rechazo(tabla, e) {
   const msg = String(e?.message || e);
   // Sin señal el fetch tira TypeError: eso es la cola haciendo su trabajo, no
