@@ -37,12 +37,14 @@ export function vistaHoy(root, { arranca = 0 } = {}) {
 
   root.append(
     h('div.flow',
-      noSeGuardo(),
-      llegoElResumen(),
-      estaElExtracto(),
-      cerroElMes(hoy),
-      sinRevisar(),
-      conexionCaida(),
+      // Los avisos de arriba, con UNA sola accion llena.
+      ...unaSolaAccion(
+        noSeGuardo(),
+        llegoElResumen(),
+        estaElExtracto(),
+        cerroElMes(hoy),
+        sinRevisar(),
+        conexionCaida()),
       carrusel(arranca, heroMes(res, hoy, p), plataLibre(hoy), heroDolares()),
       loQueSeViene(hoy),
       // Bishu arriba del presupuesto: es la voz de la app, y al fondo de la
@@ -56,6 +58,35 @@ export function vistaHoy(root, { arranca = 0 } = {}) {
       antesDeComprar()
     )
   );
+}
+
+/**
+ * Un solo boton lleno entre los avisos de arriba.
+ *
+ * El primero de mes se juntan cuatro: llego el resumen de la tarjeta, esta
+ * el de la cuenta, cerro el mes y hay movimientos sin revisar. Cada uno se
+ * escribio solo y cada uno trae su boton oscuro, asi que la pantalla arranca
+ * con cuatro botones que gritan lo mismo y ninguno se lee como el primero.
+ *
+ * El orden de arriba ES la prioridad —los errores antes que las novedades—,
+ * asi que el lleno se lo queda el primero que este vivo. Los demas pasan al
+ * escalon del medio: contorno, no gris. En gris quedaban iguales que el
+ * "Después" que tienen al lado, y ahi el problema es el opuesto —no se
+ * distingue cual de los dos hace algo—.
+ *
+ * No se esconde ninguno: siguen todos y se siguen pudiendo tocar.
+ */
+function unaSolaAccion(...nodos) {
+  const vivos = nodos.filter(Boolean);
+  let libre = true;
+  for (const n of vivos) {
+    if (!n.querySelectorAll) continue;
+    for (const b of n.querySelectorAll('button.btn:not(.sec):not(.linea)')) {
+      if (libre) { libre = false; continue; }
+      b.classList.add('linea');
+    }
+  }
+  return vivos;
 }
 
 /**
