@@ -251,6 +251,7 @@ export function formImportarExtracto(yaBajado = null) {
 
     cotejo.replaceChildren(
       cual.value ? conciliacion(r, cual.value, { lista, tarjeta: conTarjeta }) : null);
+    if (cual.value) anotarCotejo(r, cual.value, conTarjeta);
 
     const btn = h('button.btn');
     const pintarBoton = () => {
@@ -431,6 +432,28 @@ export function formImportarExtracto(yaBajado = null) {
     h('div.small.mut', { style: { lineHeight: '1.5' } }, txt));
 
   return cerrar;
+}
+
+/**
+ * Guarda cómo quedó el último cotejo de esa cuenta.
+ *
+ * El resultado se veía una vez y se perdía: para volver a saber si faltaba
+ * algo de agosto había que pegar el texto otra vez. Se guarda el RESUMEN
+ * —cuándo, cuántos coincidían, cuántos faltaban— y no los movimientos: el
+ * texto del extracto es la parte sensible y no tiene por qué quedar guardada
+ * para contestar "¿cuándo fue la última vez?".
+ */
+async function anotarCotejo(r, cuentaId, tarjeta) {
+  const c = conciliar(r, state.transactions, cuentaId, { tarjeta });
+  const previos = state.settings?.cotejos || {};
+  await guardar('settings', { ...(state.settings || {}), cotejos: {
+    ...previos,
+    [cuentaId]: { cuando: new Date().toISOString(),
+                  desde: r.periodo?.desde || null, hasta: r.periodo?.hasta || null,
+                  total: c.total, coinciden: c.coinciden,
+                  faltan: c.faltan.length, sobran: c.sobran.length,
+                  difieren: c.difieren.length }
+  } });
 }
 
 /**

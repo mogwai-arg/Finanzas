@@ -87,7 +87,7 @@ function balance(per, moneda, hoy) {
   const enCurso = per === hoyISO().slice(0, 7);
   const { simbolo, numero } = plataPartida(dif, moneda);
   const pl = F.plataLibre(state.accounts, state.transactions, state.recurrings,
-                          state.recurring_payments, hoy, moneda);
+                          state.recurring_payments, hoy, moneda, state.fondos);
   const hayLibre = pl.enCuentas || pl.resumenes || pl.fijos;
 
   return h('button.grp.pad', { style: { width: '100%', textAlign: 'left', border: '0',
@@ -114,7 +114,10 @@ function balance(per, moneda, hoy) {
       h('div.small.mut', { style: { marginTop: '6px', lineHeight: '1.45' } },
         'La diferencia de arriba no es lo que tenés: le falta restar los ',
         'resúmenes de tarjeta y los gastos fijos que todavía no pagaste. ',
-        'Eso ya está restado en la plata libre.')) : null,
+        'Eso ya está restado en la plata libre.',
+        pl.apartado > 0
+          ? ` Y lo que apartaste en fondos, ${plata(Math.round(pl.apartado), moneda)}: `
+            + 'sigue en tus cuentas pero ya tiene dueño.' : '')) : null,
 
     h('div.small.mut', { style: { marginTop: '11px', paddingTop: '11px',
                                   borderTop: '1px solid var(--line)', lineHeight: '1.5' } },
@@ -373,6 +376,10 @@ function loQueViene(hoy) {
         plata(Math.round(m.libre)),
         m.pct != null ? h('small', `${m.pct} % comprometido`) : null)))),
 
+    // Si la foto que lee el cron quedó vieja, el aviso del día 10 dejó de
+    // salir y nadie se entera. Se dice acá, que es la pantalla del tema.
+    fotoVieja(),
+
     h('div.small.mut', { style: { padding: '10px 4px 0', lineHeight: '1.5' } },
       conCuotas.length
         ? frag('Las cuotas que ya firmaste se descuentan solas de cada mes. ',
@@ -440,6 +447,24 @@ function loQueCobraElBanco(hoy) {
       // esconde: es el cargo nuevo que apareció sin que nadie avisara.
       atencion: promedio > 0 && ultimo.total > promedio * 1.34,
       accion: h('button', { onclick: () => formImportarExtracto() }, 'Subir resumen') });
+}
+
+/**
+ * Si la proyección que guardó la app quedó vieja.
+ *
+ * El aviso del día 10 lee esa foto y, con más de veinte días, no avisa —que es
+ * correcto—. Lo que estaba mal era que dejaba de avisar en silencio: nadie se
+ * entera de que un aviso no salió.
+ */
+function fotoVieja() {
+  const f = state.settings?.proyeccion;
+  if (!f?.calculada) return null;
+  const dias = Math.floor((Date.now() - new Date(f.calculada)) / 86400000);
+  if (dias <= 20) return null;
+  return h('div.small.mut', { style: { padding: '10px 4px 0', lineHeight: '1.5',
+                                       color: 'var(--amb)' } },
+    `La cuenta que uso para avisarte al teléfono es de hace ${dias} días, así que `,
+    'ese aviso está apagado. Se arregla solo: ya la recalculé al abrir la app.');
 }
 
 /** Los cargos que se repiten y todavía no son gastos fijos. */

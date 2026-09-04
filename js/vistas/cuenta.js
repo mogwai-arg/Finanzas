@@ -11,7 +11,7 @@
 // de efectivo al banco, ese millón y medio no aparece en ningún lado como
 // entrada, y con razón: entró antes. Acá se ve cuándo.
 // =====================================================================
-import { h, icono, iconoDe, deslizable, confirmar, aviso, hoja, campo } from '../ui.js';
+import { h, frag, icono, iconoDe, deslizable, confirmar, aviso, hoja, campo } from '../ui.js';
 import { state, borrar, guardar } from '../db.js';
 import * as F from '../finance.js';
 import { plata, plataPartida, nombreDe, buscar, tituloTx, aFecha, hoyISO,
@@ -71,6 +71,8 @@ export function vistaCuenta(root, params) {
     // "¿Me faltaba algo de agosto?" se pregunta acá, mirando los movimientos
     // de esta cuenta, y no en la pantalla de importar. El cotejo vive del otro
     // lado; lo que faltaba era el camino desde donde nace la duda.
+    ultimoCotejo(c),
+
     c.tipo !== 'credito' ? h('button.btn.sec', { style: { marginTop: '16px' },
                                                  // Se pide al tocar: arriba
                                                  // deja dos módulos
@@ -159,6 +161,39 @@ function renglon(rot, monto, moneda, signo, apoyo) {
                            color: monto < 0 ? 'var(--tx2)' : 'var(--tx)' } },
         plata(moneda === 'USD' ? monto : Math.round(monto), moneda, { signo }))),
     apoyo ? h('div.small.mut', { style: { color: 'var(--tx3)', marginTop: '1px' } }, apoyo) : null);
+}
+
+/**
+ * Cómo quedó la última vez que se cotejó esta cuenta con el banco.
+ *
+ * "¿Me faltaba algo de agosto?" tiene respuesta sin volver a pegar nada. Y si
+ * el cotejo es de hace mucho, eso también es una respuesta.
+ */
+const dia = iso => {
+  const [y, m, d] = String(iso).slice(0, 10).split('-').map(Number);
+  return `${d}/${m}`;
+};
+
+function ultimoCotejo(c) {
+  const x = state.settings?.cotejos?.[c.id];
+  if (!x) return null;
+  const dias = Math.floor((Date.now() - new Date(x.cuando)) / 86400000);
+  const limpio = !x.faltan && !x.sobran && !x.difieren;
+  const pendiente = (x.faltan || 0) + (x.sobran || 0) + (x.difieren || 0);
+
+  return h('div', { style: { marginTop: '16px' } },
+    h('div.ghead', 'Último cotejo con el banco'),
+    h('div.grp.pad',
+      h('div', { style: { fontSize: '14.5px', lineHeight: '1.5' } },
+        dias === 0 ? 'Hoy' : dias === 1 ? 'Ayer' : `Hace ${dias} días`,
+        x.hasta ? `, sobre el resumen hasta el ${dia(x.hasta)}` : '', '. ',
+        limpio
+          ? h('b', { style: { color: 'var(--pos)' } }, 'Coincidía todo.')
+          : frag('Coincidían ', h('b', `${x.coinciden} de ${x.total}`), ' y quedaban ',
+                 h('b', { style: { color: 'var(--amb)' } }, String(pendiente)),
+                 ' por mirar.')),
+      dias > 45 ? h('div.small.mut', { style: { marginTop: '7px', lineHeight: '1.45' } },
+        'Ya pasó más de un mes: convendría cotejar de nuevo.') : null));
 }
 
 function movimientos(filas, moneda, cuenta) {
