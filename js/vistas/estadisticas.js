@@ -418,7 +418,10 @@ function puertaAlCierre(hoy) {
  * Una sola versión, y la completa.
  */
 function presupuesto(per, hoy) {
-  const budgets = state.budgets.filter(b => b.periodo === per);
+  // Los topes no caducan el 31: si no cargaste los de este mes, rigen los del
+  // último que los tenga. Se dice de dónde vienen, que es lo que evita que un
+  // tope de hace cuatro meses se discuta solo.
+  const { topes: budgets, heredados, de } = F.topesDelMes(state.budgets, per);
   const alertPct = Number(state.settings?.alert_pct) || 80;
   const res = F.resumenMes(state.transactions, per, 'ARS');
   const porCuenta = F.estadoPorCuenta(budgets, state.transactions, per, alertPct);
@@ -439,6 +442,9 @@ function presupuesto(per, hoy) {
   return plegable('Presupuesto',
     budgets.length
       ? h('div',
+          heredados ? h('div.small.mut', { style: { padding: '0 4px 10px', lineHeight: '1.5' } },
+            `Son los topes de ${nombreDelMes(de).toLowerCase()}: todavía no cargaste los de `,
+            'este mes. Tocá Ajustar para revisarlos.') : null,
           h('div.grp', F.estadoPresupuesto(budgets, res, alertPct).map(b => filaPresupuesto(b))),
           porCuenta.length ? h('div', { style: { marginTop: '16px' } },
             h('div.ghead', 'Tope por tarjeta'),

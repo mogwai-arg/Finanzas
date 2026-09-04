@@ -3,6 +3,7 @@
 // =====================================================================
 import { h, frag, icono, aviso, confirmar, hoja, campo } from '../ui.js';
 import { state, salir, sincronizar, exportarJSON, pendientes, fallidas, DEMO,
+         traerDolar,
          FUNCTIONS_URL, conectar, desconectar, leerAhora, mirarBandeja,
          guardar, probarAviso, generarClavesAviso } from '../db.js';
 import { plata, fechaRelativa, aNumero } from '../formato.js';
@@ -72,6 +73,8 @@ export function vistaAjustes(root) {
           h('span.chev', icono('chev', 15))))),
 
     seccionLectura(),
+
+    seccionDolar(),
 
     seccionAvisos(),
 
@@ -170,6 +173,70 @@ const TIPOS = [
   ['extracto', 'Resumen del banco',  'Cuando llega el de la cuenta, para subirlo'],
   ['viene',    'Lo que ya viene',    'El día 10, si un mes futuro queda muy comprometido']
 ];
+
+/**
+ * El dólar con el que se suman pesos y dólares.
+ *
+ * Se puede traer solo o escribir a mano, y las dos cosas hacen falta:
+ * traerlo es lo que hace que no se deje de actualizar, y escribirlo a mano es
+ * la salida cuando el servicio no contesta o cuando querés usar TU cotización
+ * —la del día que compraste— en vez de la de hoy.
+ *
+ * Y siempre dice de cuándo es. Una cotización de hace tres meses hace más
+ * daño que ninguna: el total sale mal y nadie sospecha del número.
+ */
+function seccionDolar() {
+  const val = Number(state.settings?.usd_ref) || 0;
+  const entrada = h('input', { type: 'text', inputmode: 'decimal', placeholder: '1500',
+                             value: val ? String(val) : '',
+                             style: { width: '120px' },
+                             onchange: async e => {
+                               const n = aNumero(e.target.value);
+                               await guardar('settings', { ...(state.settings || {}),
+                                 usd_ref: n || null,
+                                 usd_ref_al: n ? new Date().toISOString() : null,
+                                 usd_ref_de: null });
+                               aviso(n ? 'Cotización guardada' : 'Cotización borrada');
+                             } });
+
+  const cuando = state.settings?.usd_ref_al;
+  const dias = cuando ? Math.floor((Date.now() - new Date(cuando)) / 86400000) : null;
+  // Sin fecha es el caso peligroso, no el neutro: un número puesto se lee como
+  // un número actual, y si nadie sabe de cuándo es, nadie lo va a dudar.
+  const vieja = dias == null || dias > 7;
+
+  const pie = h('div.small.mut', { style: { padding: '10px 4px 0', lineHeight: '1.5',
+                                           color: vieja ? 'var(--amb)' : undefined } },
+    !val ? 'Sin esto, los pesos y los dólares se muestran por separado y nunca se suman.'
+    : dias == null ? 'No sé de cuándo es. Traela de nuevo o volvé a escribirla.'
+    : dias === 0 ? `De hoy${state.settings?.usd_ref_de ? `, de ${state.settings.usd_ref_de}` : ''}.`
+    : dias > 7 ? `De hace ${dias} días. Con una vieja, el total de tu plata sale mal y no se nota.`
+    : `De hace ${dias} ${dias === 1 ? 'día' : 'días'}.`);
+
+  const btn = h('button.btn.sec', { style: { marginTop: '12px' }, onclick: async () => {
+    btn.disabled = true; btn.textContent = 'Buscando…';
+    try {
+      const d = await traerDolar();
+      // guardar() avisa que el estado cambió y la pantalla se redibuja sola.
+      aviso(`Dólar MEP ${plata(d.mep)}`);
+    } catch (e) {
+      // Qué pasó, no "no pude": el campo de arriba sigue estando y con el
+      // motivo se sabe si hay que escribirlo a mano o esperar un rato.
+      aviso(String(e.message || e).slice(0, 90));
+      btn.disabled = false; btn.textContent = 'Traer el de hoy';
+    }
+  } }, icono('sync', 16), 'Traer el de hoy');
+
+  return h('section',
+    h('div.ghead', 'Dólar'),
+    h('div.grp',
+      h('div.li',
+        h('div.av', icono('monedas', 17)),
+        h('div.m', h('div.t', 'Cotización MEP'),
+          h('div.s', 'Con esto se valúa en pesos lo que tenés en dólares')),
+        entrada)),
+    pie, btn);
+}
 
 function seccionAvisos() {
   const grp = h('div.grp');

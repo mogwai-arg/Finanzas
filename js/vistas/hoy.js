@@ -390,8 +390,9 @@ function heroMes(res, hoy, p) {
   ) };
 }
 
-const topeDelMes = p => state.budgets.filter(b => b.periodo === p && b.moneda !== 'USD')
-                                     .reduce((s, b) => s + Number(b.monto || 0), 0);
+const topeDelMes = p => F.topesDelMes(state.budgets, p).topes
+  .filter(b => b.moneda !== 'USD')
+  .reduce((s, b) => s + Number(b.monto || 0), 0);
 
 /**
  * En dolares interesan las dos cosas, y antes solo se veia una.
@@ -554,7 +555,7 @@ function cuandoCae(d, fecha) {
 function tiraBishu(hoy) {
   const p = per();
   const res = F.resumenMes(state.transactions, p, 'ARS');
-  const budgets = state.budgets.filter(b => b.periodo === p);
+  const budgets = F.topesDelMes(state.budgets, p).topes;
   const peor = F.estadoPresupuesto(budgets, res, 80).find(b => b.gastado > b.tope);
   const cierra = state.accounts.find(a => a.tipo === 'credito' && a.activo !== false &&
     F.tieneCiclo(a) && F.proximoCiclo(a, hoy).diasACierre === 1);

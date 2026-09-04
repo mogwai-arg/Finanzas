@@ -1360,4 +1360,63 @@ t('una tasa vieja se avisa en vez de usarla callado', () => {
   assert.equal(F.tasaVieja({ tna: null, tnaAl: null }, HOY_R), false, 'sin tasa no hay nada viejo');
 });
 
+
+// ---------------------------------------------------------------------
+// Los topes no vencen el 31
+// ---------------------------------------------------------------------
+const TOPES = [
+  { id: 'a1', periodo: '2026-08', category_id: 'c1', monto: 400000, clase: 'categoria' },
+  { id: 'a2', periodo: '2026-08', category_id: 'c2', monto: 150000, clase: 'categoria' }
+];
+
+t('si el mes tiene sus propios topes, se usan esos', () => {
+  const b = [...TOPES, { id: 's1', periodo: '2026-09', category_id: 'c1', monto: 500000 }];
+  const r = F.topesDelMes(b, '2026-09');
+  assert.equal(r.heredados, false);
+  assert.equal(r.topes.length, 1);
+  assert.equal(r.topes[0].monto, 500000);
+});
+
+t('y si no, se heredan del último mes que los tenga', () => {
+  // Sin esto, el día 1 de cada mes la sección decía "sin topes cargados" y se
+  // apagaban solas la detección de excedidos, el aviso y el color del hero.
+  const r = F.topesDelMes(TOPES, '2026-09');
+  assert.equal(r.heredados, true);
+  assert.equal(r.de, '2026-08');
+  assert.equal(r.topes.length, 2);
+});
+
+t('los heredados vienen con el período de ESTE mes', () => {
+  // Tienen que poder usarse como si fueran de este mes: los consume el mismo
+  // código que los propios.
+  const r = F.topesDelMes(TOPES, '2026-09');
+  assert.ok(r.topes.every(b => b.periodo === '2026-09'));
+  assert.equal(r.topes[0].heredadoDe, '2026-08');
+});
+
+t('salta meses vacíos: agosto rige en noviembre si no hubo nada en el medio', () => {
+  const r = F.topesDelMes(TOPES, '2026-11');
+  assert.equal(r.heredados, true);
+  assert.equal(r.de, '2026-08');
+});
+
+t('pero no hereda de hace un año', () => {
+  // Un tope de hace ocho meses no dice nada de lo que gastás hoy.
+  assert.deepEqual(F.topesDelMes(TOPES, '2027-06').topes, []);
+});
+
+t('sin ningún tope nunca, no inventa', () => {
+  assert.deepEqual(F.topesDelMes([], '2026-09').topes, []);
+  assert.equal(F.topesDelMes([], '2026-09').heredados, false);
+});
+
+t('heredar no toca el mes del que vino', () => {
+  // El original tiene que quedar intacto: si guardar septiembre le cambiara
+  // el período a la fila de agosto, revisar un mes borraría la historia del
+  // anterior sin que nada lo diga.
+  const copia = JSON.parse(JSON.stringify(TOPES));
+  F.topesDelMes(TOPES, '2026-09');
+  assert.deepEqual(TOPES, copia);
+});
+
 console.log(`\n${ok} pruebas OK`);

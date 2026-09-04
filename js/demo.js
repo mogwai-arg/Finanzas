@@ -317,7 +317,7 @@ export const DEMO = {
   integrations: [],
   
   settings: {
-    usd_ref: 1485, alert_pct: 80, dia_cobro: 1, sobre_estimado: 1532000,
+    usd_ref: 1485, usd_ref_al: '2026-09-03T12:00:00.000Z', usd_ref_de: 'dolarapi', alert_pct: 80, dia_cobro: 1, sobre_estimado: 1532000,
     sumas_fijas_nr: 120000, ocultar_montos: false
   }
 };

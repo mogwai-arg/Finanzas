@@ -240,8 +240,16 @@ export function formRecurrente(r = null) {
 // =====================================================================
 export function formPresupuesto(periodo = hoyISO().slice(0, 7)) {
   const cats = state.categories.filter(c => c.tipo === 'gasto');
-  const actuales = new Map(state.budgets.filter(b => b.periodo === periodo)
-                                        .map(b => [b.category_id, b]));
+  // Si todavía no cargaste los de este mes, se proponen los del último que los
+  // tenga. Volver a escribir diez números cada 1º es fricción que nadie
+  // sostiene, y sin topes la app deja de opinar sin avisar.
+  const { topes: heredables, heredados, de } = F.topesDelMes(state.budgets, periodo);
+  // Sin el id: un tope heredado se guarda como fila NUEVA de este mes. Con el
+  // id puesto, guardar le cambiaría el período a la fila de agosto y el mes
+  // pasado se quedaría sin presupuesto, o sea que revisar septiembre borraría
+  // la historia de agosto sin que nada lo diga.
+  const topes = heredados ? heredables.map(({ id, ...b }) => b) : heredables;
+  const actuales = new Map(topes.filter(b => b.category_id).map(b => [b.category_id, b]));
   const campos = new Map();
 
   // Con cuánto se cuenta: lo que entró este mes, y si todavía no entró nada,
@@ -302,11 +310,10 @@ export function formPresupuesto(periodo = hoyISO().slice(0, 7)) {
   // comida" sino "cuánto quiero que me venga la Visa". Con las tarjetas es la
   // forma en que uno se pone el límite de verdad.
   const cuentas = state.accounts.filter(a => a.activo !== false && a.tipo === 'credito');
-  const porCuenta = new Map(state.budgets.filter(b => b.periodo === periodo && b.account_id)
-                                         .map(b => [b.account_id, b]));
+  const porCuenta = new Map(topes.filter(b => b.account_id).map(b => [b.account_id, b]));
   const camposCuenta = new Map();
-  const ahorros = new Map(state.budgets.filter(b => b.periodo === periodo && b.clase === 'ahorro')
-                                       .map(b => [b.moneda || 'ARS', b]));
+  const ahorros = new Map(topes.filter(b => b.clase === 'ahorro')
+                               .map(b => [b.moneda || 'ARS', b]));
   const camposAhorro = new Map();
 
   const campo1 = (etiqueta, ic, inp) => h('div.f', { style: { marginBottom: '13px' } },
@@ -315,6 +322,13 @@ export function formPresupuesto(periodo = hoyISO().slice(0, 7)) {
 
   const cuerpo = h('div',
     cabecera,
+    heredados ? h('div.aviso.bra', { style: { marginBottom: '16px' } },
+      h('div.av.bra', icono('sync', 17)),
+      h('div.txt',
+        h('div.tt', `Copiados de ${periodoLargo(de)}`),
+        h('div.ds', 'Un tope no vence el 31: hasta que digas otra cosa, sigue siendo ' +
+                    'tu número. Cambiá lo que cambió y guardá.'))) : null,
+
     h('div.small.mut', { style: { marginBottom: '18px', lineHeight: '1.5' } },
       `Topes de ${periodoLargo(periodo)}. Dejá en blanco lo que no quieras seguir: `,
       'un presupuesto con diez renglones que no mirás es peor que uno con tres.'),
@@ -358,7 +372,9 @@ export function formPresupuesto(periodo = hoyISO().slice(0, 7)) {
       let n = 0;
       const poner = async (viejo, fila) => {
         if (fila.monto > 0) { await guardar('budgets', { ...(viejo || {}), periodo, ...fila }); n++; }
-        else if (viejo) await borrar('budgets', viejo.id);
+        // Solo se borra lo que existe de verdad. Un heredado no tiene id: no
+        // hay nada que borrar y no hay que tocar el mes del que vino.
+        else if (viejo?.id) await borrar('budgets', viejo.id);
       };
       for (const [catId, inp] of campos)
         await poner(actuales.get(catId), { category_id: catId, account_id: null,

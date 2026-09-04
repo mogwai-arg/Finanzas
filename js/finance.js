@@ -1130,7 +1130,10 @@ export function cierreDeMes(datos, per, moneda = 'ARS', ref = hoy()) {
   const subio = comparables.filter(c => c.cambio > 0).sort((a, b) => b.cambio - a.cambio)[0] || null;
   const bajo = comparables.filter(c => c.cambio < 0).sort((a, b) => a.cambio - b.cambio)[0] || null;
 
-  const delMes = budgets.filter(b => b.periodo === per);
+  // Los mismos topes que regian ese mes, heredados incluidos: si no cargaste
+  // los de septiembre, el cierre de septiembre se mide contra los de agosto,
+  // que es contra lo que de verdad estabas midiendo.
+  const delMes = topesDelMes(budgets, per).topes;
   const presu = estadoPresupuesto(delMes, res).map(b => ({ ...b, nombre: nombre(b.category_id) }));
   const pasadas = presu.filter(b => b.gastado > b.tope);
   const dentro = presu.filter(b => b.tope > 0 && b.gastado <= b.tope);
@@ -1528,3 +1531,38 @@ export function dondeRinde(cuentas, txs, { moneda = 'ARS', per = null } = {}, re
 export const tasaVieja = (fila, ref = hoy(), dias = 60) =>
   !!fila.tna && (!fila.tnaAl ||
     (ref - parseFecha(fila.tnaAl)) / 86400000 > dias);
+
+/**
+ * Los topes que rigen este mes, aunque nadie los haya vuelto a cargar.
+ *
+ * El presupuesto se guarda por periodo, asi que el dia 1 de cada mes no habia
+ * ninguno: la seccion decia "sin topes cargados" y con eso se apagaban solas
+ * la deteccion de excedidos, el aviso al telefono y el color del hero. No se
+ * veia como un error, se veia como que la app dejo de opinar.
+ *
+ * Un tope no caduca el 31. Si en agosto decidiste no pasarte de 400.000 en
+ * supermercado, en septiembre sigue siendo tu numero hasta que digas otra
+ * cosa. Asi que se heredan del ultimo mes que los tenga.
+ *
+ * Se heredan pero no se esconden: vienen marcados con el mes del que salieron
+ * para que la pantalla lo diga. Heredar en silencio seria peor que no
+ * heredar, porque un tope de hace cuatro meses no se discute solo.
+ */
+export function topesDelMes(budgets, per, { meses = 6 } = {}) {
+  const propios = (budgets || []).filter(b => b.periodo === per);
+  if (propios.length) return { topes: propios, heredados: false, de: null };
+
+  let p = per;
+  for (let i = 0; i < meses; i++) {
+    p = mesAnterior(p);
+    const viejos = (budgets || []).filter(b => b.periodo === p);
+    if (viejos.length) {
+      // Con el periodo cambiado: lo que se devuelve tiene que poder usarse
+      // como si fuera de este mes. El id se deja para poder rastrearlo, pero
+      // guardarlos crea filas nuevas, no pisa las de aquel mes.
+      return { topes: viejos.map(b => ({ ...b, periodo: per, heredadoDe: p })),
+               heredados: true, de: p };
+    }
+  }
+  return { topes: [], heredados: false, de: null };
+}

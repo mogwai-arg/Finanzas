@@ -266,6 +266,29 @@ export async function bajarAdjunto(mensaje, id) {
   return bytes;
 }
 
+/**
+ * La cotizacion del dolar, para poder sumar pesos y dolares.
+ *
+ * Cargarla a mano una semana si y otra no es de esas cosas que se dejan de
+ * hacer al mes, y una cotizacion de hace tres meses hace mas dano que ninguna:
+ * el total sale mal y nadie sospecha del numero.
+ *
+ * Devuelve lo que guardo o tira con el motivo. Que falle no es grave —el
+ * campo a mano sigue estando— asi que quien la llama puede ignorar el error.
+ */
+export async function traerDolar() {
+  if (!FUNCTIONS_URL) throw new Error('Falta FUNCTIONS_URL en la configuración.');
+  const r = await fetch(`${FUNCTIONS_URL}/dolar`, { method: 'POST' });
+  const txt = await r.text();
+  if (r.status === 404) throw new Error('Falta subir la función dolar.');
+  let d; try { d = JSON.parse(txt); } catch { throw new Error(txt.slice(0, 120)); }
+  if (!r.ok || !d.mep) throw new Error(d.error || `Error ${r.status}`);
+
+  await guardar('settings', { ...(state.settings || {}),
+    usd_ref: d.mep, usd_ref_al: new Date().toISOString(), usd_ref_de: d.fuente });
+  return d;
+}
+
 export async function leerAhora(proveedor) {
   if (!FUNCTIONS_URL) throw new Error('Falta FUNCTIONS_URL en la configuración.');
   const t = await token();
