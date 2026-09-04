@@ -140,6 +140,34 @@ function balance(per, moneda, hoy) {
  * propias y un pago de tarjeta no son gasto —el gasto ya se contó el día de la
  * compra— y son justo los importes grandes que uno espera ver en el total.
  */
+/**
+ * Los ingresos de la hoja, con los rendimientos en una sola linea.
+ *
+ * Es la misma razon que en la lista de Gastos: la cuenta remunerada acredita
+ * todos los dias, asi que entre el sueldo y lo que sigue habia doce renglones
+ * de doscientos pesos. Aca molesta mas todavia, porque la hoja existe para
+ * poder verificar de donde sale un numero y esos doce no se verifican de a
+ * uno: se verifican sumados.
+ */
+function ingresosPlegados(ingresos, moneda, linea) {
+  const fecha = tx => `${String(tx.fecha).slice(8, 10)}/${String(tx.fecha).slice(5, 7)}`;
+  const suelta = ({ tx, monto }) => linea(
+    tituloTx(tx), plata(Math.round(monto), moneda),
+    fecha(tx) + (tx.account_id ? ` · ${nombreDe('accounts', tx.account_id, '')}` : ''));
+
+  const rinde = ingresos.filter(i => F.esRendimiento(i.tx));
+  if (rinde.length < 3) return ingresos.map(suelta);
+
+  const total = rinde.reduce((s, i) => s + i.monto, 0);
+  const dias = new Set(rinde.map(i => String(i.tx.fecha).slice(0, 10))).size;
+  const donde = nombreDe('accounts', rinde[0].tx.account_id, '');
+  return [
+    ...ingresos.filter(i => !rinde.includes(i)).map(suelta),
+    linea('Rendimientos', plata(Math.round(total), moneda),
+          `${dias} ${dias === 1 ? 'día' : 'días'}${donde ? ` · ${donde}` : ''}`)
+  ];
+}
+
 function hojaDeDondeSale(per, moneda) {
   const d = F.deDondeSale(state.transactions, per, moneda, state.accounts);
   const m = Number(per.slice(5, 7));
@@ -154,10 +182,7 @@ function hojaDeDondeSale(per, moneda) {
                                                           letterSpacing: '0' } },
         plata(d.totalIngresos, moneda))),
       d.ingresos.length
-        ? h('div.grp', d.ingresos.map(({ tx, monto }) => linea(
-            tituloTx(tx), plata(Math.round(monto), moneda),
-            `${String(tx.fecha).slice(8, 10)}/${String(tx.fecha).slice(5, 7)}` +
-            (tx.account_id ? ` · ${nombreDe('accounts', tx.account_id, '')}` : ''))))
+        ? h('div.grp', ...ingresosPlegados(d.ingresos, moneda, linea))
         : h('div.grp.pad', h('div.small.mut', 'No hay ingresos cargados este mes.'))),
 
     h('div',

@@ -185,7 +185,10 @@ export function hoja(titulo, contenido, { onClose } = {}) {
   const tirador = h('div.tirador');
   const cruz = h('button.cerrar-hoja', { type: 'button', 'aria-label': 'Cerrar',
                                          onclick: () => cerrar() }, icono('cerrar', 17));
-  const caja = h('div.hoja', { role: 'dialog', 'aria-modal': 'true', 'aria-label': titulo },
+  const caja = h('div.hoja', { role: 'dialog', 'aria-modal': 'true', 'aria-label': titulo,
+                              // Para poder darle el foco a la hoja misma en el
+                              // telefono, donde no se enfoca ningun campo.
+                              tabindex: '-1' },
     tirador, titulo ? h('div.hoja-tope', h('h2', titulo), cruz) : cruz);
   mask.append(caja);
   arrastrarParaCerrar(caja, tirador, () => cerrar());
@@ -204,6 +207,12 @@ export function hoja(titulo, contenido, { onClose } = {}) {
     const f = caja.querySelectorAll('button,input,select,textarea,a[href],[tabindex]:not([tabindex="-1"])');
     if (!f.length) return;
     const [pri, ult] = [f[0], f[f.length - 1]];
+    // Si el foco quedo AFUERA, la comparacion contra el primero y el ultimo
+    // no da nunca y el Tab se va tranquilo a lo que hay detras de la hoja.
+    // Pasaba en el telefono, que es donde se usa: ahi no se enfoca ningun
+    // campo al abrir —abriria el teclado— asi que el foco se queda en el
+    // boton que la abrio, que esta afuera.
+    if (!caja.contains(document.activeElement)) { e.preventDefault(); pri.focus(); return; }
     if (e.shiftKey && document.activeElement === pri) { e.preventDefault(); ult.focus(); }
     else if (!e.shiftKey && document.activeElement === ult) { e.preventDefault(); pri.focus(); }
   };
@@ -213,7 +222,12 @@ export function hoja(titulo, contenido, { onClose } = {}) {
   document.body.style.overflow = 'hidden';
   document.addEventListener('keydown', tecla);
   const primero = caja.querySelector('input,select,textarea,button');
+  // En pantalla grande, al primer campo. En el telefono, a la hoja misma: el
+  // lector de pantalla anuncia que se abrio un dialogo y el foco ya esta
+  // adentro, pero el teclado no salta —enfocar un campo lo abriria y taparia
+  // media hoja antes de que uno lea que dice—.
   if (primero && matchMedia('(min-width:600px)').matches) setTimeout(() => primero.focus(), 80);
+  else setTimeout(() => caja.focus(), 80);
   return cerrar;
 }
 
