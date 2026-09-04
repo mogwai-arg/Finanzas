@@ -356,5 +356,38 @@ t('una que ya existe no se crea de nuevo', () => {
   assert.equal(nueva('es gastronomia'), null, 'ni escrita sin tilde');
 });
 
+
+console.log('\nCORREGIR UNO QUE NO ES EL ÚLTIMO');
+
+const ULTIMOS = [{ id: '3', comercio: 'Nafta' },
+                 { id: '2', comercio: 'Café Martinez' },
+                 { id: '1', comercio: 'Coto' }];
+
+t('si lo nombra, corrige ese', () => {
+  // "El café iba en efectivo" cuando el café no es lo último obligaba a ir a
+  // Gastos a buscarlo, que es el viaje que el chat viene a evitar.
+  assert.equal(C.aCualSeRefiere('el café iba en efectivo', ULTIMOS)?.id, '2');
+  assert.equal(C.aCualSeRefiere('coto fue ayer', ULTIMOS)?.id, '1');
+  assert.equal(C.aCualSeRefiere('la nafta era 50000', ULTIMOS)?.id, '3');
+});
+
+t('si no nombra ninguno, manda el último', () => {
+  assert.equal(C.aCualSeRefiere('con efectivo', ULTIMOS), null);
+  assert.equal(C.aCualSeRefiere('fue ayer', ULTIMOS), null);
+  assert.equal(C.aCualSeRefiere('', ULTIMOS), null);
+});
+
+t('gana el más nuevo si dos coinciden', () => {
+  const dos = [{ id: 'b', comercio: 'Coto Abasto' }, { id: 'a', comercio: 'Coto Cicsa' }];
+  assert.equal(C.aCualSeRefiere('coto fue con efectivo', dos)?.id, 'b');
+});
+
+t('una palabra corta no calza en cualquier lado', () => {
+  // "el" adentro de "efectivo" no quiere decir que hables de un comercio
+  // llamado "El".
+  assert.equal(C.aCualSeRefiere('con efectivo', [{ id: 'x', comercio: 'El' }]), null);
+  assert.equal(C.aCualSeRefiere('con efectivo', [{ id: 'x', comercio: 'Ya' }]), null);
+});
+
 console.log(`\n${ok} pruebas OK${mal ? `, ${mal} FALLAN` : ''}\n`);
 process.exit(mal ? 1 : 0);

@@ -27,6 +27,7 @@ import { irA } from '../ruteo.js';
 import { formPresupuesto } from './formularios.js';
 import { formImportarExtracto } from './extracto.js';
 import { cargosPorMes } from '../extracto.js';
+import { sinCategoria } from '../reglas.js';
 import { nombreDelMes } from './cierre.js';
 
 const MES_CORTO = ['ene', 'feb', 'mar', 'abr', 'may', 'jun',
@@ -263,7 +264,37 @@ function categorias(per, moneda) {
     h('div.grp.pad', barrasHorizontales(datos, { moneda,
       alFila: d => irA('/gastos') })),
     cs.length > 8 ? h('div.small.mut', { style: { padding: '10px 4px 0' } },
-      `y ${cs.length - 8} categorías más, todas por debajo de las de arriba`) : null);
+      `y ${cs.length - 8} categorías más, todas por debajo de las de arriba`) : null,
+
+    // El pozo de "sin categoría" es lo que vuelve inútil este gráfico justo
+    // cuando más plata tiene adentro. Se ofrece resolverlo desde acá, que es
+    // donde molesta.
+    puertaACategorizar(per, moneda));
+}
+
+/** Cuánto hay sin categoría y el camino para arreglarlo de a muchos. */
+function puertaACategorizar(per, moneda) {
+  if (moneda !== 'ARS') return null;
+  const grupos = sinCategoria(state.transactions, state);
+  if (!grupos.length) return null;
+  const total = grupos.reduce((s, g) => s + g.total, 0);
+  const cuantos = grupos.reduce((s, g) => s + g.cuantos, 0);
+  // Por debajo de esto no vale la pena molestar: el gráfico se lee igual.
+  const gasto = F.resumenMes(state.transactions, per, 'ARS').gastos;
+  if (total < 5000 || (gasto > 0 && total / gasto < 0.03)) return null;
+
+  return h('button.li', { style: { marginTop: '12px', width: '100%',
+                                   background: 'var(--card)',
+                                   borderRadius: 'var(--r-tarjeta)' },
+                          onclick: () => irA('/categorizar') },
+    h('div.av.amb', icono('lista', 17)),
+    h('div.m',
+      h('div.t', `${plata(Math.round(total))} sin categoría`),
+      h('div.s', { style: { whiteSpace: 'normal', lineHeight: '1.4' } },
+        `${cuantos} ${cuantos === 1 ? 'movimiento' : 'movimientos'} en `,
+        `${grupos.length} ${grupos.length === 1 ? 'comercio' : 'comercios'}. `,
+        'Se resuelven de a grupos.')),
+    h('span.chev', icono('chev', 15)));
 }
 
 // -------------------------------------------------------- los más grandes

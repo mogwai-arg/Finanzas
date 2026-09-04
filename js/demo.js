@@ -118,6 +118,24 @@ export const DEMO = {
       moneda: 'ARS', tipo: 'gasto', account_id: id('gal'), category_id: id('c4'),
       cuotas: 1, fuente: 'banco', revisado: true },
 
+    // ---- consumos que entraron por el resumen y todavia no tienen categoria.
+    // Es como entran de verdad: el resumen no dice de que es cada compra.
+    { id: id('s1'), fecha: '2026-09-03', descripcion: 'COTO CICSA 3456', comercio: 'COTO CICSA 3456',
+      monto: 84210, moneda: 'ARS', tipo: 'gasto', account_id: id('visa'),
+      cuotas: 1, fuente: 'resumen', revisado: true },
+    { id: id('s2'), fecha: '2026-09-09', descripcion: 'COTO ABASTO', comercio: 'COTO ABASTO',
+      monto: 51340, moneda: 'ARS', tipo: 'gasto', account_id: id('visa'),
+      cuotas: 1, fuente: 'resumen', revisado: true },
+    { id: id('s3'), fecha: '2026-09-06', descripcion: 'SHELL GRAL PAZ', comercio: 'SHELL GRAL PAZ',
+      monto: 62800, moneda: 'ARS', tipo: 'gasto', account_id: id('visa'),
+      cuotas: 1, fuente: 'resumen', revisado: true },
+    { id: id('s4'), fecha: '2026-09-11', descripcion: 'FARMACITY 812', comercio: 'FARMACITY 812',
+      monto: 23990, moneda: 'ARS', tipo: 'gasto', account_id: id('visa'),
+      cuotas: 1, fuente: 'resumen', revisado: true },
+    { id: id('s5'), fecha: '2026-09-12', descripcion: 'LO DE PEPE', comercio: 'LO DE PEPE',
+      monto: 18400, moneda: 'ARS', tipo: 'gasto', account_id: id('visa'),
+      cuotas: 1, fuente: 'resumen', revisado: true },
+
     // ---- consumos del resumen de la Visa que cerro el 27/08
     { id: id('t9'), fecha: '2026-06-06', descripcion: 'Naked', comercio: 'Naked', monto: 228783,
       moneda: 'ARS', tipo: 'gasto', account_id: id('visa'), category_id: id('c10'),

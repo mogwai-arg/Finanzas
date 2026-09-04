@@ -166,3 +166,46 @@ export function comoRegla(comercio, category_id, reglas = []) {
   return { patron: marca, category_id, veces_usada: 1,
            prioridad: ancha ? (ancha.prioridad || 0) + 1 : 10 };
 }
+
+/**
+ * Los gastos sin categoria, agrupados por comercio.
+ *
+ * Es la pieza que faltaba para poder categorizar de a muchos. Los seis COTO
+ * de un resumen son una fila, no seis: de a uno son cuarenta toques y nadie
+ * los da, y por eso el grafico de "en que se fue" tiene un pozo enorme
+ * llamado "sin categoria" que lo vuelve inutil.
+ *
+ * Cada grupo trae la sugerencia y de donde sale, para poder aceptarla o
+ * discutirla sin abrir nada.
+ */
+export function sinCategoria(txs, estado = {}, { desde = null } = {}) {
+  const { reglas = [], transactions = [], categories = [] } = estado;
+  const por = new Map();
+
+  for (const t of txs || []) {
+    if (t.tipo !== 'gasto' || t.category_id) continue;
+    if (desde && String(t.fecha).slice(0, 10) < desde) continue;
+    const nombre = (t.comercio || t.descripcion || '').trim();
+    if (!nombre) continue;
+    const clave = marcaDe(nombre) || nombre.toLowerCase();
+    const g = por.get(clave) || { clave, nombre, txs: [], total: 0 };
+    // El nombre mas corto del grupo: "COTO" se lee mejor que
+    // "COTO CICSA 3456 BUENOS AIRES".
+    if (nombre.length < g.nombre.length) g.nombre = nombre;
+    g.txs.push(t);
+    g.total = Math.round((g.total + (Number(t.monto) || 0)) * 100) / 100;
+    por.set(clave, g);
+  }
+
+  return [...por.values()]
+    .map(g => {
+      const s = categoriaPara(g.nombre, { reglas, transactions, categories });
+      return { ...g, cuantos: g.txs.length, sugerida: s.category_id, porQue: s.porQue,
+               seguro: s.seguro,
+               // El ultimo, para poder decir "el 12 de agosto" y ubicarlo.
+               ultimo: g.txs.map(t => String(t.fecha).slice(0, 10)).sort().pop() };
+    })
+    // Por plata y no por cantidad: veinte cafes de mil pesos mueven menos el
+    // grafico que una compra de doscientos mil.
+    .sort((a, b) => b.total - a.total);
+}

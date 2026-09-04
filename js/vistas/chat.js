@@ -22,7 +22,8 @@ import { h, frag, icono, iconoDe, aviso } from '../ui.js';
 import { state, guardar, borrar } from '../db.js';
 import { leerFrase } from '../frase.js';
 import { categoriaPara, comoRegla, reglaQueChoca } from '../reglas.js';
-import { leerCorreccion, categoriaNueva, MARCA_CORRECCION } from '../correccion.js';
+import { leerCorreccion, categoriaNueva, aCualSeRefiere,
+         MARCA_CORRECCION } from '../correccion.js';
 import { quePregunta, contestar } from '../preguntas.js';
 import { bishu } from '../bishu.js';
 import { plata, nombreDe, hoyISO } from '../formato.js';
@@ -43,11 +44,58 @@ const MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun',
  */
 const hilo = h('div.flow', { style: { paddingBottom: '8px' } });
 let pendiente = null;
+
+/**
+ * Lo dicho, guardado en el teléfono.
+ *
+ * Vivía solo en memoria: cerrabas la app y la charla arrancaba de cero. En un
+ * chat eso se siente como que el otro te olvidó, y encima se pierde el "el
+ * café iba en efectivo" de la mañana.
+ *
+ * Se guarda el TEXTO, no los botones. Un "Deshacer" de anteayer que ya no
+ * puede deshacer nada es peor que no tenerlo: se ve igual de vivo y no hace
+ * nada. Al volver, la charla se relee; para actuar hay que decir algo nuevo.
+ */
+const CHARLA_KEY = 'bishusha.charla';
+const MAX_GUARDADAS = 30;
+
+const leerCharla = () => {
+  try { return JSON.parse(localStorage.getItem(CHARLA_KEY) || '[]'); }
+  catch { return []; }
+};
+/**
+ * El texto de una burbuja, legible.
+ *
+ * textContent pega todo sin separar: "coto 4731045 lucas de naftacafé 800".
+ * Los bloques son renglones distintos y tienen que quedar como renglones.
+ */
+function textoPlano(nodo) {
+  if (typeof nodo === 'string') return nodo;
+  const partes = [];
+  for (const hijo of nodo.childNodes) {
+    if (hijo.nodeType === 3) { partes.push(hijo.textContent); continue; }
+    const bloque = ['DIV', 'P', 'LI'].includes(hijo.tagName);
+    partes.push(bloque ? '\n' + textoPlano(hijo) : textoPlano(hijo));
+  }
+  return partes.join('').replace(/\n{2,}/g, '\n').trim();
+}
+
+const anotarCharla = (quien, texto) => {
+  if (!texto) return;
+  try {
+    const d = [...leerCharla(), { quien, texto, cuando: Date.now() }].slice(-MAX_GUARDADAS);
+    localStorage.setItem(CHARLA_KEY, JSON.stringify(d));
+  } catch { /* modo privado: la charla vive solo en memoria */ }
+};
 // El último movimiento anotado, para que "ay, la pagué con efectivo" tenga a
 // qué referirse. Es lo que hace que esto sea una conversación y no una
 // ventanita de comandos: sin memoria, corregir obliga a deshacer y escribir
 // todo de nuevo, y ahí conviene el formulario.
 let ultimo = null;
+// Los últimos que se cargaron en esta charla, del más nuevo al más viejo.
+// "El café iba en efectivo" cuando el café no es lo último obligaba a ir a
+// Gastos a buscarlo, que es el viaje que el chat viene a evitar.
+const ultimos = [];
 
 export function vistaChat(root) {
   const entrada = h('input', {
@@ -67,6 +115,10 @@ export function vistaChat(root) {
         color: mio ? '#fff' : 'var(--tx)',
         borderRadius: mio ? '16px 16px 4px 16px' : '16px 16px 16px 4px',
         padding: '10px 13px', fontSize: '15px', lineHeight: '1.45',
+        // Lo guardado viene con saltos de línea adentro de un texto suelto.
+        whiteSpace: extra.viejo ? 'pre-line' : 'normal',
+        // Lo de la vez pasada, apagado: se lee pero no compite con lo de hoy.
+        opacity: extra.viejo ? '.62' : '1',
         ...(extra.style || {})
       }
     }, contenido);
@@ -74,6 +126,7 @@ export function vistaChat(root) {
       mio ? null : h('div', { style: { flex: 'none', marginBottom: '2px' } }, bishu(extra.animo || 'contento', 26)),
       burbuja);
     hilo.append(fila);
+    if (extra.guardar !== false) anotarCharla(quien, textoPlano(contenido));
     // Al fondo, que es donde está lo último. Sin esto la respuesta queda
     // abajo del teclado y parece que no pasó nada.
     requestAnimationFrame(() => window.scrollTo(0, document.body.scrollHeight));
@@ -94,6 +147,8 @@ export function vistaChat(root) {
     });
 
     ultimo = { tx, burbuja: null, comercio: m.comercio };
+    ultimos.unshift(tx);
+    ultimos.length = Math.min(ultimos.length, 8);
 
     const partes = [
       h('b', plata(m.monto, m.moneda)),
@@ -222,20 +277,25 @@ export function vistaChat(root) {
    * lo único que cambia es la cuenta. Y si nombrás una categoría, además
    * queda aprendida para ese comercio, igual que tocando el botón.
    */
-  async function corregir(c) {
-    const tx = ultimo.tx;
+  async function corregir(c, otro = null) {
+    const tx = otro || ultimo.tx;
+    const suyo = !otro || otro.id === ultimo.tx.id;
     if (c.borrar) {
       await borrar('transactions', tx.id);
-      ultimo = null;
-      decir('bishu', 'Listo, lo borré.');
+      const i = ultimos.findIndex(x => x.id === tx.id);
+      if (i >= 0) ultimos.splice(i, 1);
+      if (suyo) ultimo = null;
+      decir('bishu', `Listo, borré ${tx.comercio || 'el movimiento'}.`);
       return;
     }
     const nueva = { ...tx, ...c.campos };
     await guardar('transactions', nueva);
-    ultimo.tx = nueva;
+    if (suyo) ultimo.tx = nueva;
+    const j = ultimos.findIndex(x => x.id === tx.id);
+    if (j >= 0) ultimos[j] = nueva;
 
     const aprendio = c.campos.category_id
-      ? await aprender(ultimo.comercio, c.campos.category_id) : null;
+      ? await aprender(nueva.comercio || nueva.descripcion, c.campos.category_id) : null;
 
     // Se repite el movimiento entero, no solo lo que cambió: después de dos o
     // tres correcciones, "listo" no alcanza para saber cómo quedó.
@@ -297,7 +357,14 @@ export function vistaChat(root) {
     if (corrige) {
       const gastos = (state.categories || []).filter(x => x.tipo !== 'ingreso');
       const c = leerCorreccion(dicho, { cuentas: state.accounts, categorias: gastos });
-      if (c) { await corregir(c); return; }
+      if (c) {
+        // Si nombra uno de los últimos, se corrige ESE. Si no nombra ninguno,
+        // el último, que es el caso de siempre.
+        const otro = aCualSeRefiere(dicho, ultimos.map(t => state.transactions
+          .find(x => x.id === t.id)).filter(Boolean));
+        await corregir(c, otro);
+        return;
+      }
 
       // Nombró una categoría que no existe. Mandarlo a Ajustes a crearla y
       // volver es justo la fricción que este chat viene a sacar.
@@ -376,6 +443,16 @@ export function vistaChat(root) {
   // El saludo, una sola vez: al volver, la charla sigue donde estaba.
   if (hilo.childElementCount) return;
 
+  // Lo de la última vez, si hubo. Va sin botones y en gris: es historia, no
+  // algo sobre lo que se pueda actuar.
+  const antes = leerCharla();
+  if (antes.length) {
+    for (const b of antes) decir(b.quien, b.texto, { guardar: false, viejo: true });
+    hilo.append(h('div.small.mut', { style: { textAlign: 'center', padding: '10px 0 2px' } },
+      '— hasta acá, la vez pasada —'));
+    return;
+  }
+
   decir('bishu', h('div',
     'Contame el gasto como se te ocurra y yo lo anoto.',
     h('div.small.mut', { style: { marginTop: '7px', lineHeight: '1.6' } },
@@ -387,7 +464,10 @@ export function vistaChat(root) {
     h('div.small.mut', { style: { marginTop: '5px', lineHeight: '1.6' } },
       h('div', h('b', '¿cuánto me queda?')),
       h('div', h('b', '¿en qué se me fue?')),
-      h('div', h('b', '¿qué se viene?')))));
+      h('div', h('b', '¿qué se viene?')))),
+    // El saludo no se guarda: se vuelve a armar solo cada vez, y guardado
+    // ocuparía media pantalla de historia que nadie quiere releer.
+    { guardar: false });
 }
 
 const enlace = (txt, fn) => h('button', {

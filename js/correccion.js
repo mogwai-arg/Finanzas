@@ -152,4 +152,32 @@ export function categoriaNueva(texto, categorias = []) {
   return crudo.replace(/(^|\s)(\p{L})/gu, (_, a, b) => a + b.toUpperCase());
 }
 
+/**
+ * A cuál de los últimos movimientos se refiere.
+ *
+ * "El café iba en efectivo" cuando el café no es lo último que cargaste. Sin
+ * esto hay que ir a Gastos a buscarlo, que es exactamente el viaje que el chat
+ * viene a evitar.
+ *
+ * Se busca por nombre entre los últimos, del más reciente al más viejo, y solo
+ * si lo nombra: sin nombre manda el último, que es el caso de siempre. Y si
+ * dos coinciden gana el más nuevo, que es el que uno tiene en la cabeza.
+ */
+export function aCualSeRefiere(texto, ultimos = []) {
+  const t = sinTildes(String(texto || '').toLowerCase());
+  if (!t.trim()) return null;
+  for (const tx of ultimos) {
+    for (const campo of [tx.comercio, tx.descripcion]) {
+      const nombre = sinTildes(String(campo || '').toLowerCase()).trim();
+      // Palabras de tres letras o menos calzan en cualquier lado: "el" dentro
+      // de "efectivo" no quiere decir que hables de un comercio llamado "El".
+      if (nombre.length < 4) continue;
+      const primera = nombre.split(/\s+/).find(p => p.length >= 4);
+      if (!primera) continue;
+      if (new RegExp(`(?<![\\p{L}])${escapar(primera)}`, 'iu').test(t)) return tx;
+    }
+  }
+  return null;
+}
+
 const escapar = s => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
