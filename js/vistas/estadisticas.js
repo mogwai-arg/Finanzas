@@ -23,7 +23,7 @@ import * as F from '../finance.js';
 import * as S from '../sueldo.js';
 import { plata, plataPartida, hoyISO, buscar, nombreDe, tituloTx } from '../formato.js';
 import { barrasHorizontales, barrasPorMes, leyenda,
-         tortaDeCategorias } from '../graficos.js';
+         tortaDeCategorias, coloresDeCategorias } from '../graficos.js';
 import { irA } from '../ruteo.js';
 import { formPresupuesto } from './formularios.js';
 import { formImportarExtracto, proponerFijos } from './extracto.js';
@@ -93,7 +93,11 @@ function balance(per, moneda, hoy) {
   return h('button.grp.pad', { style: { width: '100%', textAlign: 'left', border: '0',
                                         display: 'block', cursor: 'pointer' },
                                onclick: () => hojaDeDondeSale(per, moneda) },
-    h('div.ghead', { style: { margin: '0 0 5px' } }, 'Entró y salió este mes',
+    // El rotulo nombra al NUMERO GRANDE, que es la diferencia. Decia "entró y
+    // salió" y abajo de eso habia una sola cifra: no habia forma de saber si
+    // era lo que entró, lo que salió o la resta.
+    h('div.ghead', { style: { margin: '0 0 5px' } },
+      enCurso ? 'Lo que va quedando' : 'Lo que quedó este mes',
       h('span', { style: { textTransform: 'none', letterSpacing: '0' } }, 'De dónde sale')),
     // El mes en curso NO se pinta: con el sueldo adentro el día 1 y los
     // gastos sin hacer, un número verde enorme dice "vas bárbaro" todos los
@@ -256,9 +260,22 @@ function categorias(per, moneda) {
   const datos = cs.slice(0, 8).map(c => ({
     etiqueta: c.id ? (buscar('categories', c.id)?.nombre || 'Sin categoría') : 'Sin categoría',
     monto: c.monto,
-    nota: `${Math.round(c.parte * 100)} % de lo que gastaste`,
+    parte: c.parte,
     id: c.id
   }));
+  // El porcentaje lo escribe la torta al lado de cada gajo. Repetirlo debajo
+  // de cada barra era decir lo mismo dos veces en la misma pantalla: seis
+  // renglones que no agregaban nada y hacian falta scrollear.
+  //
+  // Y el color es el MISMO que en la torta: son las mismas categorías, una
+  // arriba de la otra. Con la torta a cinco colores y las barras todas del
+  // mismo azul había que volver a leer los nombres para seguir una de un
+  // gráfico al otro.
+  const color = coloresDeCategorias(datos);
+  // Las que no entran en la paleta van grises, que es como las pinta la torta
+  // cuando las pliega en "otras": ahi tampoco tienen color propio.
+  const barras = datos.map(({ parte, ...d }) =>
+    ({ ...d, color: color.get(String(d.id)) || 'var(--cat-otras)' }));
 
   return h('section',
     // Un "4" suelto al lado del título no decía de qué era.
@@ -272,7 +289,7 @@ function categorias(per, moneda) {
     h('div.grp.pad', { style: { marginBottom: '10px' } },
       tortaDeCategorias(datos, { moneda, alGajo: () => irA('/gastos') })),
 
-    h('div.grp.pad', barrasHorizontales(datos, { moneda,
+    h('div.grp.pad', barrasHorizontales(barras, { moneda,
       alFila: d => irA('/gastos') })),
     cs.length > 8 ? h('div.small.mut', { style: { padding: '10px 4px 0' } },
       `y ${cs.length - 8} categorías más, todas por debajo de las de arriba`) : null,

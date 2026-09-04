@@ -44,7 +44,8 @@ export function barrasHorizontales(datos, { moneda = 'ARS', alFila } = {}) {
       h('div.gr-tope',
         h('span.gr-et', d.etiqueta),
         h('span.gr-val', plata(Math.round(d.monto), moneda))),
-      h('div.gr-pista', h('div.gr-marca', { style: { width: pct + '%' } })),
+      h('div.gr-pista', h('div.gr-marca',
+        { style: { width: pct + '%', background: d.color || null } })),
       d.nota ? h('div.gr-nota', d.nota) : null);
     return fila;
   }));
@@ -118,6 +119,30 @@ export const leyenda = (...pares) =>
  *   · Dos píxeles de aire entre gajos, del color de la tarjeta, para que dos
  *     colores contiguos no se lean como uno solo.
  */
+/**
+ * Que color le toca a cada categoria.
+ *
+ * Vive aparte porque la torta y las barras de abajo hablan de LAS MISMAS
+ * categorias, una arriba de la otra. Con la torta a cinco colores y las
+ * barras todas del mismo azul, no habia forma de seguir una de un grafico al
+ * otro: habia que volver a leer los nombres cada vez.
+ *
+ * "Sin categoria" va gris y NO gasta un color de la paleta: no es una
+ * categoria mas, es la ausencia de una. Pintarla de azul la hace competir
+ * con las de verdad, y encima suele ser la mas grande —que es justamente el
+ * problema que hay que ver, no un rubro del que uno este orgulloso—.
+ */
+export function coloresDeCategorias(datos, tope = 5) {
+  const orden = [...datos].filter(d => d.monto > 0).sort((a, b) => b.monto - a.monto);
+  const m = new Map();
+  let slot = 0;
+  for (const d of orden.slice(0, tope)) {
+    m.set(String(d.id), d.id === null || d.id === undefined
+      ? 'var(--cat-otras)' : `var(--cat-${Math.min(5, ++slot)})`);
+  }
+  return m;
+}
+
 export function tortaDeCategorias(datos, { moneda = 'ARS', alGajo, tope = 5 } = {}) {
   const limpios = datos.filter(d => d.monto > 0);
   if (limpios.length < 2) return null;
@@ -127,12 +152,8 @@ export function tortaDeCategorias(datos, { moneda = 'ARS', alGajo, tope = 5 } = 
   // categoría más, es la ausencia de una. Pintarla de azul la hace competir
   // con las de verdad, y encima suele ser la más grande —que es justamente el
   // problema que hay que ver, no un rubro del que uno esté orgulloso—.
-  let slot = 0;
-  const gajos = orden.slice(0, tope).map(d => ({
-    ...d,
-    color: d.id === null || d.id === undefined
-      ? 'var(--cat-otras)' : `var(--cat-${Math.min(5, ++slot)})`
-  }));
+  const color = coloresDeCategorias(datos, tope);
+  const gajos = orden.slice(0, tope).map(d => ({ ...d, color: color.get(String(d.id)) }));
   const cola = orden.slice(tope);
   if (cola.length) {
     gajos.push({ etiqueta: cola.length === 1 ? cola[0].etiqueta : `Otras ${cola.length}`,
