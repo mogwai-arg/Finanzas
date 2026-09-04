@@ -70,9 +70,20 @@ Deno.serve(async (req) => {
   // El numero de un solo uso dice de quien es la sesion y a que proveedor.
   const sb = admin();
   const { data: pendiente, error: errPend } = await sb.from('oauth_pendientes')
-    .select('user_id, proveedor').eq('nonce', nonce).maybeSingle();
+    .select('user_id, proveedor, created_at').eq('nonce', nonce).maybeSingle();
 
-  if (!pendiente) {
+  // Y que sea de recien. Los viejos los barre oauth-start, pero solo cuando
+  // se empieza OTRA conexion: si no se empieza ninguna, un nonce se queda
+  // valido para siempre, y un link de vuelta filtrado hace meses seguiria
+  // sirviendo para atar una integracion a esa cuenta. Se comprueba tambien
+  // aca, al canjearlo, con la misma ventana de quince minutos —de sobra para
+  // tocar "permitir" en Google—.
+  const VENTANA = 15 * 60 * 1000;
+  const viejo = pendiente &&
+    Date.now() - new Date(pendiente.created_at as string).getTime() > VENTANA;
+  if (viejo) await sb.from('oauth_pendientes').delete().eq('nonce', nonce);
+
+  if (!pendiente || viejo) {
     // Tres motivos distintos que antes decian todos lo mismo, y solo uno de
     // ellos se arregla probando de nuevo.
     const motivo =
@@ -80,6 +91,9 @@ Deno.serve(async (req) => {
         ? 'falta correr el SQL 007 en Supabase: no existe la tabla oauth_pendientes'
       : nonce.includes('|')
         ? 'oauth-start quedó en la versión vieja: volvé a pegarla y desplegarla'
+      : viejo
+        ? 'el permiso caducó: pasaron más de 15 minutos desde que lo pediste, ' +
+          'probá de nuevo'
       : errPend
         ? `no pude leer el permiso pendiente: ${errPend.message}`
         : 'el permiso caducó o ya se usó; probá de nuevo';

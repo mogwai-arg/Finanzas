@@ -57,6 +57,21 @@ export const TABLAS = ['accounts', 'categories', 'transactions', 'recurrings',
   'integrations', 'notificaciones', 'recibos', 'paritarias', 'sumas_nr',
   'push_subscriptions', 'fondos', 'deudas', 'settings'];
 
+/**
+ * Las columnas que baja cada tabla, cuando no son todas.
+ *
+ * `integrations` guarda los tokens de Gmail y de Mercado Pago. Bajandola con
+ * select('*') esos tokens viajaban al navegador y —peor— quedaban escritos
+ * en localStorage, en texto plano y para siempre, cuando lo unico que la
+ * pantalla necesita es si esta conectada, con que cuenta y si dio error.
+ *
+ * Refrescarlos y usarlos es cosa de las funciones del servidor, que leen la
+ * tabla con la service role. Aca no hacen falta nunca.
+ */
+const SOLO_COLUMNAS = {
+  integrations: 'id,user_id,proveedor,cuenta,activo,ultimo_error,ultima_sync,expira_at,updated_at'
+};
+
 const CACHE_KEY = 'bishusha.cache.v1';
 const COLA_KEY  = 'bishusha.cola.v1';
 const ROTAS_KEY = 'bishusha.rotas.v1';
@@ -78,10 +93,18 @@ export const onChange = fn => { subs.add(fn); return () => subs.delete(fn); };
 export const emit = () => subs.forEach(fn => fn());
 
 // ------------------------------------------------------------------ cache
+/** Sin los tokens, vengan de donde vengan. */
+const sinTokens = filas => (filas || []).map(
+  ({ access_token, refresh_token, ...resto }) => resto);
+
 function guardarCache() {
   try {
     const d = { ultimaSync: state.ultimaSync };
     for (const t of TABLAS) d[t] = state[t];
+    // Aunque la sincronizacion ya no los baje, una cache escrita por una
+    // version anterior los tiene adentro y sobrevive a la actualizacion. Se
+    // limpian al guardar y al leer: dos lineas y el disco queda sin nada.
+    d.integrations = sinTokens(d.integrations);
     localStorage.setItem(CACHE_KEY, JSON.stringify(d));
   } catch (e) { console.warn('cache lleno', e); }
 }
@@ -90,6 +113,7 @@ export function cargarCache() {
     const d = JSON.parse(localStorage.getItem(CACHE_KEY) || 'null');
     if (!d) return false;
     for (const t of TABLAS) if (d[t]) state[t] = d[t];
+    state.integrations = sinTokens(state.integrations);
     state.ultimaSync = d.ultimaSync || null;
     return true;
   } catch { return false; }
@@ -451,11 +475,12 @@ export async function sincronizar(opciones = {}) {
     // error en la consola y esa tabla no llegaba nunca: nada se rompia a la
     // vista, simplemente faltaban datos.
     const traer = async t => {
-      if (!desde) return await sb.from(t).select('*');
-      const r = await sb.from(t).select('*').gt('updated_at', desde);
+      const cols = SOLO_COLUMNAS[t] || '*';
+      if (!desde) return await sb.from(t).select(cols);
+      const r = await sb.from(t).select(cols).gt('updated_at', desde);
       if (!r.error) return r;
       console.warn(`${t}: sin updated_at, se pide entera`, r.error.message);
-      return { ...(await sb.from(t).select('*')), completa: true };
+      return { ...(await sb.from(t).select(cols)), completa: true };
     };
     const res = await Promise.all(TABLAS.map(traer));
 
