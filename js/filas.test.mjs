@@ -72,5 +72,77 @@ t('un tipo imposible cae en gasto', () => {
   assert.equal(normalizar('transactions', { id: '1', tipo: 'cualquiera' }).tipo, 'gasto');
 });
 
+// =====================================================================
+// LA BASE TIENE LAS COLUMNAS QUE LA APP ESCRIBE
+//
+// Es la unica prueba de este archivo que no mira una funcion: lee el codigo
+// y lo compara contra las migraciones. Existe porque el mismo error pasa dos
+// veces y cuesta lo mismo las dos.
+//
+// Se escribe la pantalla, se guarda un campo nuevo en `settings` y no se
+// escribe el SQL que crea la columna. Postgres rechaza LA FILA ENTERA —"Could
+// not find the 'cotejos' column of 'settings' in the schema cache"—, el
+// cambio queda en el cajon de pendientes y Ajustes muestra "1 cambios no se
+// pudieron subir". No se pierde nada, pero la app deja de guardar ESA fila
+// hasta que alguien se acuerde de correr un SQL que nunca se escribio.
+//
+// Paso con `cotejos` y con `suscripciones`, las dos a la vez.
+// =====================================================================
+import { readFileSync, readdirSync } from 'node:fs';
+
+/** Las llaves de primer nivel de un objeto literal, contando llaves. */
+function llavesDe(src, desde) {
+  const fin = (() => {
+    let n = 0;
+    for (let i = desde; i < src.length; i++) {
+      if (src[i] === '{') n++;
+      else if (src[i] === '}' && --n === 0) return i;
+    }
+    return -1;
+  })();
+  if (fin < 0) return [];
+  const cuerpo = src.slice(desde + 1, fin);
+  // Solo el primer nivel: se saltea lo que este adentro de otras llaves.
+  const llaves = [];
+  let n = 0, tok = '';
+  for (const c of cuerpo) {
+    if (c === '{' || c === '[' || c === '(') n++;
+    else if (c === '}' || c === ']' || c === ')') n--;
+    else if (n === 0 && c === ',') { tok = ''; continue; }
+    else if (n === 0 && c === ':') { const m = tok.trim().match(/([A-Za-z_]\w*)$/);
+                                     if (m) llaves.push(m[1]); tok = ''; continue; }
+    if (n === 0) tok += c;
+  }
+  return llaves;
+}
+
+t('la base tiene todas las columnas que la app le escribe a settings', () => {
+  const archivos = [];
+  const recorrer = d => readdirSync(d, { withFileTypes: true }).forEach(e => {
+    const f = `${d}/${e.name}`;
+    if (e.isDirectory()) recorrer(f);
+    else if (f.endsWith('.js')) archivos.push(f);
+  });
+  recorrer('js');
+
+  const escritas = new Set();
+  for (const f of archivos) {
+    const src = readFileSync(f, 'utf8');
+    for (const m of src.matchAll(/guardar\('settings',\s*\{/g)) {
+      for (const k of llavesDe(src, m.index + m[0].length - 1)) escritas.add(k);
+    }
+  }
+  assert.ok(escritas.size >= 4, `no encontro las escrituras a settings (${escritas.size})`);
+
+  const sql = readdirSync('supabase/migrations')
+    .map(f => readFileSync(`supabase/migrations/${f}`, 'utf8')).join('\n');
+  const faltan = [...escritas].filter(c =>
+    !new RegExp(`add column if not exists\\s+${c}\\b`, 'i').test(sql));
+
+  assert.deepEqual(faltan, [],
+    `la app escribe settings.${faltan.join(', settings.')} y ninguna migración crea ` +
+    'esa columna: la fila entera se va a rechazar');
+});
+
 console.log(`\n${ok} pruebas OK${mal ? `, ${mal} FALLAN` : ''}\n`);
 process.exit(mal ? 1 : 0);

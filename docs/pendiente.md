@@ -11,7 +11,10 @@ arregló, lo que se miró y está bien, y lo que quedó abierto— en
 
 1. **Correr `supabase/migrations/019_fondos_deudas.sql`.** Sin eso, crear un
    fondo o una deuda se rechaza y queda en el cajón de cambios pendientes.
-2. **Prender "Topes del mes"** en Ajustes → Avisos.
+2. **Correr `supabase/migrations/020_cotejos_suscripciones.sql`.** Es el que
+   falta si Ajustes dice *"Could not find the 'cotejos' column of 'settings'"*.
+   Después, **Reintentar** en ese mismo cartel y el cambio sube.
+3. **Prender "Topes del mes"** en Ajustes → Avisos.
 
 ---
 
