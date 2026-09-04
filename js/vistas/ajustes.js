@@ -190,6 +190,9 @@ function seccionDolar() {
   const val = Number(state.settings?.usd_ref) || 0;
   const entrada = h('input', { type: 'text', inputmode: 'decimal', placeholder: '1500',
                              value: val ? String(val) : '',
+                             // Sin esto el lector de pantalla lo anuncia como
+                             // "campo de texto, 1500" y no dice de qué es.
+                             'aria-label': 'Cotización del dólar MEP en pesos',
                              style: { width: '120px' },
                              onchange: async e => {
                                const n = aNumero(e.target.value);

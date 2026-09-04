@@ -15,7 +15,13 @@
   /* ---------- tinta ---------- */
   --tx:        #14161C;   /* principal · 13.9:1 sobre --card */
   --tx2:       #5C6272;   /* secundario · 5.9:1 — pasa AA en 12 px */
-  --tx3:       #868C9B;   /* terciario · 3.3:1 — SOLO decorativo o >= 18 px */
+  /* Terciario. Antes era #868C9B a 3.3:1, "solo decorativo o >= 18 px", y esa
+     regla no se sostuvo: terminó puesto en los importes de la lista de gastos
+     a 12,5 px. Un token que solo se puede usar en algunos lados se usa mal.
+     Ahora pasa AA en cualquier tamaño y sobre las dos superficies —5.1:1 en
+     tarjeta, 4.6:1 en el lienzo— y sigue siendo claramente más apagado que
+     --tx2, que es para lo que existe. */
+  --tx3:       #686E7E;
 
   /* ---------- marca: lo único que se puede tocar ----------
      Petróleo. Elegido sobre tinta, ciruela y berenjena.
@@ -29,6 +35,12 @@
   --pos:       #0B7F5A;  --pos-bg: #E3F4EC;  /* entra plata · dentro del tope */
   --amb:       #9A5D00;  --amb-bg: #FBF0DE;  /* vence pronto · cerca del tope */
   --neg:       #C1293D;  --neg-bg: #FBE9EB;  /* vencido. NUNCA para "te pasaste" */
+  /* Los mismos, para PINTAR un bloque con texto blanco encima. En claro
+     coinciden con los de arriba; en oscuro no pueden: allá --brand y --neg son
+     tonos claros —pensados para texto sobre fondo oscuro— y el blanco encima
+     de ellos queda en 2,3:1. Son dos trabajos distintos y necesitan dos
+     valores distintos. */
+  --neg-solid:   #C1293D;
 
   /* ---------- datos ----------
      Los colores de los gráficos son otro trabajo que los de la interfaz: una
@@ -107,12 +119,12 @@
 
     --tx:   #F2F3F7;
     --tx2:  #9BA1B0;
-    --tx3:  #767C8B;
+    --tx3:  #868C9B;   /* 5.3:1 en tarjeta, 5.8:1 en el lienzo */
 
     --brand:    #59B8D6;  --brand-bg: #102C36;  --brand-solid: #17728C;
     --pos:      #3FC08F;  --pos-bg:   #0F2A22;
     --amb:      #E3A94F;  --amb-bg:   #2C2211;
-    --neg:      #FF6E80;  --neg-bg:   #2E1519;
+    --neg:      #FF6E80;  --neg-bg:   #2E1519;  --neg-solid: #A81E30;
 
     /* Los pasos del oscuro se eligen contra su propia superficie, no se
        aclaran los del claro: validados igual, ΔE 16,5 normal y 14,8 deutan. */
@@ -134,11 +146,11 @@
 }
 :root[data-tema="oscuro"]{
   --bg:#0A0B0F; --card:#16181F; --fill:#20232C; --line:#2A2D37;
-  --tx:#F2F3F7; --tx2:#9BA1B0; --tx3:#767C8B;
+  --tx:#F2F3F7; --tx2:#9BA1B0; --tx3:#868C9B;
   --brand:#59B8D6; --brand-bg:#102C36; --brand-solid:#17728C;
   --pos:#3FC08F; --pos-bg:#0F2A22;
   --amb:#E3A94F; --amb-bg:#2C2211;
-  --neg:#FF6E80; --neg-bg:#2E1519;
+  --neg:#FF6E80; --neg-bg:#2E1519; --neg-solid:#A81E30;
   --dato-in:#2FA87C; --dato-out:#4A96D8; --dato-eje:#2A2D37;
   --cat-1:#3987e5; --cat-2:#d95926; --cat-3:#199e70; --cat-4:#c98500;
   --cat-5:#d55181; --cat-otras:#6B7280;

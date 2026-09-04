@@ -8,7 +8,8 @@
     "demo": "node build-demo.mjs",
     "build": "node build-web.mjs",
     "funciones": "node build-funciones.mjs",
-    "iconos": "node build-iconos.mjs"
+    "iconos": "node build-iconos.mjs",
+    "a11y": "node revisar-a11y.mjs"
   },
   "devDependencies": {
     "esbuild": "^0.28.2",
