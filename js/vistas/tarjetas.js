@@ -602,6 +602,12 @@ function loQueDiceElBanco(t, hoy) {
   // El otro saldo de la tarjeta. Una argentina tiene dos y el banco muestra
   // los dos: el de dolares se paga aparte y se cotiza aparte.
   const bo = F.brechaDeTarjeta(state.transactions, t, per, saldos, otraMoneda);
+  // Los dos campos SIEMPRE, no solo si ya hay consumos cargados en la otra
+  // moneda. Condicionarlo a eso era justo al reves de para que sirve: si el
+  // banco muestra un saldo en dolares que la app no vio, no hay ni un consumo
+  // cargado, y ese es exactamente el caso en que hay que poder anotarlo. Pasó
+  // con la Mastercard: la Visa tenía consumos en dólares y mostraba los dos
+  // campos, la Mastercard no tenía ninguno y no dejaba escribirlo.
   const hayOtra = bo.app > 0 || bo.banco != null;
 
   const guardarSaldos = async (montoPropio, montoOtro) => {
@@ -628,7 +634,7 @@ function loQueDiceElBanco(t, hoy) {
                                        placeholder: '0',
                                        value: br.banco != null ? String(br.banco) : '' });
     const inp = campoDe(b);
-    const inpOtra = hayOtra ? campoDe(bo) : null;
+    const inpOtra = campoDe(bo);
     const leer = (el, m) => {
       if (!el || !el.value.trim()) return { ok: true, valor: null };
       const n = aNumero(el.value);
@@ -638,14 +644,18 @@ function loQueDiceElBanco(t, hoy) {
       h('div.small.mut', { style: { lineHeight: '1.55' } },
         'El saldo del resumen en curso, como lo muestra la app del banco. Pasa ',
         'a ser el total de la tarjeta: es el que vas a pagar.'),
-      campo(hayOtra ? `Saldo en ${moneda === 'USD' ? 'dólares' : 'pesos'}`
-                    : 'Saldo según el banco', inp),
+      campo(`Saldo en ${moneda === 'USD' ? 'dólares' : 'pesos'}`, inp),
       // Los dos saldos son dos numeros distintos y se pagan por separado:
       // con un campo solo, anotar el de dolares pisaba el de pesos.
-      inpOtra ? campo(`Saldo en ${otraMoneda === 'USD' ? 'dólares' : 'pesos'}`, inpOtra) : null,
+      h('div.f',
+        h('label', `Saldo en ${otraMoneda === 'USD' ? 'dólares' : 'pesos'}`),
+        inpOtra,
+        h('div.small.mut', { style: { marginTop: '6px', lineHeight: '1.45' } },
+          'Vacío si esta tarjeta no tiene saldo en esa moneda.')),
       h('div.small.mut', { style: { lineHeight: '1.55' } },
         'Acá tenés cargados ', h('b', plata(Math.round(b.app), moneda)),
         hayOtra ? frag(' y ', h('b', plata(bo.app, otraMoneda))) : '',
+        !hayOtra ? frag(' y nada en ', otraMoneda === 'USD' ? 'dólares' : 'pesos') : '',
         '. No se toca ni se le agrega nada: una fila sin comprobante después ',
         'aparece en el mes y en las estadísticas sin que nadie la haya gastado. ',
         'La diferencia queda anotada hasta que subas el resumen, y ahí se cierra sola.'),
@@ -711,9 +721,12 @@ function loQueDiceElBanco(t, hoy) {
       h('span.mut', { style: { textTransform: 'none', letterSpacing: '0' } },
         cuando ? `anotado ${fechaRelativa(cuando, hoy)}` : '')),
     h('div.grp.pad',
-      bloque(b, moneda, bo.banco != null
+      // El rótulo de la moneda aparece si la tarjeta tiene algo en la otra,
+      // aunque no esté anotado: un bloque suelto que dice "El banco US$ 240"
+      // no aclara que ese NO es el saldo en pesos de esta tarjeta.
+      bloque(b, moneda, hayOtra
         ? (moneda === 'USD' ? 'En dólares' : 'En pesos') : null, false),
-      bloque(bo, otraMoneda, b.banco != null
+      bloque(bo, otraMoneda, (b.banco != null || b.app > 0)
         ? (otraMoneda === 'USD' ? 'En dólares' : 'En pesos') : null,
         b.banco != null),
 
