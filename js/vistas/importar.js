@@ -231,6 +231,7 @@ export function formImportarResumen(yaBajado = null) {
       });
     }
     await guardarVarios('transactions', filas);
+    const cierre = await cerrarLoAnotado(cuenta, r);
 
     cerrar();
     const aRevisar = nuevos.filter(m => m.cuotas > 1).length;
@@ -239,6 +240,61 @@ export function formImportarResumen(yaBajado = null) {
       : [cargados ? `${cargados} importados` : null,
          adoptados ? `${adoptados} ya estaban` : null,
          aRevisar ? `${aRevisar} en cuotas para revisar` : null].filter(Boolean).join(' · '));
+    if (cierre) hoja('El número que habías anotado', cierre);
+  }
+
+  /**
+   * Cierra lo que se habia anotado a mano del banco, ahora que llego el
+   * resumen de verdad.
+   *
+   * Anotar "el banco dice 610.000" servia para no navegar a ciegas hasta el
+   * cierre. Cuando el resumen llega, ese numero deja de hacer falta: o el
+   * detalle da lo mismo —y entonces aparecieron los consumos que faltaban— o
+   * no da, y eso hay que decirlo, porque significa que el resumen tampoco
+   * trae todo.
+   *
+   * Se borra siempre. Dejarlo puesto seria seguir mandando un numero de
+   * memoria por encima de un detalle que ya esta completo.
+   */
+  async function cerrarLoAnotado(cuenta, r) {
+    const todos = state.settings?.saldos_tarjeta || {};
+    const dePer = todos[cuenta.id];
+    if (!dePer || !r.ciclo?.cierre) return null;
+    const moneda = cuenta.moneda || 'ARS';
+    // Del resumen las fechas vienen como texto ISO. El vencimiento suele
+    // venir; cuando no, se deduce del cierre y del dia de la tarjeta.
+    const vence = r.ciclo.vencimiento || F.fechaISO(F.vencimientoDeCierre(
+      F.parseFecha(r.ciclo.cierre), Number(cuenta.vencimiento_dia) || 10));
+    const per = String(vence).slice(0, 7);
+    const anotado = F.saldoDeclarado(todos, cuenta.id, per);
+    if (!anotado) return null;
+
+    const ahora = F.totalTarjetaEnPeriodo(state.transactions, cuenta, per, moneda);
+    const resto = { ...dePer };
+    delete resto[per];
+    await guardar('settings', { ...(state.settings || {}),
+      saldos_tarjeta: { ...todos, [cuenta.id]: resto } });
+
+    const dif = Math.round(ahora - anotado.monto);
+    return h('div.flow',
+      h('div.small.mut', { style: { lineHeight: '1.55' } },
+        'Habías anotado que el banco decía ',
+        h('b', { style: { color: 'var(--tx)' } }, plata(Math.round(anotado.monto), moneda)),
+        ' de este resumen. Ya llegó el detalle, así que ese número no hace más falta.'),
+      h('div.grp.pad',
+        h('div', { style: { display: 'flex', justifyContent: 'space-between',
+                            alignItems: 'baseline', gap: '10px' } },
+          h('span.small.mut', 'El detalle suma'),
+          h('span.tabnum', { style: { fontWeight: '700', fontSize: '17px' } },
+            plata(Math.round(ahora), moneda))),
+        h('div.small', { style: { marginTop: '8px', lineHeight: '1.5',
+                                  color: Math.abs(dif) <= 1 ? 'var(--pos)' : 'var(--amb)' } },
+          Math.abs(dif) <= 1
+            ? 'Da exactamente lo que decía el banco: aparecieron los consumos que faltaban.'
+            : `Quedan ${plata(Math.abs(dif), moneda)} de diferencia contra lo que decía el `
+              + `banco. ${dif < 0 ? 'El resumen trae MENOS de lo que el banco mostraba en '
+                 + 'curso: puede ser un consumo que entró en el ciclo siguiente.'
+                 : 'El resumen trae MÁS: puede haber algo cargado dos veces.'}`)));
   }
 }
 

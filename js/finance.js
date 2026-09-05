@@ -205,6 +205,50 @@ export function totalTarjetaEnPeriodo(txs, tarjeta, per, moneda = 'ARS') {
 }
 
 /**
+ * Lo que dice el banco de un resumen que todavia no cerro.
+ *
+ * El resumen no se puede bajar hasta que cierra, pero el saldo en curso la
+ * app del banco lo muestra desde el dia uno, y no siempre coincide con lo
+ * cargado: un consumo que no llego por correo, un ajuste, una compra vieja
+ * que cayo en este ciclo. Cien mil pesos de diferencia y ninguna forma de
+ * encontrar donde estan.
+ *
+ * Anotarlo NO cambia lo cargado ni le agrega una fila: eso seria plata sin
+ * comprobante, y despues el mes cierra con un movimiento que nadie hizo. El
+ * numero del banco pasa a ser el total —porque es el que se paga— y la
+ * diferencia queda escrita al lado, con nombre, hasta que llegue el resumen.
+ */
+export function saldoDeclarado(declarados, tarjetaId, per) {
+  const d = declarados && declarados[tarjetaId] && declarados[tarjetaId][per];
+  const crudo = d && d.monto;
+  // Number('') es CERO, no NaN. Sin esto, un campo que se abrio y se cerro
+  // sin escribir nada se guardaba como "el banco dice que no debes nada" y la
+  // tarjeta pasaba a valer cero.
+  if (crudo === null || crudo === undefined || crudo === '') return null;
+  const monto = Number(crudo);
+  if (!Number.isFinite(monto) || monto < 0) return null;
+  return { monto: round2(monto), cuando: (d && d.cuando) || null };
+}
+
+/**
+ * Lo cargado, lo que dice el banco, y el agujero entre los dos.
+ *
+ * `dif` positivo es lo que falta cargar; negativo, lo que sobra —dos veces el
+ * mismo consumo, o un pago que el banco todavia no acredito—. Los dos casos
+ * importan y por eso no se recorta a cero: un total que sobra tambien es un
+ * error, y silenciarlo lo deja adentro para siempre.
+ */
+export function brechaDeTarjeta(txs, tarjeta, per, declarados, moneda = 'ARS') {
+  const app = totalTarjetaEnPeriodo(txs, tarjeta, per, moneda);
+  const dec = saldoDeclarado(declarados, tarjeta.id, per);
+  if (!dec) return { app, banco: null, cuando: null, dif: 0, total: app };
+  return { app, banco: dec.monto, cuando: dec.cuando,
+           dif: round2(dec.monto - app),
+           // El que se paga es el del banco. Es todo el punto de anotarlo.
+           total: dec.monto };
+}
+
+/**
  * Cuanto de un resumen ya estaba comprometido antes de que empezara.
  *
  * Son las cuotas de compras de meses anteriores: el resumen nuevo no arranca
@@ -376,7 +420,8 @@ export function deudaFutura(txs, tarjetas, moneda = 'ARS', ref = hoy(), meses = 
  * consumido $595.729 contra un proximo resumen de $394.463: los $201.266 de
  * mas son cuotas de meses siguientes que ya tienen el limite tomado.
  */
-export function limiteDeTarjeta(tarjeta, txs, ref = hoy(), moneda = 'ARS', pagado = 0) {
+export function limiteDeTarjeta(tarjeta, txs, ref = hoy(), moneda = 'ARS', pagado = 0,
+                                extra = 0) {
   const limite = Number(tarjeta.limite) || 0;
   let consumido = 0;
   for (const tx of txs) {
@@ -384,7 +429,9 @@ export function limiteDeTarjeta(tarjeta, txs, ref = hoy(), moneda = 'ARS', pagad
     for (const c of cronograma(tx, tarjeta, ref)) if (c.pendiente) consumido += c.monto;
   }
   // Pagar el resumen libera el limite en el momento, no cuando vence.
-  consumido = round2(Math.max(0, consumido - (Number(pagado) || 0)));
+  // `extra` es lo que el banco dice de mas que lo cargado: son consumos que
+  // existen y ya estan comiendo el limite aunque todavia no se sepa cuales.
+  consumido = round2(Math.max(0, consumido - (Number(pagado) || 0) + (Number(extra) || 0)));
   return { limite, consumido, disponible: round2(limite - consumido),
            usado: limite > 0 ? Math.round((consumido / limite) * 100) : 0 };
 }
@@ -761,7 +808,7 @@ export function debitosPrevistos(recurrings, txs, tarjeta, ciclo, ref = hoy()) {
  * tarjeta le financie el mes.
  */
 export function plataLibre(cuentas, txs, recurrings, pagos, ref = hoy(), moneda = 'ARS',
-                           fondos = []) {
+                           fondos = [], declarados = {}) {
   const propias = (cuentas || []).filter(c => c.activo !== false && (c.moneda || 'ARS') === moneda);
   let enCuentas = 0;
   for (const c of propias) {
@@ -773,9 +820,16 @@ export function plataLibre(cuentas, txs, recurrings, pagos, ref = hoy(), moneda 
   for (const t of propias) {
     if (t.tipo !== 'credito') continue;
     const cerrado = resumenAPagar(t, ref);
-    if (cerrado) resumenes += faltaPagarDeResumen(txs, t, cerrado, moneda);
+    if (cerrado) {
+      const falta = faltaPagarDeResumen(txs, t, cerrado, moneda);
+      // Si se anoto lo que dice el banco, ESE es el que se paga: sumar el de
+      // la app seria apartar cien mil pesos menos de los que van a salir.
+      const b = brechaDeTarjeta(txs, t, periodo(cerrado.vence), declarados, moneda);
+      resumenes += b.banco != null && falta > 0
+        ? Math.max(0, round2(falta + b.dif)) : falta;
+    }
     const enCurso = proximoCiclo(t, ref);
-    proximo += totalTarjetaEnPeriodo(txs, t, periodo(enCurso.vence), moneda);
+    proximo += brechaDeTarjeta(txs, t, periodo(enCurso.vence), declarados, moneda).total;
     debitos += debitosPrevistos(recurrings, txs, t, enCurso, ref).total;
   }
 

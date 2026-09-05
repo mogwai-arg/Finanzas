@@ -3,11 +3,11 @@
 // El grafico muestra lo que YA debes, no lo que gastaste: las barras bajan
 // solas a medida que se terminan las cuotas.
 // =====================================================================
-import { h, icono, iconoDe, hoja } from '../ui.js';
-import { state } from '../db.js';
+import { h, icono, iconoDe, hoja, campo, aviso, confirmar } from '../ui.js';
+import { state, guardar } from '../db.js';
 import * as F from '../finance.js';
 import { plata, plataPartida, diasHasta, fechaISO, mesCorto, periodoLargo, buscar,
-         fechaRelativa, tituloTx, dondeTx } from '../formato.js';
+         fechaRelativa, tituloTx, dondeTx, aNumero, hoyISO } from '../formato.js';
 import { irA } from '../ruteo.js';
 import { formCuenta } from './formularios.js';
 import { formImportarResumen } from './importar.js';
@@ -45,6 +45,7 @@ export function vistaTarjeta(root, { id }) {
     plastico(t, hoy, false),
     faltaElCierre(t),
     limite(t, hoy),
+    loQueDiceElBanco(t, hoy),
     consumosDelCiclo(t, hoy),
     comparativa([t], hoy, 'Contra el mes pasado'),
     debitosQueVienen(t, hoy),
@@ -97,10 +98,16 @@ function plastico(t, hoy, linkear) {
   // Sin cierre cargado no hay resumen que mostrar: en vez de un cero que
   // parece un dato, se muestra todo lo que hay y se pide la fecha que falta.
   const sinCiclo = !F.tieneCiclo(t);
+  // Lo que dice el banco de este resumen, si se anoto. Manda sobre lo cargado
+  // porque es lo que se paga; la diferencia se escribe abajo y no se
+  // disimula.
+  const b = sinCiclo ? null
+    : F.brechaDeTarjeta(state.transactions, t, F.periodo(foco.vence),
+                        state.settings?.saldos_tarjeta, moneda);
   const total = sinCiclo
     ? todoLoQueDebe(t)
-    : aPagar ? falta
-             : F.totalTarjetaEnPeriodo(state.transactions, t, F.periodo(foco.vence), moneda);
+    : aPagar ? (b.banco != null ? Math.max(0, F.round2(falta + b.dif)) : falta)
+             : b.total;
   const { simbolo, numero } = plataPartida(
     (t.moneda || 'ARS') === 'USD' ? total : Math.round(total), t.moneda || 'ARS');
   const dv = diasHasta(isoDe(foco.vence), hoy);
@@ -144,7 +151,15 @@ function plastico(t, hoy, linkear) {
         previstos.total > 0 ? h('div', h('span', 'Faltan caer'),
           h('b', `${plata(Math.round(previstos.total), moneda)} de débitos`)) : null,
         pagado > 0 ? h('div', h('span', 'Pagaste'),
-          h('b', `${plata(Math.round(pagado), moneda)} · del ${fmt(cerrado.cierre)}`)) : null));
+          h('b', `${plata(Math.round(pagado), moneda)} · del ${fmt(cerrado.cierre)}`)) : null),
+    // Si el numero de arriba es el del banco, tiene que decirlo: un total que
+    // no se puede sumar con la lista de abajo y no avisa se lee como un error
+    // de la app.
+    b && b.banco != null ? h('div.foot', { style: { marginTop: '2px' } },
+      h('div', h('span', 'Lo dice el banco'),
+        h('b', b.dif === 0 ? 'coincide con lo cargado'
+          : b.dif > 0 ? `faltan ${plata(Math.round(b.dif), moneda)} por aparecer`
+                      : `${plata(Math.round(-b.dif), moneda)} de más acá`))) : null);
   return cc;
 }
 
@@ -182,8 +197,15 @@ function faltaElCierre(t) {
 // ------------------------------------------------------------ limite
 function limite(t, hoy) {
   if (!t.limite) return null;
-  const { moneda, pagado } = estadoTarjeta(t, hoy);
-  const l = F.limiteDeTarjeta(t, state.transactions, hoy, moneda, pagado);
+  const { moneda, pagado, aPagar } = estadoTarjeta(t, hoy);
+  // Lo que el banco dice de mas tambien esta comiendo el limite: son consumos
+  // que existen. Sin esto, la tarjeta decia "te quedan 5 millones" con cien
+  // mil pesos consumidos que la app no habia visto.
+  const foco = aPagar || F.proximoCiclo(t, hoy);
+  const dif = F.tieneCiclo(t)
+    ? F.brechaDeTarjeta(state.transactions, t, F.periodo(foco.vence),
+                        state.settings?.saldos_tarjeta, moneda).dif : 0;
+  const l = F.limiteDeTarjeta(t, state.transactions, hoy, moneda, pagado, dif);
   return h('section',
     h('div.ghead', 'Límite'),
     h('div.grp.pad',
@@ -402,6 +424,119 @@ function proximosResumenes(t, hoy) {
  * El mes pasado completo va igual, en gris: es a donde vas si seguis asi, y
  * sin eso el numero no se puede ubicar en ningun lado.
  */
+/**
+ * Anotar lo que dice el banco de un resumen que todavia no cerro.
+ *
+ * El resumen no se puede bajar hasta que cierra, pero el saldo en curso la
+ * app del banco lo muestra desde el dia uno. Cuando no coinciden —un consumo
+ * que no llego por correo, un ajuste, una compra vieja que cayo en este
+ * ciclo— hay que guiarse por el del banco, que es el que se paga, y no hay
+ * forma de encontrar a mano donde estan los cien mil que faltan.
+ *
+ * Se anota el numero del banco y ESE pasa a ser el total. Lo cargado no se
+ * toca y no se le inventa una fila: una fila sin comprobante es plata que
+ * despues aparece en el mes, en las estadisticas y en el presupuesto sin que
+ * nadie la haya gastado. La diferencia queda escrita, con nombre, hasta que
+ * llegue el resumen.
+ */
+function loQueDiceElBanco(t, hoy) {
+  if (!F.tieneCiclo(t)) return null;
+  const moneda = t.moneda || 'ARS';
+  const { aPagar } = estadoTarjeta(t, hoy);
+  const foco = aPagar || F.proximoCiclo(t, hoy);
+  const per = F.periodo(foco.vence);
+  const b = F.brechaDeTarjeta(state.transactions, t, per,
+                              state.settings?.saldos_tarjeta, moneda);
+
+  const guardarSaldo = async monto => {
+    const todos = { ...(state.settings?.saldos_tarjeta || {}) };
+    const dePer = { ...(todos[t.id] || {}) };
+    if (monto == null) delete dePer[per];
+    else dePer[per] = { monto, cuando: hoyISO() };
+    // Solo los tres ultimos resumenes: uno de hace un ano no sirve para nada
+    // y hace crecer la fila para siempre.
+    const vivos = Object.keys(dePer).sort().slice(-3);
+    todos[t.id] = Object.fromEntries(vivos.map(k => [k, dePer[k]]));
+    await guardar('settings', { ...(state.settings || {}), saldos_tarjeta: todos });
+    aviso(monto == null ? 'Borrado' : 'Guardado');
+  };
+
+  const abrir = () => {
+    const inp = h('input', { type: 'text', inputmode: 'decimal',
+                             placeholder: '0',
+                             value: b.banco != null ? String(b.banco) : '' });
+    const cerrar = hoja(`Lo que dice el banco · ${periodoLargo(per)}`, h('div.flow',
+      h('div.small.mut', { style: { lineHeight: '1.55' } },
+        'El saldo del resumen en curso, como lo muestra la app del banco. Pasa ',
+        'a ser el total de la tarjeta: es el que vas a pagar.'),
+      campo('Saldo según el banco', inp),
+      h('div.small.mut', { style: { lineHeight: '1.55' } },
+        'Acá tenés cargados ', h('b', plata(Math.round(b.app), moneda)),
+        '. No se toca ni se le agrega nada: una fila sin comprobante después ',
+        'aparece en el mes y en las estadísticas sin que nadie la haya gastado. ',
+        'La diferencia queda anotada hasta que subas el resumen, y ahí se cierra sola.'),
+      h('button.btn', { onclick: async () => {
+        const n = aNumero(inp.value);
+        if (inp.value.trim() && n == null) return aviso('No entendí ese número');
+        await guardarSaldo(inp.value.trim() ? n : null);
+        cerrar(); irA(`/tarjetas/${t.id}`);
+      } }, 'Guardar'),
+      b.banco != null ? h('button.btn.sec', { onclick: async () => {
+        if (!await confirmar('¿Borrar lo anotado y volver a lo cargado?', 'Borrar')) return;
+        await guardarSaldo(null); cerrar(); irA(`/tarjetas/${t.id}`);
+      } }, 'Borrar lo anotado') : null));
+  };
+
+  if (b.banco == null) {
+    return h('section',
+      h('button.li', { style: { background: 'var(--card)',
+                                borderRadius: 'var(--r-tarjeta)' }, onclick: abrir },
+        h('div.av', icono('banco', 17)),
+        h('div.m', h('div.t', '¿El banco dice otro número?'),
+          h('div.s', 'Anotalo y mando ese, hasta que puedas bajar el resumen')),
+        h('span.chev', icono('chev', 15))));
+  }
+
+  const igual = b.dif === 0;
+  return h('section',
+    h('div.ghead', 'Lo que dice el banco',
+      h('span.mut', { style: { textTransform: 'none', letterSpacing: '0' } },
+        b.cuando ? `anotado ${fechaRelativa(b.cuando, hoy)}` : '')),
+    h('div.grp.pad',
+      h('div', { style: { display: 'flex', justifyContent: 'space-between',
+                          alignItems: 'baseline', gap: '10px' } },
+        h('span.small.mut', 'El banco'),
+        h('span.tabnum', { style: { fontWeight: '700', fontSize: '17px' } },
+          plata(Math.round(b.banco), moneda))),
+      h('div', { style: { display: 'flex', justifyContent: 'space-between',
+                          alignItems: 'baseline', gap: '10px', marginTop: '6px' } },
+        h('span.small.mut', 'Cargado acá'),
+        h('span.tabnum', { style: { color: 'var(--tx2)' } },
+          plata(Math.round(b.app), moneda))),
+      h('div', { style: { display: 'flex', justifyContent: 'space-between',
+                          alignItems: 'baseline', gap: '10px', marginTop: '6px',
+                          paddingTop: '8px', borderTop: '1px solid var(--line)' } },
+        h('span.small', { style: { fontWeight: '600' } },
+          igual ? 'Coincide' : b.dif > 0 ? 'Falta cargar' : 'Cargado de más'),
+        h('span.tabnum', { style: { fontWeight: '700',
+                                    color: igual ? 'var(--pos)' : 'var(--amb)' } },
+          igual ? '—' : plata(Math.round(Math.abs(b.dif)), moneda))),
+
+      h('div.small.mut', { style: { marginTop: '11px', lineHeight: '1.5' } },
+        igual
+          ? 'Lo cargado da exactamente lo que dice el banco. '
+          : b.dif > 0
+            ? 'Esa diferencia ya está contada en el total y en la plata libre, '
+              + 'aunque no se sepa todavía de qué es. '
+            : 'Puede haber algo cargado dos veces, o un pago que el banco '
+              + 'todavía no acreditó. ',
+        'Cuando subas el resumen de ', periodoLargo(per),
+        ', la app compara y lo cierra sola.'),
+
+      h('button.btn.sec', { style: { marginTop: '12px' }, onclick: abrir },
+        'Cambiar el número')));
+}
+
 const mayuscula = t => String(t).charAt(0).toUpperCase() + String(t).slice(1);
 
 function comparativa(tarjetas, hoy, titulo) {

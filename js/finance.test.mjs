@@ -1501,4 +1501,74 @@ t('sin tarjetas no hay nada que comparar', () => {
   assert.equal(F.gastoDeTarjetas(COMPRAS, [], new Date(2026, 8, 14)), null);
 });
 
+// =====================================================================
+// LO QUE DICE EL BANCO DE UN RESUMEN QUE NO CERRO
+// =====================================================================
+console.log('\nSALDO DECLARADO POR EL BANCO');
+
+const MASTER_TJ = { id: 'master', tipo: 'credito', moneda: 'ARS',
+             cierre_dia: 1, vencimiento_dia: 9 };
+const CONSUMOS_TJ = [
+  { fecha: '2026-09-03', tipo: 'gasto', account_id: 'master', monto: 60000, moneda: 'ARS' },
+  { fecha: '2026-09-08', tipo: 'gasto', account_id: 'master', monto: 102326, moneda: 'ARS' }
+];
+const PER_TJ = F.periodo(F.proximoCiclo(MASTER_TJ, new Date(2026, 8, 14)).vence);
+
+t('sin anotar nada, el total es lo cargado', () => {
+  const b = F.brechaDeTarjeta(CONSUMOS_TJ, MASTER_TJ, PER_TJ, {}, 'ARS');
+  assert.equal(b.app, 162326);
+  assert.equal(b.banco, null);
+  assert.equal(b.dif, 0);
+  assert.equal(b.total, 162326);
+});
+
+t('anotado, manda el del banco y la diferencia queda con nombre', () => {
+  // Es el caso real: la app dice 162.326 y el banco 265.000. Se paga el del
+  // banco; los 102.674 que no se encuentran quedan escritos, no escondidos.
+  const dec = { master: { [PER_TJ]: { monto: 265000, cuando: '2026-09-14' } } };
+  const b = F.brechaDeTarjeta(CONSUMOS_TJ, MASTER_TJ, PER_TJ, dec, 'ARS');
+  assert.equal(b.app, 162326);
+  assert.equal(b.banco, 265000);
+  assert.equal(b.dif, 102674);
+  assert.equal(b.total, 265000);
+});
+
+t('si el banco dice MENOS, tambien se ve: algo esta cargado de mas', () => {
+  // No se recorta a cero. Un total que sobra tambien es un error, y
+  // silenciarlo lo deja adentro para siempre.
+  const dec = { master: { [PER_TJ]: { monto: 100000 } } };
+  const b = F.brechaDeTarjeta(CONSUMOS_TJ, MASTER_TJ, PER_TJ, dec, 'ARS');
+  assert.equal(b.dif, -62326);
+  assert.equal(b.total, 100000);
+});
+
+t('lo anotado para OTRO resumen no se aplica a este', () => {
+  const dec = { master: { '2099-01': { monto: 999999 } } };
+  assert.equal(F.brechaDeTarjeta(CONSUMOS_TJ, MASTER_TJ, PER_TJ, dec, 'ARS').banco, null);
+});
+
+t('un cero es un dato y un vacio no', () => {
+  // Cero es "el banco dice que no debo nada", que es distinto de no haberlo
+  // anotado. Un texto vacio o una letra no son ninguna de las dos cosas.
+  assert.equal(F.saldoDeclarado({ m: { p: { monto: 0 } } }, 'm', 'p').monto, 0);
+  assert.equal(F.saldoDeclarado({ m: { p: { monto: '' } } }, 'm', 'p'), null);
+  assert.equal(F.saldoDeclarado({ m: { p: { monto: -5 } } }, 'm', 'p'), null);
+  assert.equal(F.saldoDeclarado({}, 'm', 'p'), null);
+  assert.equal(F.saldoDeclarado(null, 'm', 'p'), null);
+});
+
+t('la plata libre aparta lo que dice el banco, no lo que dice la app', () => {
+  // Sin esto, anotar la diferencia seria decorativo: la pantalla mostraria
+  // 265.000 y el "podes gastar" seguiria calculado con 162.326.
+  const cuentas = [{ id: 'caja', tipo: 'caja', moneda: 'ARS',
+                     saldo_inicial: 1000000, saldo_al: '2026-09-01', activo: true }, MASTER_TJ];
+  const ref = new Date(2026, 8, 14);
+  const sin = F.plataLibre(cuentas, CONSUMOS_TJ, [], [], ref, 'ARS', [], {});
+  const con = F.plataLibre(cuentas, CONSUMOS_TJ, [], [], ref, 'ARS', [],
+                           { master: { [PER_TJ]: { monto: 265000 } } });
+  assert.equal(sin.proximo, 162326);
+  assert.equal(con.proximo, 265000);
+  assert.equal(con.libreEstricta, sin.libreEstricta - 102674);
+});
+
 console.log(`\n${ok} pruebas OK`);

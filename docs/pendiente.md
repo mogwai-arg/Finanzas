@@ -14,7 +14,9 @@ arregló, lo que se miró y está bien, y lo que quedó abierto— en
 2. **Correr `supabase/migrations/020_cotejos_suscripciones.sql`.** Es el que
    falta si Ajustes dice *"Could not find the 'cotejos' column of 'settings'"*.
    Después, **Reintentar** en ese mismo cartel y el cambio sube.
-3. **Prender "Topes del mes"** en Ajustes → Avisos.
+3. **Correr `supabase/migrations/021_saldo_del_banco.sql`.** Para poder anotar
+   lo que dice el banco de un resumen que todavía no cerró.
+4. **Prender "Topes del mes"** en Ajustes → Avisos.
 
 ---
 
