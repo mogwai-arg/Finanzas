@@ -218,6 +218,67 @@ export function comprometidoEnPeriodo(txs, tarjeta, per, moneda = 'ARS') {
 }
 
 /**
+ * Lo que va gastado con las tarjetas contra el mismo tramo del mes pasado.
+ *
+ * La comparacion obvia —este mes contra el mes pasado entero— miente todos
+ * los meses: el dia 5 siempre vas "barbaro" y el 28 siempre vas mal, y lo
+ * unico que estas midiendo es que dia es hoy. Se compara CONTRA EL MISMO
+ * TRAMO: si hoy es 14, los primeros 14 dias de uno contra los primeros 14
+ * del otro.
+ *
+ * Se mide por COMPRA y no por cuota: una compra en doce cuentea entera el dia
+ * que la hiciste, porque eso es lo que decidiste ese dia. Lo que vas a pagar
+ * mes a mes es otra pregunta y tiene su propia pantalla —las cuotas
+ * comprometidas—; mezclarlas haria que un mes sin comprar nada se viera igual
+ * que uno con tres compras chicas.
+ *
+ * Tambien vuelve el mes pasado COMPLETO, que es contra lo que uno se compara
+ * de verdad: "voy 486.000 y el mes pasado terminaste en 892.000" dice a donde
+ * vas, y el tramo dice si vas mas rapido o mas lento que entonces.
+ */
+export function gastoDeTarjetas(txs, tarjetas, ref = hoy(), moneda = 'ARS') {
+  const ids = new Set((tarjetas || []).filter(t => t && t.id).map(t => t.id));
+  if (!ids.size) return null;
+
+  const per = periodo(ref);
+  const previo = periodoSuma(per, -1);
+  const dia = ref.getDate();
+  // Febrero contra enero: el dia 30 no existe en febrero. Se corta en el
+  // ultimo dia que los dos meses tienen, para que el tramo sea el mismo.
+  const [y, m] = previo.split('-').map(Number);
+  const largoPrevio = new Date(y, m, 0).getDate();
+  const corte = Math.min(dia, largoPrevio);
+
+  const sumar = (p, hastaDia) => {
+    let total = 0, cuantos = 0;
+    for (const tx of txs || []) {
+      if (tx.tipo !== 'gasto' || !ids.has(tx.account_id)) continue;
+      if (monedaDe(tx) !== moneda) continue;
+      const f = parseFecha(tx.fecha);
+      if (periodo(f) !== p || f.getDate() > hastaDia) continue;
+      total += Math.abs(Number(tx.monto) || 0);
+      cuantos++;
+    }
+    return { total: round2(total), cuantos };
+  };
+
+  const ahora = sumar(per, dia);
+  const tramo = sumar(previo, corte);
+  const completo = sumar(previo, 31);
+
+  return {
+    per, previo, dia, corte,
+    ahora, tramo, completo,
+    dif: round2(ahora.total - tramo.total),
+    // Sin nada el mes pasado no hay porcentaje que calcular: "infinito por
+    // ciento mas" no es un dato. Se devuelve null y la pantalla lo dice.
+    difPct: tramo.total > 0 ? (ahora.total - tramo.total) / tramo.total : null,
+    // Que parte del mes pasado ENTERO ya llevas gastada.
+    delTotalPrevio: completo.total > 0 ? ahora.total / completo.total : null
+  };
+}
+
+/**
  * Que compras componen ese compromiso, para poder abrirlo.
  *
  * Un total no se puede discutir; una lista si. "88.728 en cuotas" invita a

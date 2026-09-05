@@ -12,6 +12,7 @@ import { irA } from '../ruteo.js';
 import { formCuenta } from './formularios.js';
 import { formImportarResumen } from './importar.js';
 import { formMovimiento } from './form-movimiento.js';
+import { barrasHorizontales } from '../graficos.js';
 
 const isoDe = d => fechaISO(d);
 
@@ -30,6 +31,7 @@ export function vistaTarjetas(root) {
   }
   root.append(h('div.flow',
     ...tarjetas.map(t => plastico(t, hoy, true)),
+    comparativa(tarjetas, hoy, 'Gasto con las tarjetas'),
     deudaTotal(tarjetas, hoy),
     h('button.btn.sec', { onclick: () => formCuenta() }, icono('mas', 17), 'Agregar tarjeta'),
     h('button.btn.sec', { onclick: () => formImportarResumen() }, icono('recibo', 17), 'Importar un resumen')));
@@ -44,6 +46,7 @@ export function vistaTarjeta(root, { id }) {
     faltaElCierre(t),
     limite(t, hoy),
     consumosDelCiclo(t, hoy),
+    comparativa([t], hoy, 'Contra el mes pasado'),
     debitosQueVienen(t, hoy),
     cuotasVivas(t, hoy),
     proximosResumenes(t, hoy),
@@ -387,6 +390,80 @@ function proximosResumenes(t, hoy) {
 }
 
 // -------------------------------------------------------- deuda total
+/**
+ * Lo que va gastado este mes contra el mismo tramo del pasado.
+ *
+ * La comparacion que uno hace sola —"llevo 486.000, el mes pasado gaste
+ * 892.000"— miente todos los meses: el dia 5 siempre vas barbaro y el 28
+ * siempre vas mal, y lo unico que estas midiendo es que dia es hoy. Por eso
+ * la barra del medio es el mes pasado A LA MISMA ALTURA, y el titular sale
+ * de esa y no del mes entero.
+ *
+ * El mes pasado completo va igual, en gris: es a donde vas si seguis asi, y
+ * sin eso el numero no se puede ubicar en ningun lado.
+ */
+const mayuscula = t => String(t).charAt(0).toUpperCase() + String(t).slice(1);
+
+function comparativa(tarjetas, hoy, titulo) {
+  const moneda = 'ARS';
+  const r = F.gastoDeTarjetas(state.transactions, tarjetas, hoy, moneda);
+  if (!r) return null;
+  // Sin nada de un lado ni del otro no hay comparacion, hay una pantalla
+  // vacia con dos ceros adentro.
+  if (!r.ahora.total && !r.completo.total) return null;
+
+  const dias = `${r.dia} ${r.dia === 1 ? 'día' : 'días'}`;
+  const cuantas = n => `${n} ${n === 1 ? 'compra' : 'compras'}`;
+  const sube = r.difPct != null && r.difPct > 0;
+  // "más" y "menos" escritos, y no un signo. Un "-79 %" con guion se lee como
+  // una raya tanto como como un menos, y es la linea que contesta la pregunta.
+  const titular = r.difPct == null
+    ? (r.completo.total > 0 ? 'El mes pasado, a esta altura, no habías cargado nada'
+                            : 'Es el primer mes con movimientos de tarjeta')
+    : `${Math.abs(Math.round(r.difPct * 100))} % ${sube ? 'más' : 'menos'} ` +
+      'que a esta altura del mes pasado';
+
+  return h('section',
+    h('div.ghead', titulo,
+      h('span.mut', { style: { textTransform: 'none', letterSpacing: '0' } },
+        `a los ${dias}`)),
+    h('div.grp.pad',
+      h('div.cifra', ...(({ simbolo, numero }) => [h('em', simbolo), numero])(
+        plataPartida(r.ahora.total, moneda))),
+      h('div.small', { style: { marginTop: '4px', fontWeight: '600',
+                                color: r.difPct == null ? 'var(--tx2)'
+                                     : sube ? 'var(--amb)' : 'var(--pos)' } },
+        titular),
+
+      // Las dos barras son LA comparacion, y nada mas. El mes pasado entero
+      // estuvo un rato de tercera barra y fue peor: al ser la mas grande fija
+      // la escala, y las dos que hay que comparar quedaban aplastadas contra
+      // la izquierda. Va escrito abajo, que es donde un dato de contexto no
+      // le roba el grafico al dato principal.
+      h('div', { style: { marginTop: '14px' } }, barrasHorizontales([
+        { etiqueta: 'Este mes', monto: r.ahora.total,
+          nota: cuantas(r.ahora.cuantos) },
+        { etiqueta: 'El pasado, a la misma altura', monto: r.tramo.total,
+          color: 'var(--cat-otras)',
+          // Cuando los meses no miden lo mismo, el tramo se corta antes: hay
+          // que decirlo o el numero parece mal calculado.
+          nota: r.corte !== r.dia
+            ? `${cuantas(r.tramo.cuantos)} · los primeros ${r.corte} días, hasta donde llega ese mes`
+            : cuantas(r.tramo.cuantos) }
+      ], { moneda })),
+
+      r.completo.total > 0 ? h('div.small.mut',
+        { style: { marginTop: '12px', lineHeight: '1.5' } },
+        mayuscula(periodoLargo(r.previo)) + ' terminó en ',
+        h('b', { style: { color: 'var(--tx)' } }, plata(Math.round(r.completo.total), moneda)),
+        r.delTotalPrevio != null
+          ? `: llevás el ${Math.round(r.delTotalPrevio * 100)} % de eso.` : '.') : null,
+
+      h('div.small.mut', { style: { marginTop: '8px', lineHeight: '1.5' } },
+        'Cuenta la compra el día que la hiciste, entera aunque sea en cuotas. ',
+        'Lo que vas a pagar mes a mes son las cuotas comprometidas.')));
+}
+
 function deudaTotal(tarjetas, hoy) {
   const deuda = F.deudaFutura(state.transactions, tarjetas, 'ARS', hoy, 12);
   if (!deuda.length) return null;

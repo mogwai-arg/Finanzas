@@ -1419,4 +1419,86 @@ t('heredar no toca el mes del que vino', () => {
   assert.deepEqual(TOPES, copia);
 });
 
+// =====================================================================
+// TARJETAS: ESTE MES CONTRA EL MISMO TRAMO DEL PASADO
+// =====================================================================
+console.log('\nGASTO CON TARJETAS');
+
+const VISA = { id: 'visa', tipo: 'credito' };
+const MASTER = { id: 'master', tipo: 'credito' };
+const COMPRAS = [
+  { fecha: '2026-09-03', tipo: 'gasto', account_id: 'visa', monto: 100000, moneda: 'ARS' },
+  { fecha: '2026-09-12', tipo: 'gasto', account_id: 'visa', monto: 386300, moneda: 'ARS', cuotas: 12 },
+  { fecha: '2026-09-20', tipo: 'gasto', account_id: 'visa', monto: 999, moneda: 'ARS' },
+  { fecha: '2026-08-05', tipo: 'gasto', account_id: 'visa', monto: 398100, moneda: 'ARS' },
+  { fecha: '2026-08-25', tipo: 'gasto', account_id: 'visa', monto: 494300, moneda: 'ARS' },
+  { fecha: '2026-09-10', tipo: 'gasto', account_id: 'caja', monto: 50000, moneda: 'ARS' },
+  { fecha: '2026-09-10', tipo: 'ingreso', account_id: 'visa', monto: 700000, moneda: 'ARS' },
+  { fecha: '2026-09-11', tipo: 'gasto', account_id: 'visa', monto: 300, moneda: 'USD' }
+];
+
+t('compara contra el MISMO TRAMO y no contra el mes entero', () => {
+  // Es todo el punto: contra el mes pasado completo, el dia 5 siempre vas
+  // barbaro y el 28 siempre vas mal. Lo unico que mide eso es que dia es hoy.
+  const r = F.gastoDeTarjetas(COMPRAS, [VISA], new Date(2026, 8, 14));
+  assert.equal(r.ahora.total, 486300);
+  assert.equal(r.tramo.total, 398100);      // solo el 5 de agosto, no el 25
+  assert.equal(r.completo.total, 892400);   // agosto entero, aparte
+  assert.equal(r.dif, 88200);
+});
+
+t('lo que todavia no paso no cuenta', () => {
+  const r = F.gastoDeTarjetas(COMPRAS, [VISA], new Date(2026, 8, 14));
+  assert.equal(r.ahora.cuantos, 2);         // la compra del 20 queda afuera
+});
+
+t('una compra en cuotas cuenta entera el dia que se hizo', () => {
+  // Es lo que decidiste ese dia. Lo que vas a pagar mes a mes es otra
+  // pregunta y tiene su propia pantalla.
+  const r = F.gastoDeTarjetas(COMPRAS, [VISA], new Date(2026, 8, 14));
+  assert.equal(r.ahora.total, 100000 + 386300);
+});
+
+t('lo que no es de la tarjeta no entra, y un ingreso tampoco', () => {
+  const r = F.gastoDeTarjetas(COMPRAS, [VISA], new Date(2026, 8, 14));
+  // El gasto de 'caja', el ingreso y el consumo en dolares quedan afuera.
+  assert.equal(r.ahora.cuantos, 2);
+  const usd = F.gastoDeTarjetas(COMPRAS, [VISA], new Date(2026, 8, 14), 'USD');
+  assert.equal(usd.ahora.total, 300);
+});
+
+t('suma varias tarjetas juntas', () => {
+  const dos = [...COMPRAS,
+    { fecha: '2026-09-08', tipo: 'gasto', account_id: 'master', monto: 25000, moneda: 'ARS' }];
+  const r = F.gastoDeTarjetas(dos, [VISA, MASTER], new Date(2026, 8, 14));
+  assert.equal(r.ahora.total, 511300);
+});
+
+t('el dia 30 contra febrero corta donde los dos meses llegan', () => {
+  // Sin esto, el tramo de febrero se "cortaria" en un dia que no existe y la
+  // comparacion seria de 30 dias contra 28: siempre a favor del mes corto.
+  const txs = [
+    { fecha: '2026-03-30', tipo: 'gasto', account_id: 'visa', monto: 10, moneda: 'ARS' },
+    { fecha: '2026-02-28', tipo: 'gasto', account_id: 'visa', monto: 7, moneda: 'ARS' }
+  ];
+  const r = F.gastoDeTarjetas(txs, [VISA], new Date(2026, 2, 30));
+  assert.equal(r.dia, 30);
+  assert.equal(r.corte, 28);
+  assert.equal(r.tramo.total, 7);
+});
+
+t('sin nada el mes pasado no inventa un porcentaje', () => {
+  // "Infinito por ciento mas" no es un dato.
+  const solo = [{ fecha: '2026-09-03', tipo: 'gasto', account_id: 'visa',
+                  monto: 100000, moneda: 'ARS' }];
+  const r = F.gastoDeTarjetas(solo, [VISA], new Date(2026, 8, 14));
+  assert.equal(r.difPct, null);
+  assert.equal(r.delTotalPrevio, null);
+  assert.equal(r.ahora.total, 100000);
+});
+
+t('sin tarjetas no hay nada que comparar', () => {
+  assert.equal(F.gastoDeTarjetas(COMPRAS, [], new Date(2026, 8, 14)), null);
+});
+
 console.log(`\n${ok} pruebas OK`);
