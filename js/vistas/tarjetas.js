@@ -291,6 +291,7 @@ function cuotasVivas(t, hoy) {
  * consumos, o que se hayan cargado en la cuenta del mismo banco en vez de en
  * la tarjeta. Viendo la lista, el error salta.
  */
+const A_LA_VISTA = 12;
 function consumosDelCiclo(t, hoy) {
   const { ciclo: c, aPagar, moneda } = estadoTarjeta(t, hoy);
   const per = F.periodo(c.vence);
@@ -317,20 +318,46 @@ function consumosDelCiclo(t, hoy) {
           'fijate que lo hayas puesto en la tarjeta y no en la cuenta del mismo banco: ',
           'en el formulario dicen el tipo al lado del nombre.')));
   }
+  const fila = f => h('button.li', {
+    onclick: () => formMovimiento(state.transactions.find(x => x.id === f.tx.id))
+  },
+    h('div.av', icono(iconoDe(f.tx.comercio || tituloTx(f.tx)), 17)),
+    h('div.m',
+      h('div.t', tituloTx(f.tx)),
+      h('div.s', [dondeTx(f.tx), fechaRelativa(f.tx.fecha, hoy),
+                  f.total > 1 ? `cuota ${f.nro} de ${f.total}` : null]
+                   .filter(Boolean).join(' · '))),
+    h('div.v', plata(moneda === 'USD' ? f.monto : Math.round(f.monto), moneda)));
+
+  // El resto, detras de un boton. Antes decia "y 14 más" en un div pelado:
+  // no se podia tocar. Y esta pantalla se abre justamente para controlar el
+  // resumen consumo por consumo, asi que esconder catorce sin forma de verlos
+  // es esconder justo lo que se vino a mirar.
+  const cuantos = filas.length - A_LA_VISTA;
+  const texto = h('div.t', { style: { color: 'var(--brand)' } },
+                  `Ver los otros ${cuantos}`);
+  // Escondidas de a una y no adentro de una caja: asi siguen siendo hermanas
+  // de las de arriba y las lineas que separan cada fila caen donde tienen que
+  // caer, abierto y cerrado.
+  const guardadas = filas.slice(A_LA_VISTA).map(f => {
+    const n = fila(f); n.hidden = true; return n;
+  });
+  const masMenos = guardadas.length ? h('button.li', {
+    'aria-expanded': 'false',
+    onclick: () => {
+      const abrir = guardadas[0].hidden;
+      for (const n of guardadas) n.hidden = !abrir;
+      masMenos.setAttribute('aria-expanded', String(abrir));
+      texto.textContent = abrir ? 'Ver menos' : `Ver los otros ${cuantos}`;
+    }
+  }, h('div.m', texto), h('span.chev', icono('chev', 15))) : null;
+
   return h('section',
-    h('div.ghead', titulo, h('span.mut', `${filas.length}`)),
-    h('div.grp', filas.slice(0, 12).map(f => h('button.li', {
-      onclick: () => formMovimiento(state.transactions.find(x => x.id === f.tx.id))
-    },
-      h('div.av', icono(iconoDe(f.tx.comercio || tituloTx(f.tx)), 17)),
-      h('div.m',
-        h('div.t', tituloTx(f.tx)),
-        h('div.s', [dondeTx(f.tx), fechaRelativa(f.tx.fecha, hoy),
-                    f.total > 1 ? `cuota ${f.nro} de ${f.total}` : null]
-                     .filter(Boolean).join(' · '))),
-      h('div.v', plata(moneda === 'USD' ? f.monto : Math.round(f.monto), moneda)))),
-      filas.length > 12 ? h('div.li', h('div.m', h('div.s.mut',
-        `y ${filas.length - 12} más`))) : null));
+    // Un numero suelto al lado del titulo no dice de que es.
+    h('div.ghead', titulo, h('span.mut', { style: { textTransform: 'none',
+                                                    letterSpacing: '0' } },
+      `${filas.length} ${filas.length === 1 ? 'consumo' : 'consumos'}`)),
+    h('div.grp', filas.slice(0, A_LA_VISTA).map(fila), ...guardadas, masMenos));
 }
 
 // --------------------------------------------------- proximos resumenes
