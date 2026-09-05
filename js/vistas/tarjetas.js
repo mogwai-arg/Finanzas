@@ -212,7 +212,8 @@ function plastico(t, hoy, linkear) {
   // paga aparte. Sumarlo al de pesos seria contar 850 como 850.
   const otraMoneda = moneda === 'USD' ? 'ARS' : 'USD';
   const otra = sinCiclo ? 0
-    : F.totalTarjetaEnPeriodo(state.transactions, t, F.periodo(foco.vence), otraMoneda);
+    : F.brechaDeTarjeta(state.transactions, t, F.periodo(foco.vence),
+                        state.settings?.saldos_tarjeta, otraMoneda).total;
   const { simbolo, numero } = plataPartida(
     (t.moneda || 'ARS') === 'USD' ? total : Math.round(total), t.moneda || 'ARS');
   const dc = diasHasta(isoDe(c.cierre), hoy);
@@ -592,52 +593,77 @@ function proximosResumenes(t, hoy) {
 function loQueDiceElBanco(t, hoy) {
   if (!F.tieneCiclo(t)) return null;
   const moneda = t.moneda || 'ARS';
+  const otraMoneda = moneda === 'USD' ? 'ARS' : 'USD';
   const { aPagar } = estadoTarjeta(t, hoy);
   const foco = aPagar || F.proximoCiclo(t, hoy);
   const per = F.periodo(foco.vence);
-  const b = F.brechaDeTarjeta(state.transactions, t, per,
-                              state.settings?.saldos_tarjeta, moneda);
+  const saldos = state.settings?.saldos_tarjeta;
+  const b = F.brechaDeTarjeta(state.transactions, t, per, saldos, moneda);
+  // El otro saldo de la tarjeta. Una argentina tiene dos y el banco muestra
+  // los dos: el de dolares se paga aparte y se cotiza aparte.
+  const bo = F.brechaDeTarjeta(state.transactions, t, per, saldos, otraMoneda);
+  const hayOtra = bo.app > 0 || bo.banco != null;
 
-  const guardarSaldo = async monto => {
+  const guardarSaldos = async (montoPropio, montoOtro) => {
     const todos = { ...(state.settings?.saldos_tarjeta || {}) };
     const dePer = { ...(todos[t.id] || {}) };
-    if (monto == null) delete dePer[per];
-    else dePer[per] = { monto, cuando: hoyISO() };
+    const cual = { ...(dePer[per] || {}) };
+    // La forma vieja colgaba el importe del periodo. Al escribir se pasa a la
+    // nueva, para no dejar las dos conviviendo.
+    delete cual.monto; delete cual.cuando;
+    for (const [m, v] of [[moneda, montoPropio], [otraMoneda, montoOtro]]) {
+      if (v == null) delete cual[m];
+      else cual[m] = { monto: v, cuando: hoyISO() };
+    }
+    if (Object.keys(cual).length) dePer[per] = cual; else delete dePer[per];
     // Solo los tres ultimos resumenes: uno de hace un ano no sirve para nada
     // y hace crecer la fila para siempre.
     const vivos = Object.keys(dePer).sort().slice(-3);
     todos[t.id] = Object.fromEntries(vivos.map(k => [k, dePer[k]]));
     await guardar('settings', { ...(state.settings || {}), saldos_tarjeta: todos });
-    aviso(monto == null ? 'Borrado' : 'Guardado');
   };
 
   const abrir = () => {
-    const inp = h('input', { type: 'text', inputmode: 'decimal',
-                             placeholder: '0',
-                             value: b.banco != null ? String(b.banco) : '' });
+    const campoDe = br => h('input', { type: 'text', inputmode: 'decimal',
+                                       placeholder: '0',
+                                       value: br.banco != null ? String(br.banco) : '' });
+    const inp = campoDe(b);
+    const inpOtra = hayOtra ? campoDe(bo) : null;
+    const leer = (el, m) => {
+      if (!el || !el.value.trim()) return { ok: true, valor: null };
+      const n = aNumero(el.value);
+      return n == null ? { ok: false, m } : { ok: true, valor: n };
+    };
     const cerrar = hoja(`Lo que dice el banco · ${periodoLargo(per)}`, h('div.flow',
       h('div.small.mut', { style: { lineHeight: '1.55' } },
         'El saldo del resumen en curso, como lo muestra la app del banco. Pasa ',
         'a ser el total de la tarjeta: es el que vas a pagar.'),
-      campo('Saldo según el banco', inp),
+      campo(hayOtra ? `Saldo en ${moneda === 'USD' ? 'dólares' : 'pesos'}`
+                    : 'Saldo según el banco', inp),
+      // Los dos saldos son dos numeros distintos y se pagan por separado:
+      // con un campo solo, anotar el de dolares pisaba el de pesos.
+      inpOtra ? campo(`Saldo en ${otraMoneda === 'USD' ? 'dólares' : 'pesos'}`, inpOtra) : null,
       h('div.small.mut', { style: { lineHeight: '1.55' } },
         'Acá tenés cargados ', h('b', plata(Math.round(b.app), moneda)),
+        hayOtra ? frag(' y ', h('b', plata(bo.app, otraMoneda))) : '',
         '. No se toca ni se le agrega nada: una fila sin comprobante después ',
         'aparece en el mes y en las estadísticas sin que nadie la haya gastado. ',
         'La diferencia queda anotada hasta que subas el resumen, y ahí se cierra sola.'),
       h('button.btn', { onclick: async () => {
-        const n = aNumero(inp.value);
-        if (inp.value.trim() && n == null) return aviso('No entendí ese número');
-        await guardarSaldo(inp.value.trim() ? n : null);
+        const a = leer(inp, moneda), c = leer(inpOtra, otraMoneda);
+        if (!a.ok || !c.ok) return aviso(`No entendí el saldo en ${(a.ok ? c : a).m === 'USD' ? 'dólares' : 'pesos'}`);
+        await guardarSaldos(a.valor, c.valor);
+        aviso('Guardado');
         cerrar(); irA(`/tarjetas/${t.id}`);
       } }, 'Guardar'),
-      b.banco != null ? h('button.btn.sec', { onclick: async () => {
+      (b.banco != null || bo.banco != null) ? h('button.btn.sec', { onclick: async () => {
         if (!await confirmar('¿Borrar lo anotado y volver a lo cargado?', 'Borrar')) return;
-        await guardarSaldo(null); cerrar(); irA(`/tarjetas/${t.id}`);
+        await guardarSaldos(null, null); aviso('Borrado');
+        cerrar(); irA(`/tarjetas/${t.id}`);
       } }, 'Borrar lo anotado') : null));
   };
 
-  if (b.banco == null) {
+  if (b.banco == null && bo.banco == null) {
     return h('section',
       h('button.li', { style: { background: 'var(--card)',
                                 borderRadius: 'var(--r-tarjeta)' }, onclick: abrir },
@@ -647,39 +673,56 @@ function loQueDiceElBanco(t, hoy) {
         h('span.chev', icono('chev', 15))));
   }
 
-  const igual = b.dif === 0;
-  return h('section',
-    h('div.ghead', 'Lo que dice el banco',
-      h('span.mut', { style: { textTransform: 'none', letterSpacing: '0' } },
-        b.cuando ? `anotado ${fechaRelativa(b.cuando, hoy)}` : '')),
-    h('div.grp.pad',
-      h('div', { style: { display: 'flex', justifyContent: 'space-between',
-                          alignItems: 'baseline', gap: '10px' } },
-        h('span.small.mut', 'El banco'),
-        h('span.tabnum', { style: { fontWeight: '700', fontSize: '17px' } },
-          plata(Math.round(b.banco), moneda))),
-      h('div', { style: { display: 'flex', justifyContent: 'space-between',
-                          alignItems: 'baseline', gap: '10px', marginTop: '6px' } },
-        h('span.small.mut', 'Cargado acá'),
-        h('span.tabnum', { style: { color: 'var(--tx2)' } },
-          plata(Math.round(b.app), moneda))),
+  const redondo = (n, m) => m === 'USD' ? n : Math.round(n);
+  const fila = (rot, valor, extra) => h('div',
+    { style: { display: 'flex', justifyContent: 'space-between',
+               alignItems: 'baseline', gap: '10px', ...(extra || {}) } },
+    h('span.small.mut', rot), valor);
+
+  // Un bloque por moneda: son dos saldos que se pagan por separado, y un
+  // total de dolares al lado de uno de pesos no se puede ni sumar ni comparar.
+  const bloque = (br, m, titulo, sep) => {
+    if (br.banco == null) return null;
+    const igual = br.dif === 0;
+    // La raya separa DOS bloques: arriba del primero no separa nada y deja un
+    // renglon vacio al principio de la tarjeta.
+    return h('div', { style: { marginTop: sep ? '14px' : '0',
+                               paddingTop: sep ? '12px' : '0',
+                               borderTop: sep ? '1px solid var(--line)' : '' } },
+      titulo ? h('div.ghead', { style: { margin: '0 0 8px' } }, titulo) : null,
+      fila('El banco', h('span.tabnum', { style: { fontWeight: '700', fontSize: '17px' } },
+        plata(redondo(br.banco, m), m))),
+      fila('Cargado acá', h('span.tabnum', { style: { color: 'var(--tx2)' } },
+        plata(redondo(br.app, m), m)), { marginTop: '6px' }),
       h('div', { style: { display: 'flex', justifyContent: 'space-between',
                           alignItems: 'baseline', gap: '10px', marginTop: '6px',
                           paddingTop: '8px', borderTop: '1px solid var(--line)' } },
         h('span.small', { style: { fontWeight: '600' } },
-          igual ? 'Coincide' : b.dif > 0 ? 'Falta cargar' : 'Cargado de más'),
+          igual ? 'Coincide' : br.dif > 0 ? 'Falta cargar' : 'Cargado de más'),
         h('span.tabnum', { style: { fontWeight: '700',
                                     color: igual ? 'var(--pos)' : 'var(--amb)' } },
-          igual ? '—' : plata(Math.round(Math.abs(b.dif)), moneda))),
+          igual ? '—' : plata(redondo(Math.abs(br.dif), m), m))));
+  };
+
+  const cuando = b.cuando || bo.cuando;
+  const algunaDif = (b.banco != null && b.dif !== 0) || (bo.banco != null && bo.dif !== 0);
+  return h('section',
+    h('div.ghead', 'Lo que dice el banco',
+      h('span.mut', { style: { textTransform: 'none', letterSpacing: '0' } },
+        cuando ? `anotado ${fechaRelativa(cuando, hoy)}` : '')),
+    h('div.grp.pad',
+      bloque(b, moneda, bo.banco != null
+        ? (moneda === 'USD' ? 'En dólares' : 'En pesos') : null, false),
+      bloque(bo, otraMoneda, b.banco != null
+        ? (otraMoneda === 'USD' ? 'En dólares' : 'En pesos') : null,
+        b.banco != null),
 
       h('div.small.mut', { style: { marginTop: '11px', lineHeight: '1.5' } },
-        igual
+        !algunaDif
           ? 'Lo cargado da exactamente lo que dice el banco. '
-          : b.dif > 0
-            ? 'Esa diferencia ya está contada en el total y en la plata libre, '
-              + 'aunque no se sepa todavía de qué es. '
-            : 'Puede haber algo cargado dos veces, o un pago que el banco '
-              + 'todavía no acreditó. ',
+          : 'Lo que falta ya está contado en el total y en la plata libre, '
+            + 'aunque no se sepa todavía de qué es. Si sobra, puede haber algo '
+            + 'cargado dos veces o un pago que el banco no acreditó. ',
         'Cuando subas el resumen de ', periodoLargo(per),
         ', la app compara y lo cierra sola.'),
 

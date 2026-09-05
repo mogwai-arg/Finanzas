@@ -12,7 +12,11 @@
 -- comprobante—; la diferencia queda escrita al lado, con nombre, hasta que
 -- llegue el resumen y se pueda cerrar.
 --
---   { "<account_id>": { "2026-09": { monto, cuando } } }
+--   { "<account_id>": { "2026-09": { "ARS": { monto, cuando },
+--                                    "USD": { monto, cuando } } } }
+--
+-- Por moneda: una tarjeta argentina tiene DOS saldos, el de pesos y el de
+-- dolares, y el banco muestra los dos. Se pagan por separado.
 --
 -- Por periodo de VENCIMIENTO, que es como se identifica un resumen en toda
 -- la app. Al importar el resumen de ese periodo, la app compara y lo borra.
@@ -21,4 +25,4 @@ alter table public.settings
   add column if not exists saldos_tarjeta jsonb not null default '{}'::jsonb;
 
 comment on column public.settings.saldos_tarjeta is
-  'Lo que dice el banco de un resumen en curso: { <account_id>: { <periodo>: { monto, cuando } } }.';
+  'Lo que dice el banco de un resumen en curso: { <account_id>: { <periodo>: { <moneda>: { monto, cuando } } } }.';

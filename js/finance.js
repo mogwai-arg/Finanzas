@@ -218,8 +218,16 @@ export function totalTarjetaEnPeriodo(txs, tarjeta, per, moneda = 'ARS') {
  * numero del banco pasa a ser el total —porque es el que se paga— y la
  * diferencia queda escrita al lado, con nombre, hasta que llegue el resumen.
  */
-export function saldoDeclarado(declarados, tarjetaId, per) {
-  const d = declarados && declarados[tarjetaId] && declarados[tarjetaId][per];
+export function saldoDeclarado(declarados, tarjetaId, per, moneda = 'ARS') {
+  const del = declarados && declarados[tarjetaId] && declarados[tarjetaId][per];
+  // Una tarjeta argentina tiene DOS saldos y los dos se pueden anotar: el de
+  // pesos y el de dolares. Se guardan por moneda.
+  //
+  // La forma vieja colgaba el importe directo del periodo y era siempre en
+  // pesos. Se sigue leyendo, para no perder lo que alguien ya haya anotado.
+  const d = !del ? null
+    : del.monto !== undefined ? (moneda === 'ARS' ? del : null)
+    : del[moneda];
   const crudo = d && d.monto;
   // Number('') es CERO, no NaN. Sin esto, un campo que se abrio y se cerro
   // sin escribir nada se guardaba como "el banco dice que no debes nada" y la
@@ -240,7 +248,7 @@ export function saldoDeclarado(declarados, tarjetaId, per) {
  */
 export function brechaDeTarjeta(txs, tarjeta, per, declarados, moneda = 'ARS') {
   const app = totalTarjetaEnPeriodo(txs, tarjeta, per, moneda);
-  const dec = saldoDeclarado(declarados, tarjeta.id, per);
+  const dec = saldoDeclarado(declarados, tarjeta.id, per, moneda);
   if (!dec) return { app, banco: null, cuando: null, dif: 0, total: app };
   return { app, banco: dec.monto, cuando: dec.cuando,
            dif: round2(dec.monto - app),
