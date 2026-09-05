@@ -3,7 +3,7 @@
 // cuentas y tarjetas, gastos fijos, presupuestos, promos y categorias.
 // =====================================================================
 import { h, icono, iconoDe, iconoDeCategoria, selectorDeIcono, hoja, aviso, campo,
-         select, confirmar, selectorDeDia } from '../ui.js';
+         select, confirmar, selectorDeDia, selectorDePlastico, PLASTICOS } from '../ui.js';
 import { state, guardar, borrar } from '../db.js';
 import * as F from '../finance.js';
 import { plata, plataPartida, periodoLargo, hoyISO, nombreDe, etiquetaCuenta,
@@ -83,8 +83,17 @@ export function formCuenta(a = null) {
   }
   c.tipo.addEventListener('change', actualizar);
 
+  // El color del plastico. Sin esto todas las tarjetas salian del mismo azul
+  // marino y en la pantalla eran tres rectangulos iguales: para distinguirlas
+  // habia que leer el nombre. En la billetera se distinguen de un vistazo.
+  let color = a?.color || PLASTICOS[0].hex;
   bloqueCredito.append(
     h('div.fila', campo('Marca', c.marca), campo('Últimos 4', c.ultimos4)),
+    h('div.f',
+      h('label', 'Color del plástico'),
+      selectorDePlastico(color, { alElegir: v => { color = v; } }),
+      h('div.small.mut', { style: { marginTop: '8px', lineHeight: '1.45' } },
+        'El de la tarjeta de verdad, para reconocerla sin leer el nombre.')),
     campo('Límite', c.limite),
     h('div.fila', campo('Día de cierre', c.cierre), campo('Día de vencimiento', c.venc)),
     h('div.small.mut', { style: { marginTop: '-12px', marginBottom: '16px', lineHeight: '1.45' } },
@@ -151,6 +160,7 @@ export function formCuenta(a = null) {
           nombre: c.nombre.value.trim(), tipo: c.tipo.value, moneda: c.moneda.value,
           banco: c.banco.value.trim() || null,
           marca: esCredito ? (c.marca.value || null) : null,
+          color: esCredito ? color : (a?.color || null),
           ultimos4: esCredito ? (c.ultimos4.value.trim() || null) : null,
           limite: esCredito ? (num(c.limite.value) || null) : null,
           cierre_dia: esCredito ? (Number(c.cierre.value) || null) : null,

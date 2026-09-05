@@ -3,7 +3,7 @@
 // El grafico muestra lo que YA debes, no lo que gastaste: las barras bajan
 // solas a medida que se terminan las cuotas.
 // =====================================================================
-import { h, icono, iconoDe, hoja, campo, aviso, confirmar } from '../ui.js';
+import { h, icono, iconoDe, hoja, campo, aviso, confirmar, masOscuro } from '../ui.js';
 import { state, guardar } from '../db.js';
 import * as F from '../finance.js';
 import { plata, plataPartida, diasHasta, fechaISO, mesCorto, periodoLargo, buscar,
@@ -121,7 +121,10 @@ function plastico(t, hoy, linkear) {
   const fmt = d => `${d.getDate()}/${d.getMonth() + 1}`;
 
   const cc = h('div.cc', {
-    style: { '--c1': t.color || '#2A2F52', '--c2': '#12141F',
+    // El de abajo se calcula del de arriba: un degrade de dos colores elegidos
+    // a mano sale mal la mitad de las veces, y con un plastico negro el azul
+    // fijo de antes lo volvia gris azulado.
+    style: { '--c1': t.color || '#2A2F52', '--c2': masOscuro(t.color || '#2A2F52'),
              cursor: linkear ? 'pointer' : 'default' },
     onclick: linkear ? () => irA(`/tarjetas/${t.id}`) : null },
     h('div.rowt',
@@ -147,28 +150,30 @@ function plastico(t, hoy, linkear) {
     // nuevo: una tarjeta que vuelve a cero sin explicación se lee como un
     // error, y una que arranca en 180.000 sin decir por qué, también.
     !sinCiclo && !aPagar && (pagado > 0 || comprometido > 0) &&
-      h('div.foot', { style: { marginTop: '2px' } },
+      h('div.foot.apilado', { style: { marginTop: '8px' } },
         // Un total no se puede discutir; una lista sí. Tocarlo abre de qué
         // compras está hecho ese compromiso.
         comprometido > 0 ? h('button.foot-link', {
           onclick: e => { e.stopPropagation(); hojaCuotas(t, hoy); } },
           h('span', 'De eso, en cuotas'),
           h('b', plata(Math.round(comprometido), moneda), icono('chev', 12))) : null,
+        // "de débitos" sobra cuando el rótulo dice "Faltan caer" y el importe
+        // está enfrente: era lo que forzaba el segundo renglón.
         previstos.total > 0 ? h('div', h('span', 'Faltan caer'),
-          h('b', `${plata(Math.round(previstos.total), moneda)} de débitos`)) : null,
+          h('b', plata(Math.round(previstos.total), moneda))) : null,
         pagado > 0 ? h('div', h('span', 'Pagaste'),
           h('b', `${plata(Math.round(pagado), moneda)} · del ${fmt(cerrado.cierre)}`)) : null),
     // El saldo en la OTRA moneda. En una tarjeta argentina el resumen trae dos
     // saldos que se pagan por separado, y hasta ahora la pantalla solo sabia
     // de uno: los consumos en dolares se sumaban al total en pesos, mil veces
     // mas chicos de lo que son, o no se veian en ningun lado.
-    !sinCiclo && otra > 0 ? h('div.foot', { style: { marginTop: '2px' } },
+    !sinCiclo && otra > 0 ? h('div.foot.apilado', { style: { marginTop: '5px' } },
       h('div', h('span', 'En dólares'),
         h('b', plata(otra, otraMoneda)))) : null,
     // Si el numero de arriba es el del banco, tiene que decirlo: un total que
     // no se puede sumar con la lista de abajo y no avisa se lee como un error
     // de la app.
-    b && b.banco != null ? h('div.foot', { style: { marginTop: '2px' } },
+    b && b.banco != null ? h('div.foot.apilado', { style: { marginTop: '5px' } },
       h('div', h('span', 'Lo dice el banco'),
         h('b', b.dif === 0 ? 'coincide con lo cargado'
           : b.dif > 0 ? `faltan ${plata(Math.round(b.dif), moneda)} por aparecer`

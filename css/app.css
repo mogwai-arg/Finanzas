@@ -137,7 +137,16 @@ button.li:active{background:var(--fill)}
 
 /* --------------------------------------------------------- tarjeta cc */
 .cc{border-radius:18px;padding:16px;color:#fff;position:relative;overflow:hidden;
-    background:linear-gradient(145deg,var(--c1,#2A2F52),var(--c2,#12141F))}
+    background:linear-gradient(145deg,var(--c1,#2A2F52),var(--c2,#12141F));
+    /* El canto. Una tarjeta negra sobre el fondo negro del modo oscuro se
+       quedaba sin borde y dejaba de leerse como una tarjeta. */
+    box-shadow:inset 0 0 0 1px rgba(255,255,255,.1)}
+/* Un brillo suave desde arriba a la izquierda: es lo que hace que el plástico
+   parezca plástico y no un rectángulo pintado. Muy tenue a propósito —el
+   dato es el número, no el reflejo—. */
+.cc::before{content:"";position:absolute;inset:0;pointer-events:none;
+            background:radial-gradient(120% 80% at 12% -10%,rgba(255,255,255,.14),transparent 60%)}
+.cc>*{position:relative}
 .cc .rowt{display:flex;justify-content:space-between;align-items:flex-start}
 .cc .nm{font-size:13.5px;font-weight:600;letter-spacing:-.01em}
 .cc .n4{font-size:12px;opacity:.72;letter-spacing:.09em;margin-top:2px;font-variant-numeric:tabular-nums}
@@ -147,7 +156,26 @@ button.li:active{background:var(--fill)}
 .cc .foot{display:flex;gap:20px;margin-top:14px;font-size:12px}
 .cc .foot b{display:block;font-size:13.5px;font-weight:600;margin-top:1px;font-variant-numeric:tabular-nums}
 .cc .foot span{opacity:.7}
+/* El segundo pie va APILADO, no en columnas. Cierra y Vence son dos datos
+   cortos y entran al lado; "Faltan caer $ 111.156 de débitos" al lado de
+   "De eso, en cuotas" queda en una columna angosta, parte el importe en dos
+   renglones y estira la tarjeta media pantalla. Cada dato en su renglón,
+   rótulo a la izquierda e importe a la derecha, entra en uno solo. */
+.cc .foot.apilado{flex-direction:column;gap:5px}
+.cc .foot.apilado>*{display:flex;justify-content:space-between;align-items:baseline;
+                    gap:10px;width:100%}
+.cc .foot.apilado b{display:inline-flex;margin-top:0;text-align:right}
 .cc .marca{font-size:11px;font-weight:700;letter-spacing:.1em;opacity:.75;text-transform:uppercase}
+
+/* Los colores de tarjeta, cada uno mostrado como lo que va a ser: un pedazo
+   del mismo degradé que va a tener el plástico, no un círculo de color. */
+.plasticos{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.plastico-op{border:0;border-radius:10px;min-height:52px;cursor:pointer;
+             display:flex;align-items:flex-end;padding:6px;color:#fff;
+             box-shadow:inset 0 0 0 2px transparent}
+.plastico-op .small{font-size:10.5px;font-weight:600;opacity:.85;
+                    text-shadow:0 1px 2px rgba(0,0,0,.5)}
+.plastico-op[aria-pressed=true]{box-shadow:inset 0 0 0 2px #fff,0 0 0 2px var(--brand)}
 
 /* ------------------------------------------------------------ botones */
 .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;

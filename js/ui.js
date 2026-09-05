@@ -179,6 +179,59 @@ export function selectorDeIcono(valor, { alElegir } = {}) {
   return grilla;
 }
 
+/**
+ * Los colores de tarjeta, con nombre de plastico de verdad.
+ *
+ * Antes todas salian del mismo azul marino y en la pantalla de tarjetas eran
+ * tres rectangulos iguales: para distinguirlas habia que leer el nombre. En
+ * la billetera se distinguen de un vistazo porque el plastico es negro, azul
+ * o gris, y esa es toda la ventaja que tiene una tarjeta sobre una fila de
+ * lista.
+ *
+ * No se adivinan por el banco: Galicia tiene la Eminent y la Black, que son
+ * negras, y la clasica, que es azul. Eso lo sabe el que la tiene en la mano.
+ *
+ * Se guarda un solo color —el de arriba— y el de abajo se calcula. Un
+ * degrade hecho de dos colores elegidos a mano sale mal la mitad de las
+ * veces; oscureciendo el mismo, nunca.
+ */
+export const PLASTICOS = [
+  { hex: '#33333A', nombre: 'Negra' },        // Eminent · Black · Signature
+  { hex: '#1F3A63', nombre: 'Azul noche' },   // Mercado Pago
+  { hex: '#00539C', nombre: 'Azul' },         // Galicia clasica · Visa
+  { hex: '#0F5C63', nombre: 'Petróleo' },
+  { hex: '#5A5F6B', nombre: 'Platino' },
+  { hex: '#6E5522', nombre: 'Dorada' },
+  { hex: '#6B2440', nombre: 'Bordó' },
+  { hex: '#2F4A34', nombre: 'Verde' }
+];
+
+/** El color de abajo del degrade: el mismo, oscurecido. */
+export const masOscuro = (hex, f = 0.42) => {
+  const m = String(hex || '').match(/^#?([0-9a-f]{6})$/i);
+  if (!m) return '#12141F';
+  const n = parseInt(m[1], 16);
+  const c = [(n >> 16) & 255, (n >> 8) & 255, n & 255]
+    .map(v => Math.round(v * f).toString(16).padStart(2, '0'));
+  return '#' + c.join('');
+};
+
+/** Los cuadraditos para elegir el color de una tarjeta. */
+export function selectorDePlastico(valor, { alElegir } = {}) {
+  let elegido = valor || PLASTICOS[0].hex;
+  const grilla = h('div.plasticos');
+  const pintar = () => {
+    grilla.replaceChildren(...PLASTICOS.map(p => h('button.plastico-op', {
+      type: 'button', 'aria-pressed': String(elegido.toLowerCase() === p.hex.toLowerCase()),
+      'aria-label': p.nombre, title: p.nombre,
+      style: { background: `linear-gradient(145deg, ${p.hex}, ${masOscuro(p.hex)})` },
+      onclick: () => { elegido = p.hex; pintar(); alElegir && alElegir(p.hex); }
+    }, h('span.small', p.nombre))));
+  };
+  pintar();
+  return grilla;
+}
+
 // -------------------------------------------------------------- hojas
 export function hoja(titulo, contenido, { onClose } = {}) {
   const mask = h('div.mask', { onclick: e => { if (e.target === mask) cerrar(); } });
