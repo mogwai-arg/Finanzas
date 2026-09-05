@@ -3,7 +3,7 @@
 // El grafico muestra lo que YA debes, no lo que gastaste: las barras bajan
 // solas a medida que se terminan las cuotas.
 // =====================================================================
-import { h, icono, iconoDe, hoja, campo, aviso, confirmar, masOscuro } from '../ui.js';
+import { h, frag, icono, iconoDe, hoja, campo, aviso, confirmar, masOscuro } from '../ui.js';
 import { state, guardar } from '../db.js';
 import * as F from '../finance.js';
 import { plata, plataPartida, diasHasta, fechaISO, mesCorto, periodoLargo, buscar,
@@ -16,30 +16,38 @@ import { barrasHorizontales } from '../graficos.js';
 
 const isoDe = d => fechaISO(d);
 
-export function vistaTarjetas(root) {
-  const hoy = new Date();
+/**
+ * Todo lo de las tarjetas, para poner adentro de Pagar.
+ *
+ * Era una pantalla aparte y no tenia por que serlo: Pagar ya traia una lista
+ * de tarjetas con el mismo nombre y el mismo importe, y abajo un "Ver las
+ * tarjetas" que llevaba a los mismos numeros con otra cara. Dos lugares para
+ * lo mismo, y encima uno de los dos no sabia lo que dice el banco.
+ *
+ * Ahora es una sola cosa: la pila, y debajo lo que solo estaba alla.
+ */
+export function seccionTarjetas(hoy) {
   const tarjetas = state.accounts.filter(a => a.tipo === 'credito' && a.activo !== false);
   if (!tarjetas.length) {
-    root.append(h('div.vacio',
-      h('div.ic', icono('tarjeta', 24)),
-      h('h3', 'Todavía no hay tarjetas'),
-      h('p', 'Cargá una con su cierre y su vencimiento para ver el cronograma de cuotas.'),
-      h('button.btn.sec', { onclick: () => formCuenta() }, 'Cargar una tarjeta'),
-      h('button.btn.sec', { style: { marginTop: '10px' }, onclick: () => formImportarResumen() },
-        'o importar un resumen')));
-    return;
+    return h('section',
+      h('div.ghead', 'Tarjetas'),
+      h('div.vacio', { style: { padding: '28px 24px' } },
+        h('div.ic', icono('tarjeta', 24)),
+        h('h3', 'Todavía no hay tarjetas'),
+        h('p', 'Cargá una con su cierre y su vencimiento para ver el cronograma de cuotas.'),
+        h('button.btn.sec', { onclick: () => formCuenta() }, 'Cargar una tarjeta'),
+        h('button.btn.sec', { style: { marginTop: '10px' }, onclick: () => formImportarResumen() },
+          'o importar un resumen')));
   }
-  root.append(h('div.flow',
-    pila(tarjetas, hoy),
+  return frag(
+    h('section', h('div.ghead', 'Tarjetas'), pila(tarjetas, hoy)),
     comparativa(tarjetas, hoy, 'Gasto con las tarjetas'),
-    deudaTotal(tarjetas, hoy),
-    h('button.btn.sec', { onclick: () => formCuenta() }, icono('mas', 17), 'Agregar tarjeta'),
-    h('button.btn.sec', { onclick: () => formImportarResumen() }, icono('recibo', 17), 'Importar un resumen')));
+    deudaTotal(tarjetas, hoy));
 }
 
 export function vistaTarjeta(root, { id }) {
   const t = buscar('accounts', id);
-  if (!t) { irA('/tarjetas'); return; }
+  if (!t) { irA('/mes'); return; }
   const hoy = new Date();
   root.append(h('div.flow',
     plastico(t, hoy, false),
@@ -103,7 +111,7 @@ function estadoTarjeta(t, hoy) {
  * dias es lo unico que pide una decision hoy— y si no hay ninguna, la
  * primera. Tocar una tapada la trae adelante; tocar la de adelante entra.
  */
-function pila(tarjetas, hoy) {
+export function pila(tarjetas, hoy) {
   const caja = h('div.pila');
   // La que pide algo. Si ninguna pide nada, la primera.
   let abierta = Math.max(0, tarjetas.findIndex(t => montoDelPlastico(t, hoy).aPagar));
@@ -157,7 +165,7 @@ function tira(t, hoy, alTocar) {
  * tira de la pila. Si cada una lo calculara por su lado, la tira podria decir
  * un numero y la tarjeta abierta otro.
  */
-function montoDelPlastico(t, hoy) {
+export function montoDelPlastico(t, hoy) {
   const est = estadoTarjeta(t, hoy);
   const { moneda, falta, aPagar, pagado } = est;
   const c = F.proximoCiclo(t, hoy);
@@ -681,7 +689,7 @@ function loQueDiceElBanco(t, hoy) {
 
 const mayuscula = t => String(t).charAt(0).toUpperCase() + String(t).slice(1);
 
-function comparativa(tarjetas, hoy, titulo) {
+export function comparativa(tarjetas, hoy, titulo) {
   const moneda = 'ARS';
   const r = F.gastoDeTarjetas(state.transactions, tarjetas, hoy, moneda);
   if (!r) return null;
@@ -741,7 +749,7 @@ function comparativa(tarjetas, hoy, titulo) {
         'Lo que vas a pagar mes a mes son las cuotas comprometidas.')));
 }
 
-function deudaTotal(tarjetas, hoy) {
+export function deudaTotal(tarjetas, hoy) {
   const deuda = F.deudaFutura(state.transactions, tarjetas, 'ARS', hoy, 12);
   if (!deuda.length) return null;
   const total = deuda.reduce((s, d) => s + d.monto, 0);

@@ -145,6 +145,7 @@ No todo lo revisado tenía algo roto. Queda anotado para no volver a mirarlo.
 | **Foco visible** | 2 px de contorno sólido en todo lo que se puede tabular. |
 | **Escape y volver el foco** | La hoja cierra con Escape y devuelve el foco al botón que la abrió. |
 | **Contraste, toque, nombres y etiquetas** | `npm run a11y`, nueve pantallas por dos apariencias: cero. |
+| **La ficha de una tarjeta** | Entró a las rutas que mide el script: era la única pantalla que nadie medía, y la primera pasada encontró un botón de 19 px. Y el script no sabía leer un degradé —lo salteaba y seguía subiendo hasta el `body`—, así que el texto blanco del plástico daba 1,12:1 contra el blanco de la página: ocho errores que no existían. |
 | **Lo que se toca pero no es un botón** | Quinta medida del script, agregada después: un `div` con `onclick` anda con el dedo y no existe para el teclado ni para el lector. Encontró la tarjeta de la pantalla de tarjetas —se tocaba desde el primer día y nunca fue alcanzable con Tab— y un `cursor:pointer` que prometía un click que no pasaba. Cero. |
 | **El service worker** | Versión estampada por deploy y borrado de las caches viejas: no puede quedar sirviendo JS viejo. Nunca guarda una respuesta redirigida, y guarda de a uno para que un archivo que falte no tire abajo la instalación. |
 

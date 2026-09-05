@@ -33,7 +33,7 @@ t('un gasto fijo ya pagado no molesta', () => {
 t('el día antes del cierre avisa, para llegar con la compra', () => {
   const a = avisosDelDia({ cuentas: CUENTAS }, d('2026-09-26'));
   assert.match(a[0].titulo, /cierra mañana/);
-  assert.equal(a[0].url, './#/tarjetas');
+  assert.equal(a[0].url, './#/mes');
   assert.deepEqual(avisosDelDia({ cuentas: CUENTAS }, d('2026-09-25')), []);
 });
 

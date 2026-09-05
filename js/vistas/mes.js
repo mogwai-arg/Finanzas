@@ -13,6 +13,7 @@ import { plata, cuandoVence, fechaISO, hoyISO, etiquetaCuenta,
          aNumero as num } from '../formato.js';
 import { irA } from '../ruteo.js';
 import { formRecurrente } from './formularios.js';
+import { seccionTarjetas, montoDelPlastico } from './tarjetas.js';
 
 export function vistaMes(root) {
   const hoy = new Date();
@@ -44,14 +45,9 @@ export function vistaMes(root) {
     // Los resúmenes son casi siempre el número más grande del mes: van
     // primero. Antes esta pantalla solo mostraba los gastos fijos, así que
     // el "Ver todo" de Hoy llevaba a una lista donde faltaba lo principal.
-    tarjetas.length ? h('section',
-      h('div.ghead', 'Tarjetas'),
-      h('div.grp', tarjetas.map(t => h('button.li', { onclick: () => irA(`/tarjetas/${t.id}`) },
-        h('div.av', icono('tarjeta', 17)),
-        h('div.m', h('div.t', t.nombre),
-          h('div.s', (t.pagado ? 'pagado · en curso · ' : '') +
-            cuandoVence(fechaISO(t.vence), hoy) + (t.declarado ? '' : ' · estimado'))),
-        h('div.v', plata(Math.round(t.monto), 'ARS')))))) : null,
+    // La pila, y debajo lo que antes vivía en la pantalla de tarjetas. Eran
+    // dos lugares con los mismos números y una puerta en el medio.
+    seccionTarjetas(hoy),
 
     h('section',
       h('div.ghead', 'Gastos fijos',
@@ -74,17 +70,8 @@ export function vistaMes(root) {
             h('p', 'El colegio, la prepaga, la luz. Cargalos una vez y la app te avisa cada mes.'),
             h('button.btn.sec', { onclick: () => formRecurrente() }, 'Cargar el primero'))),
 
-    // Las tarjetas por dentro: límite, plástico y cuotas comprometidas.
-    // Antes eran una pestaña propia y ahora viven bajo Pagar, que es la
-    // pregunta que contestan.
     h('section',
       h('div.grp',
-        h('button.li', { onclick: () => irA('/tarjetas') },
-          h('div.av', icono('tarjeta', 17)),
-          h('div.m', h('div.t', 'Ver las tarjetas'),
-            h('div.s', 'Límite disponible, ciclos y cuotas comprometidas')),
-          h('span.chev', icono('chev', 15))),
-
         // Va acá y no en Números porque es de la familia de "lo que hay que
         // pagar": lo que pasa es que todavía no llegó.
         h('button.li', { onclick: () => irA('/fondos') },
@@ -103,16 +90,13 @@ function resumenesDelMes(hoy) {
   const out = [];
   for (const t of state.accounts.filter(a => a.tipo === 'credito' && a.activo !== false)) {
     if (!F.tieneCiclo(t)) continue;      // sin cierre, la fecha seria inventada
-    const cerrado = F.resumenAPagar(t, hoy);
-    // Lo que falta, no lo que salió: un resumen ya pagado no es algo que se
-    // viene, y seguía sumando al "falta pagar" del mes.
-    const falta = cerrado ? F.faltaPagarDeResumen(state.transactions, t, cerrado, 'ARS') : 0;
-    const c = falta > 0 ? cerrado : F.proximoCiclo(t, hoy);
-    const monto = falta > 0 ? falta
-      : F.totalTarjetaEnPeriodo(state.transactions, t, F.periodo(c.vence), 'ARS');
+    // El mismo cálculo que el plástico, y no uno propio: la pila decía lo que
+    // dice el banco y esta lista lo que hay cargado, así que la misma tarjeta
+    // podía mostrar dos números distintos en la misma pantalla.
+    const { aPagar, falta, total: monto, foco: c } = montoDelPlastico(t, hoy);
     if (!monto) continue;
     out.push({ id: t.id, nombre: t.nombre, monto, vence: c.vence, declarado: c.declarado,
-               pagado: falta <= 0 && !!cerrado });
+               pagado: !aPagar && falta <= 0 && !!F.resumenAPagar(t, hoy) });
   }
   return out.sort((a, b) => a.vence - b.vence);
 }

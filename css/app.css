@@ -261,7 +261,10 @@ label:has(input[type=checkbox]){min-height:44px;align-items:center}
    de al lado. El aire va abajo, para que el nombre siga alineado arriba. */
 .gr-fila{display:block;width:100%;border:0;background:none;padding:0 0 10px;
          min-height:44px;box-sizing:border-box;
-         text-align:left;color:inherit;font:inherit;cursor:pointer}
+         text-align:left;color:inherit;font:inherit}
+/* La manito solo cuando la fila HACE algo. Una barra que no lleva a ningún
+   lado con el puntero de mano encima promete un click que no pasa. */
+button.gr-fila{cursor:pointer}
 .gr-tope{display:flex;justify-content:space-between;align-items:baseline;gap:10px;
          margin-bottom:5px}
 .gr-et{font-size:14px;font-weight:500;letter-spacing:-.012em;color:var(--tx);
@@ -295,8 +298,12 @@ label:has(input[type=checkbox]){min-height:44px;align-items:center}
 
 /* Una línea del pie del plástico que se puede abrir. Hereda el tamaño y el
    color del pie: es la misma información, con una puerta. */
-.cc .foot-link{background:none;border:0;padding:0;min-height:0;width:100%;
-               display:flex;justify-content:space-between;align-items:baseline;
+/* 44 px de alto para el pulgar, sin ocupar 44 px de pie: el relleno agranda
+   el área que se toca y el margen negativo se lo devuelve al diseño. El
+   renglón mide 20 px como el resto y se toca como un botón. */
+.cc .foot-link{background:none;border:0;width:100%;
+               min-height:44px;padding:12px 0;margin:-12px 0;
+               display:flex;justify-content:space-between;align-items:center;
                gap:10px;color:inherit;font:inherit;cursor:pointer;text-align:left}
 .cc .foot-link b{display:inline-flex;align-items:center;gap:3px}
 

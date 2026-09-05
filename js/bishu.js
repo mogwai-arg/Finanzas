@@ -143,7 +143,7 @@ export function frasesDeBishu(d, hoy = new Date()) {
   //    cambia en un mes cuándo se paga.
   if (d.cierraManana)
     decir('atento', `${d.cierraManana} cierra mañana. Lo que compres después se paga ` +
-                    'el mes siguiente.', '/tarjetas');
+                    'el mes siguiente.', '/mes');
 
   // 7. Contra el mes pasado al mismo día, que es la única comparación que
   //    contesta "¿voy gastando más o menos que la vez pasada?".

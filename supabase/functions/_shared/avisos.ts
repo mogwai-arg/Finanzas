@@ -166,7 +166,7 @@ export function avisosDelDia(d: Datos, ref = new Date()): Mensaje[] {
       if (t.tipo !== 'credito' || t.activo === false || !t.cierre_dia) continue;
       if (dias(hoy, diaSeguro(hoy.getFullYear(), hoy.getMonth(), t.cierre_dia)) !== 1) continue;
       out.push(msg('resumen', `${t.nombre} cierra mañana`,
-        'Lo que compres después entra en el resumen siguiente.', `cierre-${t.id}`, './#/tarjetas'));
+        'Lo que compres después entra en el resumen siguiente.', `cierre-${t.id}`, './#/mes'));
     }
   }
 

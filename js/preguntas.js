@@ -161,20 +161,20 @@ export function contestar(id, estado, hoy = new Date()) {
 
   if (id === 'tarjetas') {
     const tj = accounts.filter(a => a.tipo === 'credito' && a.activo !== false);
-    if (!tj.length) return { titulo: 'No tenés tarjetas cargadas.', ir: '/tarjetas' };
+    if (!tj.length) return { titulo: 'No tenés tarjetas cargadas.', ir: '/mes' };
     const filas = tj.map(t => {
       const c = F.tieneCiclo(t) ? (F.resumenAPagar(t, hoy) || F.proximoCiclo(t, hoy)) : null;
       const monto = c ? F.totalTarjetaEnPeriodo(transactions, t, F.periodo(c.vence), t.moneda || 'ARS') : 0;
       return { nombre: t.nombre, monto, vence: c?.vence || null };
     }).filter(f => f.monto > 0).sort((a, b) => b.monto - a.monto);
     const total = filas.reduce((s, f) => s + f.monto, 0);
-    if (!total) return { titulo: 'Tus resúmenes están en cero.', ir: '/tarjetas' };
+    if (!total) return { titulo: 'Tus resúmenes están en cero.', ir: '/mes' };
     const prim = filas[0];
     return {
       titulo: `Las tarjetas suman ${plata(total)}.`,
       detalle: `La más grande es ${prim.nombre}, ${plata(prim.monto)}` +
                (prim.vence ? `, que vence el ${prim.vence.getDate()}/${prim.vence.getMonth() + 1}.` : '.'),
-      ir: '/tarjetas'
+      ir: '/mes'
     };
   }
 

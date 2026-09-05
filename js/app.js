@@ -15,7 +15,7 @@ import { vistaCuenta } from './vistas/cuenta.js';
 import { vistaGastos } from './vistas/gastos.js';
 import { vistaEstadisticas } from './vistas/estadisticas.js';
 import { vistaCierre, nombreDelMes as tituloDelCierre } from './vistas/cierre.js';
-import { vistaTarjetas, vistaTarjeta } from './vistas/tarjetas.js';
+import { vistaTarjeta } from './vistas/tarjetas.js';
 import { vistaPromos } from './vistas/promos.js';
 import { vistaChat } from './vistas/chat.js';
 import { vistaCategorizar } from './vistas/categorizar.js';
@@ -45,7 +45,10 @@ const RUTAS = [
   ['/cierre/:per',    { tab: 'numeros',  titulo: p => tituloDelCierre(p.per), sub: 'Cómo cerró el mes', vista: vistaCierre, atras: true }],
   ['/estadisticas',     { tab: 'numeros',  titulo: 'Números',    sub: 'Dónde estás parado', vista: r => vistaEstadisticas(r, { moneda: 'ARS' }) }],
   ['/estadisticas/usd', { tab: 'numeros',  titulo: 'Números',    sub: 'Dónde estás parado', vista: r => vistaEstadisticas(r, { moneda: 'USD' }) }],
-  ['/tarjetas',       { tab: 'pagar',    titulo: 'Tarjetas',   vista: vistaTarjetas, atras: true }],
+  // La lista de tarjetas dejo de ser una pantalla: vive adentro de Pagar. La
+  // ruta queda para que no se rompan los avisos ya mandados ni un link viejo.
+  ['/tarjetas',       { tab: 'pagar',    titulo: 'Tarjetas',
+                        vista: () => irA('/mes'), atras: true }],
   ['/tarjetas/:id',   { tab: 'pagar',    titulo: 'Tarjeta',    vista: vistaTarjeta, atras: true }],
   ['/chat',           { tab: 'nuevo',    titulo: 'Contale a Bishu', sub: 'Escribí o dictá y lo anoto', vista: vistaChat, atras: true }],
   ['/categorizar',    { tab: 'gastos',   titulo: 'Poner categorías', sub: 'De a muchos, agrupados por comercio', vista: vistaCategorizar, atras: true }],

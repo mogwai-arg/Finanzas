@@ -23,7 +23,10 @@
 import { chromium } from 'playwright';
 const SP='/tmp/claude-0/-home-user-Finanzas/b1802126-6f08-561b-9c57-86811996c491/scratchpad';
 const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome' });
-const rutas = ['/hoy','/gastos','/mes','/estadisticas','/donde','/fondos','/chat','/ajustes','/categorizar'];
+// La ficha de una tarjeta entra a la lista: hasta ahora era la unica pantalla
+// que nadie medía, y es la que tiene el texto blanco sobre un degradé.
+const rutas = ['/hoy','/gastos','/mes','/estadisticas','/donde','/fondos','/chat',
+               '/ajustes','/categorizar','/tarjetas/demo-visa'];
 const problemas = [];
 
 for (const modo of ['light','dark']) {
@@ -46,8 +49,19 @@ for (const modo of ['light','dark']) {
         return 0.2126*r+0.7152*g+0.0722*bl; };
       const ratio = (a,b2) => { const l1=lum(a), l2=lum(b2); const [hi,lo]=l1>l2?[l1,l2]:[l2,l1];
         return (hi+0.05)/(lo+0.05); };
+      // El fondo de verdad que hay detras de un texto.
+      //
+      // Un degrade no es `background-color` sino `background-image`, asi que
+      // la version anterior lo salteaba y seguia subiendo hasta el body: el
+      // texto blanco del plastico daba 1,12:1 contra el blanco de la pagina y
+      // aparecian ocho errores que no existen. De un degrade se toma el PRIMER
+      // color, que en esta app es siempre el mas claro de los dos: si contra
+      // ese pasa, contra el resto tambien.
       const fondoDe = el => { let n=el; while(n && n!==document.documentElement){
-        const bg=getComputedStyle(n).backgroundColor;
+        const cs=getComputedStyle(n);
+        const grad=(cs.backgroundImage||'').match(/rgba?\([^)]+\)|#[0-9a-f]{3,8}/i);
+        if (grad) return grad[0];
+        const bg=cs.backgroundColor;
         if (bg && !/rgba\(0, 0, 0, 0\)|transparent/.test(bg)) return bg; n=n.parentElement; }
         return getComputedStyle(document.body).backgroundColor || 'rgb(255,255,255)'; };
 

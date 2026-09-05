@@ -49,7 +49,13 @@ otra, porque cinco es el máximo que se toca sin mirar.
 - **Lo que se viene**: en Hoy quedan los tres primeros y el total. La lista
   completa es Pagar.
 - **Tarjetas**: dejó de ser pestaña y pasó a colgar de Pagar, que es la
-  pregunta que contesta.
+  pregunta que contesta. Después dejó de ser también una pantalla: Pagar ya
+  traía una lista de tarjetas con el mismo nombre y el mismo importe, y abajo
+  una puerta que llevaba a los mismos números con otra cara. Dos lugares para
+  lo mismo, y encima uno de los dos no sabía lo que dice el banco. Ahora la
+  pila está en Pagar y lo único que queda aparte es la ficha de cada tarjeta,
+  que es a donde se entra tocándola. `/tarjetas` redirige a Pagar, para que no
+  se rompan los avisos ya mandados.
 
 ## Dos cosas que decían lo que no era
 
