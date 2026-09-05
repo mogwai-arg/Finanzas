@@ -145,6 +145,15 @@ export const DEMO = {
     { id: id('s5'), fecha: '2026-09-12', descripcion: 'LO DE PEPE', comercio: 'LO DE PEPE',
       monto: 18400, moneda: 'ARS', tipo: 'gasto', account_id: id('visa'),
       cuotas: 1, fuente: 'resumen', revisado: true },
+    // En dolares, en el resumen en curso: una tarjeta argentina trae DOS
+    // saldos y se pagan por separado. Esta fila existe para que la pantalla
+    // que los separa se pueda ver sin tener que inventar datos a mano.
+    { id: id('s6'), fecha: '2026-09-07', descripcion: 'OPENAI *CHATGPT',
+      comercio: 'OPENAI *CHATGPT', monto: 20, moneda: 'USD', tipo: 'gasto',
+      account_id: id('visa'), cuotas: 1, fuente: 'resumen', revisado: true },
+    { id: id('s7'), fecha: '2026-09-10', descripcion: 'STEAM GAMES',
+      comercio: 'STEAM GAMES', monto: 34.99, moneda: 'USD', tipo: 'gasto',
+      account_id: id('visa'), cuotas: 1, fuente: 'resumen', revisado: true },
 
     // ---- consumos del resumen de la Visa que cerro el 27/08
     { id: id('t9'), fecha: '2026-06-06', descripcion: 'Naked', comercio: 'Naked', monto: 228783,

@@ -767,6 +767,19 @@ export function debitoEnTarjeta(recurring, cuentas) {
  * Se descuenta el que ya aparecio: si el resumen o la carga a mano ya trajo
  * "Spotify", ese no se suma de nuevo.
  */
+/** Los dias `dia` que caen entre dos fechas. Casi siempre uno; a veces dos. */
+function vueltasEntre(desde, hasta, dia) {
+  const d = Math.min(31, Math.max(1, Number(dia) || 1));
+  const out = [];
+  const primero = new Date(desde.getFullYear(), desde.getMonth(), 1);
+  for (let k = 0; k < 4; k++) {
+    const f = diaSeguro(primero.getFullYear(), primero.getMonth() + k, d);
+    if (f > hasta) break;
+    if (f >= desde) out.push(f);
+  }
+  return out;
+}
+
 export function debitosPrevistos(recurrings, txs, tarjeta, ciclo, ref = hoy()) {
   const moneda = tarjeta.moneda || 'ARS';
   const hasta = ciclo.cierre;
@@ -782,15 +795,27 @@ export function debitosPrevistos(recurrings, txs, tarjeta, ciclo, ref = hoy()) {
     if (!r.debito_automatico) continue;
     if ((r.moneda || 'ARS') !== moneda) continue;
     const nombre = String(r.nombre || '').toLowerCase();
-    // ¿Ya cayo en este ciclo?
-    const ya = (txs || []).some(tx => {
-      if (tx.account_id !== tarjeta.id || tx.tipo !== 'gasto') return false;
-      const f = parseFecha(tx.fecha);
-      if (f > hasta || (desde && f < desde)) return false;
-      const texto = `${tx.descripcion || ''} ${tx.comercio || ''}`.toLowerCase();
-      return nombre && texto.includes(nombre);
-    });
-    if (!ya) items.push({ ...r, monto: Number(r.monto_estimado) || 0 });
+
+    // Cada vuelta del debito que cae DENTRO de la ventana, no una sola.
+    //
+    // Un resumen dura un mes y entonces una sola vuelta alcanza. Pero cuando
+    // la tarjeta cambia de dia de cierre, hay un resumen en el medio que dura
+    // mas: si cerraba el 27 y pasa a cerrar el 1, ese va del 27 de agosto al
+    // 1 de octubre y adentro caen DOS debitos del dia 28. Dando por hecho que
+    // era uno, el resumen quedaba corto por el importe entero del segundo, y
+    // encima al ver el primero ya cargado dejaba de prever nada.
+    for (const cuando of vueltasEntre(desde, hasta, r.dia_vencimiento)) {
+      const ya = (txs || []).some(tx => {
+        if (tx.account_id !== tarjeta.id || tx.tipo !== 'gasto') return false;
+        const f = parseFecha(tx.fecha);
+        // Contra la vuelta que corresponde y no contra la ventana entera: si
+        // no, el debito de agosto tapa al de septiembre.
+        if (Math.abs((f - cuando) / 86400000) > 6) return false;
+        const texto = `${tx.descripcion || ''} ${tx.comercio || ''}`.toLowerCase();
+        return nombre && texto.includes(nombre);
+      });
+      if (!ya) items.push({ ...r, monto: Number(r.monto_estimado) || 0, cuando });
+    }
   }
   return { items, total: round2(items.reduce((s, r) => s + r.monto, 0)) };
 }

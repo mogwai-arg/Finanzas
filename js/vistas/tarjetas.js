@@ -47,6 +47,7 @@ export function vistaTarjeta(root, { id }) {
     limite(t, hoy),
     loQueDiceElBanco(t, hoy),
     consumosDelCiclo(t, hoy),
+    consumosDelCiclo(t, hoy, (t.moneda || 'ARS') === 'USD' ? 'ARS' : 'USD'),
     comparativa([t], hoy, 'Contra el mes pasado'),
     debitosQueVienen(t, hoy),
     cuotasVivas(t, hoy),
@@ -108,6 +109,11 @@ function plastico(t, hoy, linkear) {
     ? todoLoQueDebe(t)
     : aPagar ? (b.banco != null ? Math.max(0, F.round2(falta + b.dif)) : falta)
              : b.total;
+  // El resumen de una tarjeta argentina trae DOS saldos, y el de dolares se
+  // paga aparte. Sumarlo al de pesos seria contar 850 como 850.
+  const otraMoneda = moneda === 'USD' ? 'ARS' : 'USD';
+  const otra = sinCiclo ? 0
+    : F.totalTarjetaEnPeriodo(state.transactions, t, F.periodo(foco.vence), otraMoneda);
   const { simbolo, numero } = plataPartida(
     (t.moneda || 'ARS') === 'USD' ? total : Math.round(total), t.moneda || 'ARS');
   const dv = diasHasta(isoDe(foco.vence), hoy);
@@ -152,6 +158,13 @@ function plastico(t, hoy, linkear) {
           h('b', `${plata(Math.round(previstos.total), moneda)} de débitos`)) : null,
         pagado > 0 ? h('div', h('span', 'Pagaste'),
           h('b', `${plata(Math.round(pagado), moneda)} · del ${fmt(cerrado.cierre)}`)) : null),
+    // El saldo en la OTRA moneda. En una tarjeta argentina el resumen trae dos
+    // saldos que se pagan por separado, y hasta ahora la pantalla solo sabia
+    // de uno: los consumos en dolares se sumaban al total en pesos, mil veces
+    // mas chicos de lo que son, o no se veian en ningun lado.
+    !sinCiclo && otra > 0 ? h('div.foot', { style: { marginTop: '2px' } },
+      h('div', h('span', 'En dólares'),
+        h('b', plata(otra, otraMoneda)))) : null,
     // Si el numero de arriba es el del banco, tiene que decirlo: un total que
     // no se puede sumar con la lista de abajo y no avisa se lee como un error
     // de la app.
@@ -277,7 +290,10 @@ function debitosQueVienen(t, hoy) {
     h('div.grp', previstos.items.map(r => h('div.li',
       h('div.av', icono(iconoDe(r.nombre), 17)),
       h('div.m', h('div.t', r.nombre),
-        h('div.s', `todos los meses · día ${r.dia_vencimiento}`)),
+        // La fecha concreta y no "día 28": en un resumen que se estiró caen
+        // dos vueltas del mismo débito y así son dos renglones idénticos.
+        h('div.s', r.cuando ? `${fechaRelativa(fechaISO(r.cuando), hoy)} · día ${r.dia_vencimiento}`
+                            : `todos los meses · día ${r.dia_vencimiento}`)),
       h('div.v.mut', plata(Math.round(r.monto), moneda))))),
     h('div.small.mut', { style: { padding: '10px 4px 0', lineHeight: '1.5' } },
       'Cuando el consumo llegue de verdad —del resumen o cargado a mano— dejan de ',
@@ -317,14 +333,26 @@ function cuotasVivas(t, hoy) {
  * la tarjeta. Viendo la lista, el error salta.
  */
 const A_LA_VISTA = 12;
-function consumosDelCiclo(t, hoy) {
-  const { ciclo: c, aPagar, moneda } = estadoTarjeta(t, hoy);
+
+/**
+ * Los consumos del resumen, DE UNA MONEDA.
+ *
+ * Antes no filtraba por moneda y los pintaba todos con la de la tarjeta: un
+ * consumo de US$ 850 aparecia como "$ 850" en el medio de los pesos, mil
+ * veces mas chico de lo que es y sumado a un total al que no pertenece. En
+ * una tarjeta argentina el saldo en dolares es otro saldo: se paga aparte y
+ * se cotiza aparte, asi que va en su propia lista con su propio total.
+ */
+function consumosDelCiclo(t, hoy, cual = null) {
+  const { ciclo: c, aPagar, moneda: propia } = estadoTarjeta(t, hoy);
+  const moneda = cual || propia;
   const per = F.periodo(c.vence);
   const sinCiclo = !F.tieneCiclo(t);
 
   const filas = [];
   for (const tx of state.transactions) {
     if (tx.account_id !== t.id || tx.tipo !== 'gasto') continue;
+    if (F.monedaDe(tx) !== moneda) continue;
     for (const cu of F.cronograma(tx, t, hoy)) {
       if (!sinCiclo && cu.periodoVenc !== per) continue;
       filas.push({ tx, monto: cu.monto, nro: cu.nro, total: cu.total });
@@ -332,8 +360,16 @@ function consumosDelCiclo(t, hoy) {
   }
   filas.sort((a, b) => (a.tx.fecha < b.tx.fecha ? 1 : -1));
 
-  const titulo = sinCiclo ? 'Consumos'
+  // En la otra moneda el titulo es corto: va pegado abajo del de pesos, asi
+  // que "Lo que va del resumen en dolares" ocupa dos renglones para decir lo
+  // mismo que "En dolares".
+  const titulo = moneda !== propia
+    ? (moneda === 'USD' ? 'En dólares' : 'En pesos')
+    : sinCiclo ? 'Consumos'
     : aPagar ? 'Lo que se paga' : 'Lo que va del resumen';
+  // En la otra moneda, "todavía no hay" no es una ausencia que haya que
+  // explicar: es lo normal. La sección directamente no está.
+  if (!filas.length && moneda !== propia) return null;
   if (!filas.length) {
     return h('section',
       h('div.ghead', titulo),
@@ -343,6 +379,7 @@ function consumosDelCiclo(t, hoy) {
           'fijate que lo hayas puesto en la tarjeta y no en la cuenta del mismo banco: ',
           'en el formulario dicen el tipo al lado del nombre.')));
   }
+  const acumulado = F.round2(filas.reduce((s, f) => s + f.monto, 0));
   const fila = f => h('button.li', {
     onclick: () => formMovimiento(state.transactions.find(x => x.id === f.tx.id))
   },
@@ -379,9 +416,12 @@ function consumosDelCiclo(t, hoy) {
 
   return h('section',
     // Un numero suelto al lado del titulo no dice de que es.
+    // El acumulado de la moneda al lado del titulo: es el dato que la pantalla
+    // no daba en ningun lado para los dolares.
     h('div.ghead', titulo, h('span.mut', { style: { textTransform: 'none',
                                                     letterSpacing: '0' } },
-      `${filas.length} ${filas.length === 1 ? 'consumo' : 'consumos'}`)),
+      h('span.tabnum', plata(moneda === 'USD' ? acumulado : Math.round(acumulado), moneda)),
+      ` · ${filas.length} ${filas.length === 1 ? 'consumo' : 'consumos'}`)),
     h('div.grp', filas.slice(0, A_LA_VISTA).map(fila), ...guardadas, masMenos));
 }
 

@@ -1571,4 +1571,63 @@ t('la plata libre aparta lo que dice el banco, no lo que dice la app', () => {
   assert.equal(con.libreEstricta, sin.libreEstricta - 102674);
 });
 
+// =====================================================================
+// DEBITOS QUE FALTAN CAER EN UN RESUMEN QUE SE ESTIRO
+// =====================================================================
+console.log('\nDEBITOS PREVISTOS');
+
+const TJ_DEB = { id: 'mc', tipo: 'credito', moneda: 'ARS' };
+const CARP = { id: 'carp', nombre: 'CARP ADULTO SANTI', activo: true,
+               account_id: 'mc', debito_automatico: true, moneda: 'ARS',
+               dia_vencimiento: 28, monto_estimado: 35430 };
+
+t('un resumen normal prevé UNA vuelta', () => {
+  const ciclo = { cierre: new Date(2026, 9, 1), cierreAnterior: new Date(2026, 8, 1) };
+  const d = F.debitosPrevistos([CARP], [], TJ_DEB, ciclo);
+  assert.equal(d.items.length, 1);
+  assert.equal(d.total, 35430);
+});
+
+t('un resumen que se estiró prevé LAS DOS', () => {
+  // La tarjeta cerraba el 27 y pasa a cerrar el 1: ese resumen va del 27 de
+  // agosto al 1 de octubre y adentro caen dos débitos del día 28. Dando por
+  // hecho que era uno, el resumen quedaba corto por el importe entero.
+  const ciclo = { cierre: new Date(2026, 9, 1), cierreAnterior: new Date(2026, 7, 27) };
+  const d = F.debitosPrevistos([CARP], [], TJ_DEB, ciclo);
+  assert.equal(d.items.length, 2);
+  assert.equal(d.total, 70860);
+  assert.deepEqual(d.items.map(i => F.fechaISO(i.cuando)), ['2026-08-28', '2026-09-28']);
+});
+
+t('el que YA cayó no se prevé, pero el otro sí', () => {
+  // Es el caso que lo rompía: al ver el débito de agosto ya cargado, dejaba
+  // de prever nada y el de septiembre desaparecía.
+  const ciclo = { cierre: new Date(2026, 9, 1), cierreAnterior: new Date(2026, 7, 27) };
+  const yaCargado = [{ fecha: '2026-08-28', tipo: 'gasto', account_id: 'mc',
+                       descripcion: 'CARP ADULTO SANTI', monto: 35430, moneda: 'ARS' }];
+  const d = F.debitosPrevistos([CARP], yaCargado, TJ_DEB, ciclo);
+  assert.equal(d.items.length, 1);
+  assert.equal(F.fechaISO(d.items[0].cuando), '2026-09-28');
+});
+
+t('con las dos cargadas no queda nada por caer', () => {
+  const ciclo = { cierre: new Date(2026, 9, 1), cierreAnterior: new Date(2026, 7, 27) };
+  const ambas = [
+    { fecha: '2026-08-28', tipo: 'gasto', account_id: 'mc', descripcion: 'CARP ADULTO SANTI', monto: 35430, moneda: 'ARS' },
+    { fecha: '2026-09-28', tipo: 'gasto', account_id: 'mc', descripcion: 'CARP ADULTO SANTI', monto: 35430, moneda: 'ARS' }
+  ];
+  assert.equal(F.debitosPrevistos([CARP], ambas, TJ_DEB, ciclo).items.length, 0);
+});
+
+t('el débito de agosto no tapa al de septiembre', () => {
+  // Antes se buscaba en la ventana ENTERA: cualquier fila con ese nombre
+  // adentro del resumen daba por caídas a todas las vueltas.
+  const ciclo = { cierre: new Date(2026, 9, 1), cierreAnterior: new Date(2026, 7, 27) };
+  const soloUna = [{ fecha: '2026-09-28', tipo: 'gasto', account_id: 'mc',
+                     descripcion: 'CARP ADULTO SANTI', monto: 35430, moneda: 'ARS' }];
+  const d = F.debitosPrevistos([CARP], soloUna, TJ_DEB, ciclo);
+  assert.equal(d.items.length, 1);
+  assert.equal(F.fechaISO(d.items[0].cuando), '2026-08-28');
+});
+
 console.log(`\n${ok} pruebas OK`);
