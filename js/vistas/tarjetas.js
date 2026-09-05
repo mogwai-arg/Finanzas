@@ -30,7 +30,7 @@ export function vistaTarjetas(root) {
     return;
   }
   root.append(h('div.flow',
-    ...tarjetas.map(t => plastico(t, hoy, true)),
+    pila(tarjetas, hoy),
     comparativa(tarjetas, hoy, 'Gasto con las tarjetas'),
     deudaTotal(tarjetas, hoy),
     h('button.btn.sec', { onclick: () => formCuenta() }, icono('mas', 17), 'Agregar tarjeta'),
@@ -85,15 +85,81 @@ function estadoTarjeta(t, hoy) {
 }
 
 // ---------------------------------------------------------------- cc
-function plastico(t, hoy, linkear) {
-  // Lo primero es lo que hay que pagar. Un resumen ya cerrado que vence en
-  // tres dias importa mucho mas que el que recien empezo a acumular.
-  //
-  // Pero un resumen PAGADO deja de ser lo primero: ahi la tarjeta vuelve a
-  // cero y lo que importa es el ciclo en curso, que es lo que se esta
-  // gastando ahora. Antes seguia mostrando la deuda y el "a pagar en 2 d"
-  // aunque el pago estuviera anotado.
-  const { moneda, cerrado, falta, pagado, aPagar, comprometido, previstos } = estadoTarjeta(t, hoy);
+/**
+ * Las tarjetas apiladas, como en la billetera.
+ *
+ * Tres plasticos enteros son setecientos pixeles y hay que hacer scroll para
+ * ver el tercero. Apiladas entran las tres en media pantalla y se reconocen
+ * por el color, que es exactamente como se las reconoce en la billetera de
+ * verdad: no se lee el nombre, se ve que una es negra y la otra azul.
+ *
+ * Con una diferencia con la billetera de iOS, y es la que hace que esto sirva:
+ * ALLA la tira tapada lleva solo el logo, porque el saldo no es asunto de esa
+ * pantalla. ACA el saldo ES el motivo de la pantalla, asi que sobrevive al
+ * colapso. Una pila de tres tiras sin numeros seria mas linda y contestaria
+ * menos que la lista que reemplaza.
+ *
+ * Arranca abierta la que hay que pagar —un resumen cerrado que vence en tres
+ * dias es lo unico que pide una decision hoy— y si no hay ninguna, la
+ * primera. Tocar una tapada la trae adelante; tocar la de adelante entra.
+ */
+function pila(tarjetas, hoy) {
+  const caja = h('div.pila');
+  // La que pide algo. Si ninguna pide nada, la primera.
+  let abierta = Math.max(0, tarjetas.findIndex(t => montoDelPlastico(t, hoy).aPagar));
+
+  const pintar = (mover = false) => {
+    caja.replaceChildren(...tarjetas.map((t, i) => i === abierta
+      ? plastico(t, hoy, true)
+      : tira(t, hoy, () => { abierta = i; pintar(true); })));
+    // El foco sigue a la tarjeta que se abrio. Sin esto, al tocar una tapada
+    // se rehace la pila, el boton que se toco deja de existir y el foco se
+    // va al principio de la pantalla: con lector de pantalla no hay forma de
+    // saber que paso. Solo al tocar, no al pintar la primera vez.
+    if (mover) caja.children[abierta]?.focus?.();
+  };
+  pintar();
+  return caja;
+}
+
+/** Una tarjeta tapada: el mismo plastico, con lo que se debe y nada mas. */
+function tira(t, hoy, alTocar) {
+  const { moneda, total, etiqueta, corta } = montoDelPlastico(t, hoy);
+  return h('button.cc.tira', {
+    style: pinta(t), 'aria-expanded': 'false',
+    'aria-label': `${t.nombre}: ${etiqueta.toLowerCase()} ${plata(Math.round(total), moneda)}`,
+    onclick: alTocar
+  },
+    h('div.rowt',
+      h('div', h('div.nm', t.nombre),
+        t.ultimos4 && h('div.n4', '•••• ' + t.ultimos4)),
+      h('div', { style: { textAlign: 'right' } },
+        // El rotulo y no la marca: "Galicia Mastercard" ya dice cual es, y lo
+        // que no se sabe mirando un numero suelto es si es lo que hay que
+        // pagar o lo que se viene acumulando.
+        h('div.amtl', corta),
+        h('div', { class: 'tira-amt' + (state.ocultarMontos ? ' oculto' : '') },
+          plata(Math.round(total), moneda)))));
+}
+
+/**
+ * El numero grande de una tarjeta y como se llama.
+ *
+ * Lo primero es lo que hay que pagar. Un resumen ya cerrado que vence en tres
+ * dias importa mucho mas que el que recien empezo a acumular.
+ *
+ * Pero un resumen PAGADO deja de ser lo primero: ahi la tarjeta vuelve a cero
+ * y lo que importa es el ciclo en curso, que es lo que se esta gastando
+ * ahora. Antes seguia mostrando la deuda y el "a pagar en 2 d" aunque el pago
+ * estuviera anotado.
+ *
+ * Vive aparte porque lo usan las dos formas del plastico: la entera y la
+ * tira de la pila. Si cada una lo calculara por su lado, la tira podria decir
+ * un numero y la tarjeta abierta otro.
+ */
+function montoDelPlastico(t, hoy) {
+  const est = estadoTarjeta(t, hoy);
+  const { moneda, falta, aPagar, pagado } = est;
   const c = F.proximoCiclo(t, hoy);
   const foco = aPagar || c;
   // Sin cierre cargado no hay resumen que mostrar: en vez de un cero que
@@ -109,6 +175,31 @@ function plastico(t, hoy, linkear) {
     ? todoLoQueDebe(t)
     : aPagar ? (b.banco != null ? Math.max(0, F.round2(falta + b.dif)) : falta)
              : b.total;
+  const dv = diasHasta(isoDe(foco.vence), hoy);
+  return { ...est, c, foco, sinCiclo, b, total, dv,
+    etiqueta: sinCiclo ? 'En consumos'
+      : aPagar ? (dv <= 0 ? 'Venció' : dv <= 3 ? `A pagar en ${dv} d` : 'A pagar')
+      : pagado > 0 ? 'Resumen pagado · en curso'
+      : 'Resumen en curso',
+    // La de la tira, que va al lado del importe y en cuerpo chico: ahi
+    // "Resumen en curso" es mas largo que el numero y le compite.
+    corta: sinCiclo ? 'En consumos'
+      : aPagar ? (dv <= 0 ? 'Venció' : 'A pagar')
+      : pagado > 0 ? 'Pagado · en curso'
+      : 'En curso' };
+}
+
+/** El estilo del plastico: el color de arriba y el de abajo, calculado. */
+const pinta = t => ({ '--c1': t.color || '#2A2F52',
+                      // El de abajo se calcula del de arriba: un degrade de dos
+                      // colores elegidos a mano sale mal la mitad de las veces,
+                      // y con un plastico negro el azul fijo de antes lo volvia
+                      // gris azulado.
+                      '--c2': masOscuro(t.color || '#2A2F52') });
+
+function plastico(t, hoy, linkear) {
+  const { moneda, cerrado, falta, pagado, aPagar, comprometido, previstos,
+          c, foco, sinCiclo, b, total, dv, etiqueta } = montoDelPlastico(t, hoy);
   // El resumen de una tarjeta argentina trae DOS saldos, y el de dolares se
   // paga aparte. Sumarlo al de pesos seria contar 850 como 850.
   const otraMoneda = moneda === 'USD' ? 'ARS' : 'USD';
@@ -116,26 +207,32 @@ function plastico(t, hoy, linkear) {
     : F.totalTarjetaEnPeriodo(state.transactions, t, F.periodo(foco.vence), otraMoneda);
   const { simbolo, numero } = plataPartida(
     (t.moneda || 'ARS') === 'USD' ? total : Math.round(total), t.moneda || 'ARS');
-  const dv = diasHasta(isoDe(foco.vence), hoy);
   const dc = diasHasta(isoDe(c.cierre), hoy);
   const fmt = d => `${d.getDate()}/${d.getMonth() + 1}`;
 
+  // Con `linkear` la tarjeta entera lleva a su ficha, asi que es un boton y
+  // tiene que comportarse como uno: llegarle con el tabulador, abrirse con
+  // Enter y anunciarse como boton. Era un div con onclick —invisible para el
+  // teclado y para el lector de pantalla— y ademas por eso el foco no podia
+  // seguir a la tarjeta que se abre en la pila.
+  const abrir = linkear ? () => irA(`/tarjetas/${t.id}`) : null;
   const cc = h('div.cc', {
-    // El de abajo se calcula del de arriba: un degrade de dos colores elegidos
-    // a mano sale mal la mitad de las veces, y con un plastico negro el azul
-    // fijo de antes lo volvia gris azulado.
-    style: { '--c1': t.color || '#2A2F52', '--c2': masOscuro(t.color || '#2A2F52'),
-             cursor: linkear ? 'pointer' : 'default' },
-    onclick: linkear ? () => irA(`/tarjetas/${t.id}`) : null },
+    style: { ...pinta(t), cursor: linkear ? 'pointer' : 'default' },
+    ...(linkear ? {
+      role: 'button', tabindex: '0',
+      'aria-label': `${t.nombre}: ${etiqueta.toLowerCase()} ` +
+                    `${plata(Math.round(total), moneda)}. Ver la tarjeta`,
+      onkeydown: e => {
+        if (e.key !== 'Enter' && e.key !== ' ') return;
+        e.preventDefault(); abrir();
+      }
+    } : {}),
+    onclick: abrir },
     h('div.rowt',
       h('div', h('div.nm', t.nombre),
         t.ultimos4 && h('div.n4', '•••• ' + t.ultimos4)),
       t.marca && h('span.marca', t.marca)),
-    h('div.amtl', { style: { marginTop: '14px' } },
-      sinCiclo ? 'En consumos'
-        : aPagar ? (dv <= 0 ? 'Venció' : dv <= 3 ? `A pagar en ${dv} d` : 'A pagar')
-        : pagado > 0 ? 'Resumen pagado · en curso'
-        : 'Resumen en curso'),
+    h('div.amtl', { style: { marginTop: '14px' } }, etiqueta),
     h('div', { class: 'amt' + (state.ocultarMontos ? ' oculto' : '') }, `${simbolo} ${numero}`),
     sinCiclo
       ? h('div.foot', h('div', h('span', 'Falta el cierre'),

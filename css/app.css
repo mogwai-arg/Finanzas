@@ -167,6 +167,23 @@ button.li:active{background:var(--fill)}
 .cc .foot.apilado b{display:inline-flex;margin-top:0;text-align:right}
 .cc .marca{font-size:11px;font-weight:700;letter-spacing:.1em;opacity:.75;text-transform:uppercase}
 
+/* Las tarjetas apiladas, como en la billetera: cada una tapa el pie de la
+   anterior y de arriba asoma su tira. El solapado es chico —8 px— porque el
+   pie del plástico abierto lleva datos y no un margen. */
+.pila{display:flex;flex-direction:column}
+.pila>*+*{margin-top:-8px}
+/* La sombra hacia arriba es lo que hace que se lean apiladas y no pegadas.
+   Va junto al canto porque los dos son box-shadow y el segundo pisaría al
+   primero. */
+.pila>*{box-shadow:inset 0 0 0 1px rgba(255,255,255,.1),0 -3px 12px rgba(0,0,0,.4)}
+.cc.tira{display:block;width:100%;text-align:left;padding:13px 16px 17px;
+         border:0;cursor:pointer;font:inherit}
+.cc.tira .rowt{align-items:center}
+.cc.tira .amtl{font-size:9.5px;letter-spacing:.06em}
+.tira-amt{font-family:var(--f-display);font-size:19px;font-weight:800;
+          letter-spacing:-.03em;font-variant-numeric:tabular-nums;margin-top:1px}
+.cc.tira:active{transform:scale(.995)}
+
 /* Los colores de tarjeta, cada uno mostrado como lo que va a ser: un pedazo
    del mismo degradé que va a tener el plástico, no un círculo de color. */
 .plasticos{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
@@ -394,8 +411,10 @@ label:has(input[type=checkbox]){min-height:44px;align-items:center}
        display:flex;gap:11px;align-items:flex-start}
 .aviso.amb{box-shadow:inset 0 0 0 1.5px var(--amb)}
 .aviso.neg{box-shadow:inset 0 0 0 1.5px var(--neg)}
-/* El cierre del mes: es lo bueno del dia 1, no una alarma. */
-.aviso.bra{box-shadow:inset 0 0 0 1.5px var(--brand);border:0;cursor:pointer;
+/* El cierre del mes: es lo bueno del dia 1, no una alarma.
+   Sin `cursor:pointer`: la caja no se toca, se tocan los botones de adentro.
+   El puntero de mano sobre el relleno prometía algo que no pasaba. */
+.aviso.bra{box-shadow:inset 0 0 0 1.5px var(--brand);border:0;
            color:inherit;font:inherit}
 .aviso .txt{flex:1;min-width:0}
 .aviso .tt{font-weight:600;font-size:14.5px;letter-spacing:-.015em}

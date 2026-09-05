@@ -51,9 +51,11 @@ for (const modo of ['light','dark']) {
         if (bg && !/rgba\(0, 0, 0, 0\)|transparent/.test(bg)) return bg; n=n.parentElement; }
         return getComputedStyle(document.body).backgroundColor || 'rgb(255,255,255)'; };
 
-      const out = { chicos: [], contraste: [], sinNombre: [], sinLabel: [], foco: 0 };
+      const out = { chicos: [], contraste: [], sinNombre: [], sinLabel: [],
+                    aMano: [], foco: 0 };
       // 1) area de toque
-      for (const el of document.querySelectorAll('button, a[href], input, select, [role=tab]')) {
+      for (const el of document.querySelectorAll(
+             'button, a[href], input, select, [role=tab], [role=button]')) {
         // Una casilla vive adentro de su etiqueta y el area que se toca es la
         // etiqueta entera: medir la casilla sola da un falso positivo.
         const caja = el.type === 'checkbox' || el.type === 'radio'
@@ -83,7 +85,29 @@ for (const modo of ['light','dark']) {
         const n = (el.getAttribute('aria-label') || el.textContent || '').trim();
         if (!n && el.getBoundingClientRect().width) out.sinNombre.push(el.className || el.tagName);
       }
-      // 4) inputs sin etiqueta
+      // 4) lo que se toca pero no es un boton
+      //
+      // Un div con onclick funciona con el dedo y no existe para el teclado
+      // ni para el lector de pantalla: no se le llega con el tabulador, no se
+      // abre con Enter y no se anuncia como nada. Pasa sin que nadie lo note
+      // porque en el telefono anda perfecto.
+      //
+      // No hay forma de leer los onclick puestos con addEventListener, asi
+      // que se busca la pista que si se ve: `cursor: pointer` en algo que no
+      // es un boton ni un enlace. Es la pista que delato a la tarjeta de la
+      // pantalla de tarjetas, que se tocaba desde el primer dia y nunca fue
+      // alcanzable con el teclado.
+      for (const el of document.querySelectorAll('div, span, li, section, article')) {
+        if (getComputedStyle(el).cursor !== 'pointer') continue;
+        if (el.closest('button, a[href], label, [role=button], [role=tab], summary')) continue;
+        // Solo el de MAS AFUERA: `cursor` se hereda, asi que un div clicable
+        // con cuatro hijos daba cinco avisos del mismo problema.
+        if (el.parentElement && getComputedStyle(el.parentElement).cursor === 'pointer') continue;
+        const r3 = el.getBoundingClientRect();
+        if (!r3.width || !r3.height) continue;
+        out.aMano.push((el.className || el.tagName).toString().slice(0, 40));
+      }
+      // 5) inputs sin etiqueta
       for (const el of document.querySelectorAll('input, select, textarea')) {
         const id = el.id;
         const lab = (id && document.querySelector(`label[for="${id}"]`)) ||
@@ -97,6 +121,7 @@ for (const modo of ['light','dark']) {
     for (const c of res.contraste) problemas.push({ modo, ruta: r, tipo: 'contraste', d: c });
     for (const c of res.sinNombre) problemas.push({ modo, ruta: r, tipo: 'sinNombre', d: c });
     for (const c of res.sinLabel) problemas.push({ modo, ruta: r, tipo: 'sinLabel', d: c });
+    for (const c of res.aMano) problemas.push({ modo, ruta: r, tipo: 'soloConElDedo', d: c });
   }
   await p.close();
 }
@@ -110,7 +135,7 @@ const agrupar = tipo => {
   }
   return [...m.values()];
 };
-for (const t of ['toque','contraste','sinNombre','sinLabel']) {
+for (const t of ['toque','contraste','sinNombre','sinLabel','soloConElDedo']) {
   const g = agrupar(t);
   console.log(`\n=== ${t.toUpperCase()} (${g.length} distintos) ===`);
   for (const x of g.slice(0, 18)) console.log(' ', JSON.stringify(x.d), '·', [...x.donde].slice(0,3).join(' '));
