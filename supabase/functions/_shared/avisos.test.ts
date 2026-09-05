@@ -37,6 +37,57 @@ t('el día antes del cierre avisa, para llegar con la compra', () => {
   assert.deepEqual(avisosDelDia({ cuentas: CUENTAS }, d('2026-09-25')), []);
 });
 
+t('el día del cierre también avisa, y dice hasta cuándo hay para pagar', () => {
+  // El de la víspera sirve para decidir con qué pagar. El del día del cierre
+  // sirve para otra cosa: ya no se decide nada sobre lo que entró, lo que
+  // hay que saber es hasta cuándo hay tiempo. Antes solo existía el primero.
+  const a = avisosDelDia({ cuentas: CUENTAS }, d('2026-09-27'));
+  assert.match(a[0].titulo, /cerró hoy/);
+  assert.match(a[0].cuerpo, /Vence el 4\/10/);
+  assert.match(a[0].cuerpo, /7 días/);
+  assert.equal(a[0].url, './#/mes');
+});
+
+t('el día del cierre, lo de hoy TODAVÍA entra en ese resumen', () => {
+  const a = avisosDelDia({ cuentas: CUENTAS }, d('2026-09-27'));
+  assert.match(a[0].cuerpo, /a partir de mañana/);
+});
+
+t('usa las fechas del banco y no el día fijo', () => {
+  // En Galicia el cierre no cae un día fijo: en agosto de 2026 fueron 30-jul,
+  // 27-ago y 1-oct. Con `cierre_dia` el aviso salía el 27 de septiembre, que
+  // no es un cierre, y no salía el 1 de octubre, que sí.
+  const gal = [{ id: 'v', nombre: 'Galicia Visa', tipo: 'credito',
+                 cierre_dia: 27, vencimiento_dia: 4,
+                 ciclos: [{ cierre: '2026-08-27', vence: '2026-09-04' },
+                          { cierre: '2026-10-01', vence: '2026-10-09' }] }];
+  assert.deepEqual(avisosDelDia({ cuentas: gal }, d('2026-09-27')), []);
+  const a = avisosDelDia({ cuentas: gal }, d('2026-10-01'));
+  assert.match(a[0].titulo, /cerró hoy/);
+  assert.match(a[0].cuerpo, /Vence el 9\/10/);
+  const b = avisosDelDia({ cuentas: gal }, d('2026-09-30'));
+  assert.match(b[0].titulo, /cierra mañana/);
+});
+
+t('sin fechas del banco avisa igual, marcándolo como estimado', () => {
+  // Es el caso de Mercado Pago cargada a mano. Antes esto andaba, pero el
+  // aviso del día del cierre no existía.
+  const mp = [{ id: 'mp', nombre: 'Mercado Pago', tipo: 'credito',
+                cierre_dia: 5, vencimiento_dia: 10 }];
+  const a = avisosDelDia({ cuentas: mp }, d('2026-09-05'));
+  assert.match(a[0].titulo, /cerró hoy/);
+  assert.match(a[0].cuerpo, /Vence el 10\/9/);
+  assert.match(a[0].cuerpo, /5 días/);
+  assert.match(a[0].cuerpo, /estimada/);
+});
+
+t('una tarjeta sin cierre cargado no inventa una fecha', () => {
+  const sin = [{ id: 'x', nombre: 'Alguna', tipo: 'credito' }];
+  for (const dia of ['2026-09-05', '2026-09-27', '2026-10-01']) {
+    assert.deepEqual(avisosDelDia({ cuentas: sin }, d(dia)), [], 'el ' + dia);
+  }
+});
+
 t('la promo marcada avisa el día que cae, y solo ese', () => {
   const promos = [{ id: 'p', titulo: 'YPF 25%', valor: 25, tipo: 'descuento', recordar: true,
                     medio_pago: 'MODO', tope: 20000, dias: [4],
@@ -99,6 +150,19 @@ t('lo que hay que pagar va antes que la opinión de Bishu', () => {
     promos: [{ id: 'p', titulo: 'Coto', valor: 25, recordar: true, dias: [] }]
   }, d('2026-09-14'));                                   // un lunes
   assert.deepEqual(a.map(x => x.tipo), ['pagos', 'promos', 'bishu']);
+});
+
+t('una promo no puede dejar afuera a la tarjeta que cerró hoy', () => {
+  // Solo salen DOS por vez. Antes se mandaban los dos primeros de la lista,
+  // que está escrita en el orden en que se fue programando: la promo del
+  // súper iba antes que "cerró la tarjeta, vence el 10". Una es una
+  // oportunidad y la otra tiene multa.
+  const a = avisosDelDia({
+    cuentas: CUENTAS,
+    promos: [{ id: 'p', titulo: 'Coto', valor: 25, recordar: true, dias: [] }]
+  }, d('2026-09-27'));
+  assert.equal(a.map(x => x.tipo).indexOf('resumen'), 0);
+  assert.ok(a.map(x => x.tipo).indexOf('promos') > 0);
 });
 
 t('la opinión es semanal, no de todos los días', () => {

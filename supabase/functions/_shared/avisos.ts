@@ -15,6 +15,11 @@
 export type Cuenta = {
   id: string; nombre: string; tipo: string; moneda?: string; activo?: boolean;
   cierre_dia?: number | null; vencimiento_dia?: number | null;
+  // Las seis fechas que publica el resumen. Estaban en la base y no en este
+  // tipo, asi que el aviso de cierre las ignoraba y calculaba con el dia
+  // fijo: en Galicia el cierre no cae un dia fijo, asi que avisaba el dia
+  // equivocado o no avisaba.
+  ciclos?: { cierre: string; vence?: string | null }[] | null;
   saldo_inicial?: number | null; saldo_al?: string | null;
 };
 export type Tx = {
@@ -161,12 +166,31 @@ export function avisosDelDia(d: Datos, ref = new Date()): Mensaje[] {
   }
 
   // ------------------------------------------------------------ cierre de tarjeta
+  //
+  // Dos avisos y no uno. El de la vispera sirve para decidir con que pagar
+  // —una compra de hoy entra en este resumen y una de pasado en el que
+  // viene—. El del dia del cierre sirve para otra cosa: ya no se puede
+  // decidir nada sobre lo que entro, lo que hay que saber es HASTA CUANDO
+  // hay tiempo de pagarlo. Antes solo existia el primero.
   if (on('resumen')) {
     for (const t of d.cuentas ?? []) {
-      if (t.tipo !== 'credito' || t.activo === false || !t.cierre_dia) continue;
-      if (dias(hoy, diaSeguro(hoy.getFullYear(), hoy.getMonth(), t.cierre_dia)) !== 1) continue;
-      out.push(msg('resumen', `${t.nombre} cierra mañana`,
-        'Lo que compres después entra en el resumen siguiente.', `cierre-${t.id}`, './#/mes'));
+      if (t.tipo !== 'credito' || t.activo === false) continue;
+      const c = cierreCercano(t, hoy);
+      if (!c) continue;
+      const cuando = `${c.vence.getDate()}/${c.vence.getMonth() + 1}`;
+      const faltan = dias(hoy, c.vence);
+      if (c.dias === 0) {
+        out.push(msg('resumen', `${t.nombre} cerró hoy`,
+          `Vence el ${cuando}: ${faltan <= 0 ? 'se paga hoy'
+            : `tenés ${faltan} ${faltan === 1 ? 'día' : 'días'}`}. ` +
+          'Lo que compres a partir de mañana entra en el resumen siguiente.' +
+          (c.declarado ? '' : ' (fecha estimada: falta cargar el cierre del resumen)'),
+          `cerro-${t.id}`, './#/mes'));
+      } else {
+        out.push(msg('resumen', `${t.nombre} cierra mañana`,
+          `Lo que compres desde pasado mañana entra en el resumen siguiente. ` +
+          `Este vence el ${cuando}.`, `cierre-${t.id}`, './#/mes'));
+      }
     }
   }
 
@@ -288,7 +312,28 @@ export function avisosDelDia(d: Datos, ref = new Date()): Mensaje[] {
     }
   }
 
-  return out;
+  // Lo que tiene fecha primero, y lo que es una oportunidad al final.
+  //
+  // Solo salen DOS avisos por vez —tres notificaciones a la mañana no las lee
+  // nadie— y hasta ahora los dos eran los primeros de esta lista, que esta
+  // escrita en el orden en que se fue programando. Una promo del super podia
+  // dejar afuera "la tarjeta cerró hoy, vence el 10": una es una oportunidad
+  // y la otra tiene multa.
+  const PESO: Record<string, number> = {
+    pagos: 0,      // vence un gasto fijo: tiene multa
+    resumen: 1,    // cerró la tarjeta: hay una fecha para pagarla
+    saldo: 2,      // la cuenta en rojo
+    tope: 3,       // te pasaste de lo que te pusiste
+    aumentos: 4,   // subió algo y se puede llamar
+    cierre: 5,     // cómo cerró el mes
+    viene: 6,      // un mes futuro apretado
+    promos: 7,     // una oportunidad de hoy
+    bishu: 8       // la opinión, que puede esperar a mañana
+  };
+  return out
+    .map((m, i) => ({ m, i }))
+    .sort((a, b) => ((PESO[a.m.tipo] ?? 9) - (PESO[b.m.tipo] ?? 9)) || (a.i - b.i))
+    .map(x => x.m);
 }
 
 /**
@@ -397,3 +442,51 @@ const mesAnterior = (per: string) => {
 
 const msg = (tipo: string, titulo: string, cuerpo: string, tag: string, url = './#/hoy'): Mensaje =>
   ({ tipo, titulo, cuerpo, tag, url });
+
+/** Vencimiento del resumen que cierra en `cierre`: el primer dia `vencDia` posterior. */
+function vencDe(cierre: Date, vencDia: number): Date {
+  const y = cierre.getFullYear(), m = cierre.getMonth();
+  let v = diaSeguro(y, m, vencDia);
+  if (v <= cierre) v = diaSeguro(y, m + 1, vencDia);
+  return v;
+}
+
+/**
+ * Si esta tarjeta cierra hoy o mañana, y cuando vence ese resumen.
+ *
+ * Misma regla que finance.js: primero las fechas que publica el resumen del
+ * banco, y solo si ninguna cubre el dia de hoy, el dia fijo del mes. En
+ * Galicia el cierre no cae un dia fijo —en agosto de 2026 fueron 30-jul,
+ * 27-ago y 1-oct— asi que calcular con `cierre_dia` avisa el dia equivocado.
+ */
+export function cierreCercano(t: Cuenta, hoy: Date):
+    { cierre: Date; vence: Date; dias: number; declarado: boolean } | null {
+  const vencDia = Number(t.vencimiento_dia) >= 1 && Number(t.vencimiento_dia) <= 31
+    ? Number(t.vencimiento_dia) : 10;
+
+  const decl = (t.ciclos ?? []).filter(c => c && c.cierre)
+    .map(c => ({ cierre: aFecha(c.cierre), vence: c.vence ? aFecha(c.vence) : null }))
+    .sort((a, b) => a.cierre.getTime() - b.cierre.getTime());
+  const futuros = decl.filter(c => dias(hoy, c.cierre) >= 0);
+  if (futuros.length) {
+    const c = futuros[0];
+    const dd = dias(hoy, c.cierre);
+    // Las fechas del banco mandan: si el proximo cierre no es hoy ni mañana,
+    // no se avisa. Caer al dia fijo aca seria avisar dos veces por el mismo
+    // resumen, en dos dias distintos.
+    return dd <= 1
+      ? { cierre: c.cierre, vence: c.vence || vencDe(c.cierre, vencDia), dias: dd, declarado: true }
+      : null;
+  }
+
+  const cierreDia = Number(t.cierre_dia);
+  if (!(cierreDia >= 1 && cierreDia <= 31)) return null;
+  for (const m of [0, 1]) {
+    const cierre = diaSeguro(hoy.getFullYear(), hoy.getMonth() + m, cierreDia);
+    const dd = dias(hoy, cierre);
+    if (dd === 0 || dd === 1) {
+      return { cierre, vence: vencDe(cierre, vencDia), dias: dd, declarado: false };
+    }
+  }
+  return null;
+}

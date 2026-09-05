@@ -29,9 +29,15 @@ alguna vez se prueba, en un tope solo y no en todos.
 
 ## 2. Los avisos al teléfono son dos por vez
 
-El de "lo que viene" sale último de la lista, así que el día 10, si hay dos
-avisos antes, no llega. El orden es el correcto —lo que tiene multa va
-primero— pero conviene mirarlo después de un mes de uso.
+Resuelto. El orden NO era el correcto: la lista estaba escrita en el orden en
+que se fue programando, no por urgencia, así que una promo del súper podía
+dejar afuera "la tarjeta cerró hoy, vence el 10". Ahora se ordenan antes de
+cortar: primero lo que tiene multa, último lo que es una oportunidad.
+
+Siguen siendo dos por vez a propósito —tres notificaciones a la mañana no las
+lee nadie— y el de "lo que viene", que es el último, sigue pudiendo quedar
+afuera el día 10. Ese sí conviene mirarlo con un mes de uso: si pasa seguido,
+va a otro día.
 
 ## 3. El lector de pantalla
 
