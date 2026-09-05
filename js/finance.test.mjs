@@ -179,8 +179,67 @@ t('compra el 05/09 cierra el 20/09 y vence el 30/09', () => {
   assert.equal(F.fechaISO(c), '2026-09-20');
   assert.equal(F.fechaISO(F.vencimientoDeCierre(c, 30)), '2026-09-30');
 });
-t('compra el mismo dia del cierre pasa al resumen siguiente', () => {
-  assert.equal(F.fechaISO(F.cierreDeCompra(d('2026-09-20'), 20)), '2026-10-20');
+t('el dia del cierre entra ENTERO en el resumen que cierra', () => {
+  // "Cierra el 20" es hasta el 20 inclusive, no hasta el 19: una compra del
+  // 20 a la mañana sale en ese resumen. Antes se iba al siguiente.
+  assert.equal(F.fechaISO(F.cierreDeCompra(d('2026-09-20'), 20)), '2026-09-20');
+  assert.equal(F.fechaISO(F.cierreDeCompra(d('2026-09-21'), 20)), '2026-10-20');
+});
+
+t('y con un ciclo declarado, igual', () => {
+  const t2 = { tipo: 'credito', cierre_dia: 5, vencimiento_dia: 10,
+               ciclos: [{ cierre: '2026-09-05', vence: '2026-09-10' },
+                        { cierre: '2026-10-05', vence: '2026-10-10' }] };
+  assert.equal(F.fechaISO(F.cicloDeCompra(d('2026-09-05'), t2).cierre), '2026-09-05');
+  assert.equal(F.fechaISO(F.cicloDeCompra(d('2026-09-06'), t2).cierre), '2026-10-05');
+});
+
+console.log('El resumen cerrado no se puede evaporar');
+
+t('una tarjeta SIN ciclos declarados también tiene resumen a pagar', () => {
+  // El caso que lo rompió: Mercado Pago cargada a mano —cierra el 5, vence el
+  // 10—. El día 5 el ciclo en curso saltaba al 5/10 y lo que había que pagar
+  // el 10/9 no aparecía en ningún lado. `resumenAPagar` solo miraba los
+  // ciclos declarados, así que para esta tarjeta devolvía null siempre.
+  const mp = { tipo: 'credito', cierre_dia: 5, vencimiento_dia: 10 };
+  const r = F.resumenAPagar(mp, d('2026-09-05'));
+  assert.ok(r, 'el día del cierre tiene que haber resumen a pagar');
+  assert.equal(F.fechaISO(r.cierre), '2026-09-05');
+  assert.equal(F.fechaISO(r.vence), '2026-09-10');
+  assert.equal(r.declarado, false);   // sale del día fijo, no del banco
+});
+
+t('sigue estando todos los días hasta el vencimiento', () => {
+  const mp = { tipo: 'credito', cierre_dia: 5, vencimiento_dia: 10 };
+  for (const dia of ['2026-09-05', '2026-09-07', '2026-09-10']) {
+    const r = F.resumenAPagar(mp, d(dia));
+    assert.ok(r, `falta el ${dia}`);
+    assert.equal(F.fechaISO(r.cierre), '2026-09-05');
+  }
+});
+
+t('y si no se pagó, sigue después de vencer: es lo más urgente que hay', () => {
+  // Con `vence >= ref` desaparecía justo el día después del vencimiento, que
+  // es cuando más hay que verlo. Se queda hasta que cierre el siguiente; si
+  // se pagó, lo saca faltaPagarDeResumen, que es quien sabe de pagos.
+  const mp = { tipo: 'credito', cierre_dia: 5, vencimiento_dia: 10 };
+  assert.equal(F.fechaISO(F.resumenAPagar(mp, d('2026-09-11')).cierre), '2026-09-05');
+  assert.equal(F.fechaISO(F.resumenAPagar(mp, d('2026-10-04')).cierre), '2026-09-05');
+  // El 5/10 cierra el siguiente y ESE pasa a ser el que hay que pagar.
+  assert.equal(F.fechaISO(F.resumenAPagar(mp, d('2026-10-05')).cierre), '2026-10-05');
+});
+
+t('con ciclos declarados también se queda hasta el próximo cierre', () => {
+  const gal = { tipo: 'credito', cierre_dia: 27, vencimiento_dia: 4,
+                ciclos: [{ cierre: '2026-08-27', vence: '2026-09-04' },
+                         { cierre: '2026-10-01', vence: '2026-10-09' }] };
+  assert.equal(F.fechaISO(F.resumenAPagar(gal, d('2026-09-04')).cierre), '2026-08-27');
+  assert.equal(F.fechaISO(F.resumenAPagar(gal, d('2026-09-20')).cierre), '2026-08-27');
+  assert.equal(F.fechaISO(F.resumenAPagar(gal, d('2026-10-01')).cierre), '2026-10-01');
+});
+
+t('sin cierre cargado no se inventa ninguno', () => {
+  assert.equal(F.resumenAPagar({ tipo: 'credito' }, d('2026-09-05')), null);
 });
 t('compra el 25/09 cierra el 20/10', () => {
   assert.equal(F.fechaISO(F.cierreDeCompra(d('2026-09-25'), 20)), '2026-10-20');
@@ -704,9 +763,13 @@ t('una compra antes del cierre entra en ese resumen', () => {
   assert.equal(F.fechaISO(c.vence), '2026-09-04');
   assert.equal(c.declarado, true);
 });
-t('una compra el dia del cierre entra en el siguiente', () => {
+t('una compra el dia del cierre entra en ESE resumen, no en el siguiente', () => {
+  // El cierre contempla todo el dia: el resumen que cierra el 27 llega hasta
+  // el 27 inclusive. Antes se iba al de octubre y ademas ese mismo dia el
+  // resumen recien cerrado se evaporaba de la pantalla.
   const c = F.cicloDeCompra(d('2026-08-27'), GALICIA);
-  assert.equal(F.fechaISO(c.cierre), '2026-10-01');
+  assert.equal(F.fechaISO(c.cierre), '2026-08-27');
+  assert.equal(F.fechaISO(F.cicloDeCompra(d('2026-08-28'), GALICIA).cierre), '2026-10-01');
 });
 t('el 30 de agosto NO cierra el 27 de septiembre: cierra el 1 de octubre', () => {
   // con cierre_dia = 27 la cuenta daria 2026-09-27, que no existe como cierre
@@ -949,11 +1012,16 @@ t('el 1 de septiembre hay un resumen cerrado esperando pago', () => {
 t('el ciclo en curso es otro: cierra el 1 de octubre', () => {
   assert.equal(F.fechaISO(F.proximoCiclo(GALICIA, d('2026-09-01')).cierre), '2026-10-01');
 });
-t('pasado el vencimiento ya no hay resumen a pagar', () => {
-  assert.equal(F.resumenAPagar(GALICIA, d('2026-09-06')), null);
-});
 t('el dia del vencimiento todavia cuenta', () => {
   assert.ok(F.resumenAPagar(GALICIA, d('2026-09-04')));
+});
+t('y pasado el vencimiento TAMBIEN: un resumen impago no se evapora', () => {
+  // Antes desaparecia al dia siguiente de vencer, que es justo cuando mas
+  // hay que verlo. Se queda hasta que cierre el siguiente; el que lo saca
+  // cuando se paga es faltaPagarDeResumen, que es quien sabe de pagos.
+  assert.equal(F.fechaISO(F.resumenAPagar(GALICIA, d('2026-09-06')).cierre), '2026-08-27');
+  assert.equal(F.fechaISO(F.resumenAPagar(GALICIA, d('2026-09-30')).cierre), '2026-08-27');
+  assert.equal(F.fechaISO(F.resumenAPagar(GALICIA, d('2026-10-01')).cierre), '2026-10-01');
 });
 
 

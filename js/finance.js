@@ -51,12 +51,17 @@ function diaSeguro(y, m, dia) {
 
 /**
  * Fecha de cierre del resumen al que entra una compra hecha el dia `fecha`.
- * Si la compra cae el mismo dia del cierre o despues, va al resumen siguiente.
+ *
+ * El dia del cierre entra ENTERO en el resumen que cierra. "Cierra el 5"
+ * quiere decir que el resumen llega hasta el 5 inclusive, no hasta el 4: una
+ * compra del 5 a la mañana sale en ese resumen. Con `>=` se iba al siguiente,
+ * y ademas el resumen que acababa de cerrar desaparecia de la pantalla el
+ * mismo dia que habia que empezar a pagarlo.
  */
 export function cierreDeCompra(fecha, cierreDia) {
   const y = fecha.getFullYear(), m = fecha.getMonth();
   let cierre = diaSeguro(y, m, cierreDia);
-  if (fecha >= cierre) cierre = diaSeguro(y, m + 1, cierreDia);
+  if (fecha > cierre) cierre = diaSeguro(y, m + 1, cierreDia);
   return cierre;
 }
 
@@ -108,10 +113,11 @@ const diaVenc = t => (diaDelMes(t.vencimiento_dia) ? Number(t.vencimiento_dia) :
 export const tieneCiclo = t =>
   !!((t.ciclos || []).some(c => c && c.cierre) || diaDelMes(t.cierre_dia));
 
-/** Ciclo al que entra una compra: el primero cuyo cierre es posterior. */
+/** Ciclo al que entra una compra: el primero que cierra ese dia o despues. */
 export function cicloDeCompra(fecha, tarjeta) {
   for (const c of ciclosOrdenados(tarjeta)) {
-    if (fecha < c.cierre) {
+    // <= y no <: el dia del cierre entra entero en el resumen que cierra.
+    if (fecha <= c.cierre) {
       return { cierre: c.cierre,
                vence: c.vence || vencimientoDeCierre(c.cierre, diaVenc(tarjeta)),
                declarado: true };
@@ -133,11 +139,34 @@ export function cicloDeCompra(fecha, tarjeta) {
  * esconde justamente la plata que hay que pagar esta semana.
  */
 export function resumenAPagar(tarjeta, ref = hoy()) {
-  for (const c of ciclosOrdenados(tarjeta)) {
-    const vence = c.vence || vencimientoDeCierre(c.cierre, diaVenc(tarjeta));
-    if (c.cierre <= ref && vence >= ref) return { cierre: c.cierre, vence, declarado: true };
+  const cs = ciclosOrdenados(tarjeta);
+  for (let i = 0; i < cs.length; i++) {
+    const c = cs[i];
+    if (c.cierre > ref) break;
+    // Hasta que cierre el SIGUIENTE, no hasta que venza. Un resumen impago
+    // el dia despues del vencimiento es lo mas urgente que hay, y con
+    // `vence >= ref` desaparecia de la pantalla justo ahi. Si se pago, lo
+    // saca `faltaPagarDeResumen`, que es quien sabe de pagos.
+    const proximo = cs[i + 1] ? cs[i + 1].cierre : null;
+    if (!proximo || ref < proximo) {
+      return { cierre: c.cierre,
+               vence: c.vence || vencimientoDeCierre(c.cierre, diaVenc(tarjeta)),
+               declarado: true };
+    }
   }
-  return null;
+  // Sin ciclos declarados que cubran hoy, con el dia fijo.
+  //
+  // Antes esta funcion SOLO miraba los ciclos declarados, asi que una tarjeta
+  // cargada a mano —cierra el 5, vence el 10— no tenia nunca un resumen a
+  // pagar: el dia del cierre el ciclo en curso saltaba al mes siguiente y lo
+  // que habia que pagar el 10 no aparecia en ningun lado.
+  if (!diaDelMes(tarjeta.cierre_dia)) return null;
+  const d = diaCierre(tarjeta);
+  let cierre = diaSeguro(ref.getFullYear(), ref.getMonth(), d);
+  if (cierre > ref) cierre = diaSeguro(ref.getFullYear(), ref.getMonth() - 1, d);
+  const siguiente = diaSeguro(cierre.getFullYear(), cierre.getMonth() + 1, d);
+  if (ref >= siguiente) return null;
+  return { cierre, vence: vencimientoDeCierre(cierre, diaVenc(tarjeta)), declarado: false };
 }
 
 /** Proximo cierre y vencimiento a partir de una fecha de referencia. */
