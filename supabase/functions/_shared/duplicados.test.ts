@@ -76,5 +76,67 @@ t('una compra en una cuota no le saca las cuotas a la que ya tenía', () => {
   assert.ok(!s || !('cuotas' in s));
 });
 
+// =====================================================================
+// LA MISMA PLATA VISTA DE LOS DOS LADOS DEL MOSTRADOR
+// =====================================================================
+console.log('\nTRANSFERENCIAS PROPIAS');
+
+// Lo que uno carga: UNA transferencia de Galicia a Mercado Pago.
+const laTransferencia = {
+  id: 't1', fecha: '2026-09-05', monto: 100000, moneda: 'ARS',
+  tipo: 'transferencia', account_id: 'gal', destino_account_id: 'mp'
+};
+// Lo que ve la API de Mercado Pago: plata que ENTRA. Solo ve su lado.
+const loQueVeMp = {
+  fecha: '2026-09-05', monto: 100000, moneda: 'ARS',
+  tipo: 'ingreso', account_id: 'mp', fuente: 'mercadopago'
+};
+
+t('una transferencia tuya y el ingreso que ve MP son el MISMO movimiento', () => {
+  // El bug: se comparaba el TIPO. 'transferencia' !== 'ingreso', así que la
+  // sincronización daba por nuevo algo que ya estaba y lo cargaba otra vez.
+  // Cada sync duplicaba todas las transferencias del mes.
+  assert.equal(elMismo(laTransferencia, loQueVeMp, { cuenta: 'mp' }), true);
+});
+
+t('sin decir de qué cuenta se habla, no se puede saber', () => {
+  // Sin la cuenta no hay dirección que comparar y se cae al tipo, que es lo
+  // único que queda. Por eso mp-sync ahora la pasa.
+  assert.equal(elMismo(laTransferencia, loQueVeMp), false);
+});
+
+t('una transferencia que SALE de Mercado Pago no es ese ingreso', () => {
+  const saliendo = { ...laTransferencia, account_id: 'mp', destino_account_id: 'gal' };
+  assert.equal(elMismo(saliendo, loQueVeMp, { cuenta: 'mp' }), false);
+});
+
+t('un gasto en Mercado Pago tampoco', () => {
+  const gasto = { fecha: '2026-09-05', monto: 100000, moneda: 'ARS',
+                  tipo: 'gasto', account_id: 'mp' };
+  assert.equal(elMismo(gasto, loQueVeMp, { cuenta: 'mp' }), false);
+});
+
+t('si cambia de moneda, se compara lo que LLEGA', () => {
+  const cambio = { fecha: '2026-09-05', monto: 120000, moneda: 'ARS',
+                   tipo: 'transferencia', account_id: 'gal', destino_account_id: 'wb',
+                   monto_destino: 85, moneda_destino: 'USD' };
+  const enWallbit = { fecha: '2026-09-05', monto: 85, moneda: 'USD',
+                      tipo: 'ingreso', account_id: 'wb' };
+  assert.equal(elMismo(cambio, enWallbit, { cuenta: 'wb' }), true);
+});
+
+t('la dirección no salta por encima de la fecha ni del importe', () => {
+  assert.equal(elMismo(laTransferencia, { ...loQueVeMp, monto: 100500 }, { cuenta: 'mp' }), false);
+  assert.equal(elMismo(laTransferencia, { ...loQueVeMp, fecha: '2026-09-20' }, { cuenta: 'mp' }), false);
+});
+
+t('yaEstaba encuentra la transferencia entre lo que ya hay', () => {
+  const previos = [
+    { fecha: '2026-09-01', monto: 5000, moneda: 'ARS', tipo: 'gasto', account_id: 'mp' },
+    laTransferencia
+  ];
+  assert.equal((yaEstaba(loQueVeMp, previos, { cuenta: 'mp' }) as any)?.id, 't1');
+});
+
 console.log(`\n${ok} pruebas OK${mal ? `, ${mal} FALLAN` : ''}\n`);
 process.exit(mal ? 1 : 0);

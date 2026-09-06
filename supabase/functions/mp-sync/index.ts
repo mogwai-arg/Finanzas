@@ -81,7 +81,10 @@ async function traer(sb: any, it: any) {
     if (tarjeta) fila = comoPagoDeTarjeta(fila, tarjeta);
     // ¿Ya estaba, por el mail o cargado a mano? Se completa esa fila en vez de
     // crear otra, y no se pisa nada de lo que hayas tocado vos.
-    const previo = yaEstaba(fila, previos ?? []);
+    // Con la cuenta: asi se compara por direccion y no por tipo. Una
+    // transferencia tuya de Galicia a Mercado Pago es un INGRESO para esta
+    // API, y sin esto se cargaba de nuevo cada vez.
+    const previo = yaEstaba(fila, previos ?? [], { cuenta: cuentaMP?.id ?? null });
     if (previo) {
       const suma = loQueSuma(previo, fila);
       if (suma) await sb.from('transactions').update(suma).eq('id', (previo as any).id);

@@ -1696,6 +1696,55 @@ t('pagar el resumen no libera el límite dos veces', () => {
   assert.equal(l.usado, 13);
 });
 
+console.log('\nESPEJOS DE UNA TRANSFERENCIA');
+
+const ESPEJOS = [
+  { id: 't1', fecha: '2026-09-05', tipo: 'transferencia', account_id: 'gal',
+    destino_account_id: 'mp', monto: 100000, moneda: 'ARS', fuente: 'manual' },
+  { id: 'a1', fecha: '2026-09-05', tipo: 'ingreso', account_id: 'mp',
+    monto: 100000, moneda: 'ARS', fuente: 'mercadopago' },
+  { id: 'm1', fecha: '2026-09-05', tipo: 'gasto', account_id: 'mp',
+    monto: 100000, moneda: 'ARS', fuente: 'manual' },
+  { id: 'a2', fecha: '2026-09-04', tipo: 'gasto', account_id: 'mp',
+    monto: 25000, moneda: 'ARS', fuente: 'mercadopago' },
+  { id: 'a3', fecha: '2026-09-05', tipo: 'ingreso', account_id: 'gal',
+    monto: 100000, moneda: 'ARS', fuente: 'gmail' }
+];
+
+t('encuentra lo que entró solo y es la otra cara de una transferencia', () => {
+  const e = F.espejosDeTransferencia(ESPEJOS);
+  assert.deepEqual(e.map(x => x.tx.id), ['a1', 'a3']);
+  assert.equal(e[0].transferencia.id, 't1');
+});
+
+t('lo que se escribió a mano no se toca nunca', () => {
+  // m1 coincide en importe y fecha y toca la misma cuenta, pero es de la
+  // persona: borrarle algo que escribió a mano es indefendible.
+  assert.ok(!F.espejosDeTransferencia(ESPEJOS).some(x => x.tx.id === 'm1'));
+});
+
+t('dos importes iguales el mismo día no alcanzan: tiene que tocar la cuenta', () => {
+  const otraCuenta = [ESPEJOS[0],
+    { id: 'x', fecha: '2026-09-05', tipo: 'ingreso', account_id: 'efectivo',
+      monto: 100000, moneda: 'ARS', fuente: 'mercadopago' }];
+  assert.deepEqual(F.espejosDeTransferencia(otraCuenta), []);
+});
+
+t('sin transferencias no hay espejos', () => {
+  assert.deepEqual(F.espejosDeTransferencia(ESPEJOS.filter(t2 => t2.id !== 't1')), []);
+});
+
+t('una transferencia que cambia de moneda se reconoce por lo que LLEGA', () => {
+  const cambio = [
+    { id: 'c', fecha: '2026-09-05', tipo: 'transferencia', account_id: 'gal',
+      destino_account_id: 'wb', monto: 120000, moneda: 'ARS',
+      monto_destino: 85, moneda_destino: 'USD', fuente: 'manual' },
+    { id: 'e', fecha: '2026-09-05', tipo: 'ingreso', account_id: 'wb',
+      monto: 85, moneda: 'USD', fuente: 'mercadopago' }
+  ];
+  assert.deepEqual(F.espejosDeTransferencia(cambio).map(x => x.tx.id), ['e']);
+});
+
 // =====================================================================
 // DEBITOS QUE FALTAN CAER EN UN RESUMEN QUE SE ESTIRO
 // =====================================================================

@@ -148,6 +148,12 @@ export const DEMO = {
     // En dolares, en el resumen en curso: una tarjeta argentina trae DOS
     // saldos y se pagan por separado. Esta fila existe para que la pantalla
     // que los separa se pueda ver sin tener que inventar datos a mano.
+    // La otra cara de una transferencia: lo que ve la API de Mercado Pago
+    // cuando uno se pasa plata de Galicia. Existe para poder ver la pantalla
+    // que los detecta.
+    { id: id('esp'), fecha: '2026-09-01', descripcion: 'Bank Transfer',
+      comercio: 'Bank Transfer', monto: 652800, moneda: 'ARS', tipo: 'ingreso',
+      account_id: id('mpw'), cuotas: 1, fuente: 'mercadopago', revisado: false },
     { id: id('s6'), fecha: '2026-09-07', descripcion: 'OPENAI *CHATGPT',
       comercio: 'OPENAI *CHATGPT', monto: 20, moneda: 'USD', tipo: 'gasto',
       account_id: id('visa'), cuotas: 1, fuente: 'resumen', revisado: true },

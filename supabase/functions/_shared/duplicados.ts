@@ -16,7 +16,36 @@
 export type Candidato = {
   id?: string; fecha: string; monto: number | string; moneda?: string;
   tipo?: string; account_id?: string | null; fuente?: string;
+  destino_account_id?: string | null; monto_destino?: number | string | null;
+  moneda_destino?: string | null;
 };
+
+/**
+ * Si una fila SUMA o RESTA al saldo de una cuenta. null si ni la toca.
+ *
+ * Es lo unico en lo que las dos puertas no pueden discrepar. El tipo si:
+ * pasarse plata de Galicia a Mercado Pago es UNA transferencia en la app y
+ * un INGRESO para la API de Mercado Pago, que solo ve su lado del mostrador.
+ */
+export function suma(t: Candidato, cuentaId: string | null): boolean | null {
+  if (!cuentaId) return null;
+  if (t.tipo === 'transferencia') {
+    if (t.destino_account_id === cuentaId) return true;
+    if (t.account_id === cuentaId) return false;
+    return null;
+  }
+  if (t.account_id !== cuentaId) return null;
+  return t.tipo === 'ingreso';
+}
+
+/** Lo que llega a esa cuenta: en una transferencia que cambia de moneda, el destino. */
+function enLaCuenta(t: Candidato, cuentaId: string | null) {
+  if (cuentaId && t.tipo === 'transferencia' && t.destino_account_id === cuentaId
+      && t.monto_destino != null) {
+    return { monto: Number(t.monto_destino), moneda: t.moneda_destino || t.moneda || 'ARS' };
+  }
+  return { monto: Number(t.monto), moneda: t.moneda || 'ARS' };
+}
 
 /**
  * ¿Es el mismo movimiento?
@@ -29,11 +58,28 @@ export type Candidato = {
  * cuenta no contradice a nadie.
  */
 export function elMismo(a: Candidato, b: Candidato,
-                        { dias = 3, pesos = 1 } = {}): boolean {
-  if ((a.tipo || 'gasto') !== (b.tipo || 'gasto')) return false;
-  if ((a.moneda || 'ARS') !== (b.moneda || 'ARS')) return false;
-  if (Math.abs(Number(a.monto) - Number(b.monto)) > pesos) return false;
-  if (a.account_id && b.account_id && a.account_id !== b.account_id) return false;
+                        { dias = 3, pesos = 1, cuenta = null as string | null } = {}): boolean {
+  const ea = enLaCuenta(a, cuenta), eb = enLaCuenta(b, cuenta);
+  if (ea.moneda !== eb.moneda) return false;
+  if (Math.abs(ea.monto - eb.monto) > pesos) return false;
+
+  // Por DIRECCION cuando se sabe de que cuenta se esta hablando, y por tipo
+  // solo cuando no se sabe.
+  //
+  // Comparar el tipo era el error: pasarse plata de Galicia a Mercado Pago es
+  // UNA transferencia en la app y un INGRESO para la API de MP, que solo ve
+  // su lado. Como los tipos no coincidian, la sincronizacion daba por nuevo
+  // un movimiento que ya estaba y lo cargaba otra vez. Y de paso la cuenta
+  // tampoco coincide —en una transferencia `account_id` es el ORIGEN— asi
+  // que esa comprobacion tambien sobra cuando la direccion ya alcanzo.
+  const da = suma(a, cuenta), db = suma(b, cuenta);
+  if (da !== null && db !== null) {
+    if (da !== db) return false;
+  } else {
+    if ((a.tipo || 'gasto') !== (b.tipo || 'gasto')) return false;
+    if (a.account_id && b.account_id && a.account_id !== b.account_id) return false;
+  }
+
   const d = Math.abs(
     (Date.parse(String(a.fecha).slice(0, 10)) - Date.parse(String(b.fecha).slice(0, 10))) / 86400000);
   return Number.isFinite(d) && d <= dias;
@@ -41,7 +87,8 @@ export function elMismo(a: Candidato, b: Candidato,
 
 /** El primero de la lista que sea el mismo, o null. */
 export function yaEstaba(fila: Candidato, previos: Candidato[] = [],
-                         opciones = {}): Candidato | null {
+                         opciones: { dias?: number; pesos?: number; cuenta?: string | null } = {}
+                        ): Candidato | null {
   return previos.find(p => elMismo(fila, p, opciones)) ?? null;
 }
 

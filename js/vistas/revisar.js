@@ -18,18 +18,70 @@ export function vistaRevisar(root) {
   const pend = state.transactions.filter(t => t.revisado === false)
     .sort((a, b) => (a.fecha < b.fecha ? 1 : -1));
 
+  const espejos = losEspejos();
+
   if (!pend.length) {
-    root.append(h('div.vacio',
-      h('div.ic', icono('check', 24)),
-      h('h3', 'No queda nada para revisar'),
-      h('p', 'Todo lo que entró solo ya está confirmado.'),
-      h('button.btn.sec', { onclick: () => irA('/hoy') }, 'Volver a Hoy')));
+    root.append(h('div.flow',
+      espejos,
+      h('div.vacio',
+        h('div.ic', icono('check', 24)),
+        h('h3', 'No queda nada para revisar'),
+        h('p', 'Todo lo que entró solo ya está confirmado.'),
+        h('button.btn.sec', { onclick: () => irA('/hoy') }, 'Volver a Hoy'))));
     return;
   }
 
   const cont = h('div.flow');
-  root.append(cont);
+  root.append(h('div.flow', espejos), cont);
   pintar(cont, pend, 0);
+}
+
+/**
+ * Lo que entró solo y es la otra cara de una transferencia que ya estaba.
+ *
+ * La API de Mercado Pago solo ve SU lado del mostrador: pasarse plata de
+ * Galicia a Mercado Pago es UNA transferencia acá y un INGRESO para ella.
+ * Mientras la sincronización comparaba por tipo y no por dirección, cada
+ * pasada las cargaba de nuevo y el mes se infló de los dos lados.
+ *
+ * Ya no vuelve a pasar, pero lo que quedó cargado hay que poder sacarlo, y a
+ * mano son veinte filas. Se muestran los pares y se borra el que entró solo:
+ * lo que se escribió a mano no se toca nunca.
+ */
+function losEspejos() {
+  const pares = F.espejosDeTransferencia(state.transactions);
+  if (!pares.length) return null;
+
+  const fila = ({ tx, transferencia: tr }) => h('div.li',
+    h('div', { class: 'av' + (tx.tipo === 'ingreso' ? ' pos' : '') },
+      icono(iconoDe(tx.comercio || tituloTx(tx)), 17)),
+    h('div.m',
+      h('div.t', tituloTx(tx)),
+      h('div.s', `${fechaRelativa(tx.fecha)} · ya está como "${tituloTx(tr)}"`)),
+    h('div', { class: 'v' + (tx.tipo === 'ingreso' ? ' pos' : '') },
+      plata(Math.round(Math.abs(Number(tx.monto) || 0)), tx.moneda || 'ARS')));
+
+  return h('section',
+    h('div.ghead', 'Parecen la otra cara de una transferencia',
+      h('span.mut', { style: { textTransform: 'none', letterSpacing: '0' } },
+        `${pares.length} ${pares.length === 1 ? 'movimiento' : 'movimientos'}`)),
+    h('div.grp', pares.slice(0, 12).map(fila)),
+    pares.length > 12 ? h('div.small.mut', { style: { padding: '10px 4px 0' } },
+      `y ${pares.length - 12} más`) : null,
+    h('div.small.mut', { style: { padding: '10px 4px 0', lineHeight: '1.5' } },
+      'Entraron solos y coinciden en importe y fecha con una transferencia que ya ',
+      'tenías. Si es así, sobran: la transferencia ya mueve esa plata. Se borran ',
+      'los que entraron solos; la transferencia queda.'),
+    h('button.btn', { style: { marginTop: '12px' }, onclick: async () => {
+      if (!await confirmar(
+        pares.length === 1
+          ? '¿Borrar el movimiento que entró solo? La transferencia que ya tenías no se toca.'
+          : `¿Borrar ${pares.length} movimientos que entraron solos? Las transferencias ` +
+            'que ya tenías no se tocan.', 'Borrar')) return;
+      for (const p of pares) await borrar('transactions', p.tx.id);
+      aviso(`${pares.length} borrados`);
+      irA('/revisar');
+    } }, pares.length === 1 ? 'Borrar el que sobra' : `Borrar los ${pares.length}`));
 }
 
 /**

@@ -238,6 +238,49 @@ export function totalTarjetaEnPeriodo(txs, tarjeta, per, moneda = 'ARS', { desde
 }
 
 /**
+ * Movimientos que entraron solos y que son la otra cara de una transferencia
+ * que ya estaba cargada.
+ *
+ * La API de Mercado Pago solo ve SU lado del mostrador: pasarse plata de
+ * Galicia a Mercado Pago es UNA transferencia en la app y un INGRESO para
+ * ella. Mientras la sincronizacion comparaba por tipo, cada pasada cargaba de
+ * nuevo todas las transferencias del mes y el mes se inflaba de los dos
+ * lados: entro mas y salio mas.
+ *
+ * Eso ya no vuelve a pasar, pero lo que quedo cargado hay que poder sacarlo, y
+ * a mano son veinte filas.
+ *
+ * NO borra nada: devuelve los pares para mirarlos. Un ingreso del mismo
+ * importe que una transferencia el mismo dia es casi siempre la otra cara,
+ * pero "casi siempre" no alcanza para borrarle a alguien un movimiento. Y
+ * solo mira lo que entro SOLO: lo que se escribio a mano no se toca nunca.
+ */
+export function espejosDeTransferencia(txs, { dias = 3, pesos = 1 } = {}) {
+  const transferencias = (txs || []).filter(t => t.tipo === 'transferencia');
+  if (!transferencias.length) return [];
+  const out = [];
+  for (const t of txs || []) {
+    if (t.tipo !== 'ingreso' && t.tipo !== 'gasto') continue;
+    if (!t.fuente || t.fuente === 'manual') continue;
+    const monto = Math.abs(Number(t.monto) || 0);
+    if (!monto) continue;
+    const f = parseFecha(t.fecha);
+    const par = transferencias.find(x => {
+      // La transferencia tiene que tocar la cuenta donde cayo esto: si no, es
+      // dos importes iguales el mismo dia, que tambien pasa.
+      if (t.account_id && x.account_id !== t.account_id
+          && x.destino_account_id !== t.account_id) return false;
+      const suyo = Math.abs(Number(x.monto) || 0);
+      const otro = x.monto_destino != null ? Math.abs(Number(x.monto_destino)) : suyo;
+      if (Math.abs(suyo - monto) > pesos && Math.abs(otro - monto) > pesos) return false;
+      return Math.abs((parseFecha(x.fecha) - f) / 86400000) <= dias;
+    });
+    if (par) out.push({ tx: t, transferencia: par });
+  }
+  return out;
+}
+
+/**
  * Lo que dice el banco de un resumen que todavia no cerro.
  *
  * El resumen no se puede bajar hasta que cierra, pero el saldo en curso la
