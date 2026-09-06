@@ -220,12 +220,16 @@ export function cronograma(tx, tarjeta, ref = hoy()) {
 }
 
 /** Total a pagar de una tarjeta en un periodo (mes de vencimiento del resumen). */
-export function totalTarjetaEnPeriodo(txs, tarjeta, per, moneda = 'ARS') {
+export function totalTarjetaEnPeriodo(txs, tarjeta, per, moneda = 'ARS', { desde = null } = {}) {
+  // `desde` acota por fecha de COMPRA, no de vencimiento de la cuota: sirve
+  // para preguntar "de este resumen, cuanto se compro despues de tal dia".
+  const corte = desde ? parseFecha(desde) : null;
   let total = 0;
   for (const tx of txs) {
     if (tx.account_id !== tarjeta.id) continue;
     if (monedaDe(tx) !== moneda) continue;
     if (tx.tipo !== 'gasto') continue;
+    if (corte && parseFecha(tx.fecha) <= corte) continue;
     for (const c of cronograma(tx, tarjeta)) {
       if (c.periodoVenc === per) total += c.monto;
     }
@@ -278,11 +282,25 @@ export function saldoDeclarado(declarados, tarjetaId, per, moneda = 'ARS') {
 export function brechaDeTarjeta(txs, tarjeta, per, declarados, moneda = 'ARS') {
   const app = totalTarjetaEnPeriodo(txs, tarjeta, per, moneda);
   const dec = saldoDeclarado(declarados, tarjeta.id, per, moneda);
-  if (!dec) return { app, banco: null, cuando: null, dif: 0, total: app };
-  return { app, banco: dec.monto, cuando: dec.cuando,
-           dif: round2(dec.monto - app),
-           // El que se paga es el del banco. Es todo el punto de anotarlo.
-           total: dec.monto };
+  if (!dec) return { app, banco: null, cuando: null, dif: 0, despues: 0, total: app };
+
+  // Lo que se compro DESPUES de anotar el numero no puede estar adentro de
+  // ese numero: el banco no lo habia visto. Se suma.
+  //
+  // Sin esto, anotar el saldo congelaba la tarjeta: se cargaba un gasto de
+  // hoy y el total seguia siendo el de ayer. Y no alcanza con volver a
+  // anotarlo todos los dias, porque justamente el punto de anotarlo es que el
+  // resumen todavia no se puede bajar.
+  const despues = dec.cuando
+    ? totalTarjetaEnPeriodo(txs, tarjeta, per, moneda, { desde: dec.cuando }) : 0;
+  // La diferencia se mide contra lo que el numero del banco SI abarca: lo
+  // cargado hasta el dia que se anoto. Contra el total, un gasto de hoy
+  // achicaria un agujero que no tiene nada que ver.
+  const hasta = round2(app - despues);
+  return { app, banco: dec.monto, cuando: dec.cuando, despues,
+           dif: round2(dec.monto - hasta),
+           // El que se paga es el del banco, mas lo de despues.
+           total: round2(dec.monto + despues) };
 }
 
 /**

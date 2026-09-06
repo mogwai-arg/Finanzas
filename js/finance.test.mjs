@@ -1653,6 +1653,49 @@ t('lo anotado en la forma vieja se sigue leyendo, y solo como pesos', () => {
   assert.equal(F.saldoDeclarado(viejo, 'master', PER_TJ, 'USD'), null);
 });
 
+t('un gasto de hoy se suma al número del banco, no lo pisa', () => {
+  // Anotar el saldo congelaba la tarjeta: se cargaba un gasto de hoy y el
+  // total seguía siendo el de ayer. Lo comprado DESPUÉS de anotar no puede
+  // estar adentro de ese número —el banco no lo había visto—, así que suma.
+  const dec = { master: { [PER_TJ]: { ARS: { monto: 265000, cuando: '2026-09-10' } } } };
+  const conHoy = [...CONSUMOS_TJ,
+    { fecha: '2026-09-12', tipo: 'gasto', account_id: 'master', monto: 40000, moneda: 'ARS' }];
+  const b = F.brechaDeTarjeta(conHoy, MASTER_TJ, PER_TJ, dec, 'ARS');
+  assert.equal(b.despues, 40000);
+  assert.equal(b.total, 305000);
+  // Y el agujero se mide contra lo que el número del banco SÍ abarca: si no,
+  // un gasto de hoy achicaría una diferencia que no tiene nada que ver.
+  assert.equal(b.dif, 102674);
+});
+
+t('un gasto ANTERIOR a la anotación no suma: el banco ya lo tenía', () => {
+  const dec = { master: { [PER_TJ]: { ARS: { monto: 265000, cuando: '2026-09-10' } } } };
+  const conViejo = [...CONSUMOS_TJ,
+    { fecha: '2026-09-09', tipo: 'gasto', account_id: 'master', monto: 40000, moneda: 'ARS' }];
+  const b = F.brechaDeTarjeta(conViejo, MASTER_TJ, PER_TJ, dec, 'ARS');
+  assert.equal(b.despues, 0);
+  assert.equal(b.total, 265000);
+  assert.equal(b.dif, 62674);   // el agujero se achica: apareció parte
+});
+
+console.log('\nLIMITE DE LA TARJETA');
+
+t('pagar el resumen no libera el límite dos veces', () => {
+  // Las cuotas de un resumen vencido ya NO se cuentan como consumidas, así
+  // que restar además el pago las descontaba dos veces: el disponible daba
+  // el límite entero y "0 % usado" con la tarjeta llena.
+  const tj = { id: 'v', tipo: 'credito', moneda: 'ARS', limite: 7000000,
+               cierre_dia: 1, vencimiento_dia: 9 };
+  const txs = [{ fecha: '2026-09-15', tipo: 'gasto', account_id: 'v',
+                 monto: 900000, moneda: 'ARS' }];
+  const ref = new Date(2026, 8, 20);
+  // Con el pago del resumen anterior, que ya venció: no se resta.
+  const l = F.limiteDeTarjeta(tj, txs, ref, 'ARS', 0);
+  assert.equal(l.consumido, 900000);
+  assert.equal(l.disponible, 6100000);
+  assert.equal(l.usado, 13);
+});
+
 // =====================================================================
 // DEBITOS QUE FALTAN CAER EN UN RESUMEN QUE SE ESTIRO
 // =====================================================================

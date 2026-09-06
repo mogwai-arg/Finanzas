@@ -85,7 +85,13 @@ function estadoTarjeta(t, hoy) {
   const enCurso = F.proximoCiclo(t, hoy);
   const previstos = F.debitosPrevistos(state.recurrings, state.transactions, t,
     { ...enCurso, cierreAnterior: cerrado ? cerrado.cierre : null }, hoy);
-  return { moneda, cerrado, falta, pagado, aPagar, ciclo, previstos,
+  // El pago solo LIBERA limite mientras las cuotas de ese resumen todavia se
+  // cuentan como consumidas, o sea hasta que vence. Despues del vencimiento
+  // ya no se cuentan —`cronograma` las marca no pendientes— y restar el pago
+  // encima las descontaba dos veces: el limite disponible daba el limite
+  // entero y "0 % usado" con la tarjeta llena.
+  const pagadoVivo = cerrado && cerrado.vence >= hoy ? pagado : 0;
+  return { moneda, cerrado, falta, pagado, pagadoVivo, aPagar, ciclo, previstos,
            // El resumen nuevo no arranca en cero: arranca debiendo las cuotas
            // de compras de meses anteriores, y suma desde ahí.
            comprometido: F.comprometidoEnPeriodo(state.transactions, t,
@@ -321,7 +327,7 @@ function faltaElCierre(t) {
 // ------------------------------------------------------------ limite
 function limite(t, hoy) {
   if (!t.limite) return null;
-  const { moneda, pagado, aPagar } = estadoTarjeta(t, hoy);
+  const { moneda, pagadoVivo, aPagar } = estadoTarjeta(t, hoy);
   // Lo que el banco dice de mas tambien esta comiendo el limite: son consumos
   // que existen. Sin esto, la tarjeta decia "te quedan 5 millones" con cien
   // mil pesos consumidos que la app no habia visto.
@@ -329,7 +335,7 @@ function limite(t, hoy) {
   const dif = F.tieneCiclo(t)
     ? F.brechaDeTarjeta(state.transactions, t, F.periodo(foco.vence),
                         state.settings?.saldos_tarjeta, moneda).dif : 0;
-  const l = F.limiteDeTarjeta(t, state.transactions, hoy, moneda, pagado, dif);
+  const l = F.limiteDeTarjeta(t, state.transactions, hoy, moneda, pagadoVivo, dif);
   return h('section',
     h('div.ghead', 'Límite'),
     h('div.grp.pad',
@@ -702,8 +708,9 @@ function loQueDiceElBanco(t, hoy) {
       titulo ? h('div.ghead', { style: { margin: '0 0 8px' } }, titulo) : null,
       fila('El banco', h('span.tabnum', { style: { fontWeight: '700', fontSize: '17px' } },
         plata(redondo(br.banco, m), m))),
-      fila('Cargado acá', h('span.tabnum', { style: { color: 'var(--tx2)' } },
-        plata(redondo(br.app, m), m)), { marginTop: '6px' }),
+      fila(br.despues > 0 ? 'Cargado hasta ese día' : 'Cargado acá',
+        h('span.tabnum', { style: { color: 'var(--tx2)' } },
+          plata(redondo(br.app - br.despues, m), m)), { marginTop: '6px' }),
       h('div', { style: { display: 'flex', justifyContent: 'space-between',
                           alignItems: 'baseline', gap: '10px', marginTop: '6px',
                           paddingTop: '8px', borderTop: '1px solid var(--line)' } },
@@ -711,7 +718,15 @@ function loQueDiceElBanco(t, hoy) {
           igual ? 'Coincide' : br.dif > 0 ? 'Falta cargar' : 'Cargado de más'),
         h('span.tabnum', { style: { fontWeight: '700',
                                     color: igual ? 'var(--pos)' : 'var(--amb)' } },
-          igual ? '—' : plata(redondo(Math.abs(br.dif), m), m))));
+          igual ? '—' : plata(redondo(Math.abs(br.dif), m), m))),
+      // Lo de después va aparte y sumado, no adentro de la comparación: es
+      // plata que el banco no había visto cuando dio ese número.
+      br.despues > 0 ? h('div', { style: { marginTop: '10px' } },
+        fila('Cargado después', h('span.tabnum', { style: { color: 'var(--tx2)' } },
+          '+ ' + plata(redondo(br.despues, m), m))),
+        fila(h('span', { style: { fontWeight: '600' } }, 'Total'),
+          h('span.tabnum', { style: { fontWeight: '700' } },
+            plata(redondo(br.total, m), m)), { marginTop: '6px' })) : null);
   };
 
   const cuando = b.cuando || bo.cuando;
@@ -736,6 +751,10 @@ function loQueDiceElBanco(t, hoy) {
           : 'Lo que falta ya está contado en el total y en la plata libre, '
             + 'aunque no se sepa todavía de qué es. Si sobra, puede haber algo '
             + 'cargado dos veces o un pago que el banco no acreditó. ',
+        (b.despues > 0 || bo.despues > 0)
+          ? 'Lo que cargues después de anotarlo se suma: el banco no lo había '
+            + 'visto cuando dio ese número. '
+          : '',
         'Cuando subas el resumen de ', periodoLargo(per),
         ', la app compara y lo cierra sola.'),
 
