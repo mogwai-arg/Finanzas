@@ -121,6 +121,10 @@ function tarjeta(tx, i, total, siguiente) {
   const cuenta = buscar('accounts', tx.account_id);
   let cuotas = tx.cuotas || 1;
   let categoria = tx.category_id;
+  // Entró o salió. Se puede dar vuelta acá porque la puerta por la que entró
+  // no siempre lo sabe: la API de Mercado Pago manda muchos pagos sin decir
+  // quién pagó, y de un dato que falta no se puede deducir una dirección.
+  let tipo = tx.tipo === 'ingreso' ? 'ingreso' : 'gasto';
 
   const cont = h('div.grp.pad', { style: { boxShadow: 'var(--elev-1)' } });
   const { simbolo, numero } = plataPartida(tx.monto, tx.moneda);
@@ -143,6 +147,31 @@ function tarjeta(tx, i, total, siguiente) {
 
   const nota = h('div.small.mut', { style: { marginTop: '5px' } });
   cont.append(nota);
+
+  // ------- ENTRÓ o SALIÓ
+  //
+  // Solo para lo que entró por una puerta que puede equivocarse, y solo si no
+  // es una transferencia —esas tienen dos cuentas y se editan en la ficha—.
+  // Un pago cargado del lado que no era no se nota en la lista y arruina el
+  // mes de las dos maneras: infla lo que entró y esconde lo que salió.
+  if (tx.tipo !== 'transferencia') {
+    const chipsTipo = h('div.chips', { style: { marginTop: '4px' } });
+    const cifra = cont.querySelector('.cifra');
+    const pintarTipo = () => {
+      chipsTipo.replaceChildren(
+        ...[['gasto', 'Salió'], ['ingreso', 'Entró']].map(([v, rot]) =>
+          h('button.pill.mut', { 'aria-pressed': String(tipo === v),
+            onclick: () => { tipo = v; pintarTipo(); } }, rot)));
+      cifra.classList.toggle('pos', tipo === 'ingreso');
+    };
+    pintarTipo();
+    cont.append(
+      h('div.ghead', { style: { margin: '18px 4px 8px' } }, 'Entró o salió',
+        (tx.confianza != null && tx.confianza < 70)
+          ? h('span.mut', { style: { textTransform: 'none', letterSpacing: '0' } },
+              'no vino claro') : null),
+      chipsTipo);
+  }
 
   // ------- reintegro que la app detecto sola
   const promo = promoAplicable(tx);
@@ -246,7 +275,7 @@ function tarjeta(tx, i, total, siguiente) {
         aviso('Borrado'); siguiente();
       } }, 'No era mío'),
       h('button.btn.ink', { onclick: async () => {
-        await guardar('transactions', { ...tx, cuotas, category_id: categoria,
+        await guardar('transactions', { ...tx, tipo, cuotas, category_id: categoria,
                                         revisado: true,
                                         reintegro: promo ? promo.reintegro : (tx.reintegro || 0) });
         if (promo) await sumarUso(promo);

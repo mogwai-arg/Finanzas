@@ -7,6 +7,7 @@
 import { admin, json, CORS } from '../_shared/comun.ts';
 import { yaEstaba, loQueSuma } from '../_shared/duplicados.ts';
 import { esPagoDeTarjeta, comoPagoDeTarjeta } from '../_shared/pagos.ts';
+import { direccion } from '../_shared/mp.ts';
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS });
@@ -53,11 +54,18 @@ async function traer(sb: any, it: any) {
   const { data: previos } = await sb.from('transactions').select('*')
     .eq('user_id', it.user_id).gte('fecha', String(desde).slice(0, 10));
 
+  let dudosos = 0, propios = 0;
   for (const p of data.results ?? []) {
     if (p.status !== 'approved') continue;
-    const esGasto = String(p.payer?.id ?? '') === String(it.cuenta);
     const monto = Number(p.transaction_amount ?? 0);
     if (!(monto > 0)) continue;
+
+    const d = direccion(p, it.cuenta);
+    // Plata que se mueve adentro de Mercado Pago: uno es las dos puntas. No
+    // es ni ingreso ni gasto, y cargarla de un lado solo descuadra el mes.
+    if (d === 'propio') { propios++; continue; }
+    const esGasto = d !== 'entra';
+    if (d === 'nose') dudosos++;
 
     let fila: any = {
       user_id: it.user_id,
@@ -69,7 +77,9 @@ async function traer(sb: any, it: any) {
       cuotas: Number(p.installments ?? 1),
       account_id: cuentaMP?.id ?? null,
       fuente: 'mercadopago', externo_id: String(p.id),
-      revisado: false, confianza: 95
+      // Lo dudoso entra flojo de confianza y para revisar: en la pantalla de
+      // Revisar se puede dar vuelta de un toque.
+      revisado: false, confianza: d === 'nose' ? 55 : 95
     };
 
     // Pagar la tarjeta no es un gasto: es plata que sale de una cuenta y salda
@@ -101,12 +111,15 @@ async function traer(sb: any, it: any) {
 
   await sb.from('integrations')
     .update({ ultima_sync: new Date().toISOString(), ultimo_error: null }).eq('id', it.id);
+  // Cuantos no se pudieron decidir: si son muchos, el problema es de la
+  // lectura y no de los datos, y hay que poder verlo sin adivinar.
+  if (dudosos || propios) console.log(`mp-sync ${it.user_id}: ${dudosos} sin dirección clara, ${propios} internos`);
   if (cargados) {
     await sb.from('notificaciones').insert({
       user_id: it.user_id, tipo: 'carga_auto',
       titulo: `${cargados} de Mercado Pago`, cuerpo: nuevos.slice(0, 4).join(' · ') });
   }
-  return { user: it.user_id, cargados, adoptados };
+  return { user: it.user_id, cargados, adoptados, dudosos, propios };
 }
 
 async function accessToken(sb: any, it: any) {
