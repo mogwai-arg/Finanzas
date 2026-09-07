@@ -268,6 +268,9 @@ distancia y te deja el link al mapa. Es gratis y no necesita clave de API.
 Los resultados se cachean 6 horas.
 
 Para arrancar con datos: `supabase/seed_promos.sql` (reemplazá `<TU_USER_ID>`).
+Para cargar un relevamiento por SQL, [`docs/promos.md`](docs/promos.md) tiene lo
+que la tabla acepta: dos `check` que rechazan la fila entera y dos columnas que
+entran igual pero dejan la promo fuera de todos los filtros.
 
 ---
 
