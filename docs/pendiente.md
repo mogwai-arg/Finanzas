@@ -19,9 +19,9 @@ arregló, lo que se miró y está bien, y lo que quedó abierto— en
 4. **Correr `supabase/migrations/022_promos_unicas.sql`.** Una sola vez. Es
    lo que permite pegar el relevamiento de promos todas las semanas sin
    borrar nada ni duplicar filas.
-5. **Pegar `supabase/promos_2026-09-07.sql`** en el SQL Editor, reemplazando
-   `<TU_USER_ID>`. Son las 53 promos de esta semana. Cómo funciona y qué
-   pedirle a quien arma el relevamiento está en [`promos.md`](promos.md).
+5. **Pegar `supabase/promos_2026-09-07.sql`** en el SQL Editor, entero y sin
+   tocar nada. Son las 53 promos de esta semana. Cómo funciona y qué pedirle
+   a quien arma el relevamiento está en [`promos.md`](promos.md).
 6. **Prender "Topes del mes"** en Ajustes → Avisos.
 
 ---

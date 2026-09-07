@@ -8,11 +8,31 @@ se puede copiar tal cual.
 ## Cómo se corre
 
 1. Una sola vez: `supabase/migrations/022_promos_unicas.sql`.
-2. Cada semana: abrir el archivo del relevamiento, reemplazar `<TU_USER_ID>`
-   por el uuid del usuario y pegarlo en el SQL Editor.
+2. Cada semana: pegar el archivo del relevamiento en el SQL Editor.
 
 Nada más. **No hay que borrar nada antes**, y correr dos veces el mismo
 archivo deja la base igual que correrlo una.
+
+### Nada que reemplazar
+
+El archivo no lleva el uuid del usuario escrito. Lo resuelve la base:
+
+```sql
+create temporary table _yo as select id from auth.users;
+```
+
+Es un proyecto de una sola persona, así que ese `select` devuelve una fila y
+listo. Si algún día hubiera dos usuarios, el `INSERT` corta con *"more than
+one row returned by a subquery"* **antes de escribir nada** —falla ruidoso, no
+le carga las promos al que no era— y ahí sí hay que poner el uuid a mano.
+
+El del relevamiento que llega de afuera **sí** va a traer un `<TU_USER_ID>`,
+porque quien lo escribe no lo sabe. Se reemplaza esa cadena, incluidas las
+comillas, por `(select id from auth.users)` y queda igual: no hay que buscar
+el uuid en ningún lado.
+
+Si aun así lo querés a mano: Supabase → **Authentication → Users**, columna
+`UID`. O `select id, email from auth.users;`.
 
 El de esta semana está en
 [`supabase/promos_2026-09-07.sql`](../supabase/promos_2026-09-07.sql): 53
@@ -101,7 +121,7 @@ por título —y una sola vez, porque el upsert no lo pisa—:
 
 ```sql
 update public.promos set recordar = true
- where user_id = '<TU_USER_ID>'
+ where user_id = (select id from auth.users)
    and titulo in ('20% en COTO', '50% en transporte con Mastercard',
                   '40% en bares', '40% en desayunos');
 ```

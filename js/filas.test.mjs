@@ -186,7 +186,7 @@ function valores(fila) {
 for (const archivo of readdirSync('supabase').filter(f => /^promos_.*\.sql$/.test(f))) {
   t(`${archivo} entra en la base tal como esta`, () => {
     const src = readFileSync(`supabase/${archivo}`, 'utf8');
-    const filas = src.split('\n').filter(l => l.startsWith("('<TU_USER_ID>'"));
+    const filas = src.split('\n').filter(l => l.startsWith('((select id from _yo)'));
     assert.ok(filas.length > 0, 'no encontro ninguna fila de promo');
 
     // El upsert necesita el indice de la 022; sin el, `on conflict` es un
@@ -195,6 +195,8 @@ for (const archivo of readdirSync('supabase').filter(f => /^promos_.*\.sql$/.tes
       'sin ON CONFLICT, correrlo dos semanas seguidas duplica todo');
     assert.ok(!/^\s*delete\s+from\s+public\.promos/im.test(src),
       'un DELETE se lleva puesto lo cargado a mano y lo marcado como favorito');
+    assert.ok(!/<[A-Z_]+>/.test(src.replace(/^--.*$/gm, '')),
+      'quedo un placeholder sin reemplazar: se pega tal cual y Postgres lo rechaza');
     assert.ok(!/\bset\b[^;]*\brecordar\s*=/i.test(src.split('commit;')[0] || ''),
       'el upsert no puede pisar `recordar`: es una decision de la persona');
 
