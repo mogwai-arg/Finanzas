@@ -49,7 +49,7 @@ export function vistaGastos(root) {
       .filter(({ tx: t }) => !q || [t.descripcion, t.comercio, t.notas, String(t.monto),
                           nombreDe('categories', t.category_id, '')]
                           .join(' ').toLowerCase().includes(q))
-      .sort((a, b) => a.tx.fecha < b.tx.fecha ? 1 : -1);
+      .sort((a, b) => F.porFechaYCarga(a.tx, b.tx));
 
     lista.replaceChildren();
     if (!txs.length) {

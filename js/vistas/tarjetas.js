@@ -475,7 +475,7 @@ function consumosDelCiclo(t, hoy, cual = null) {
       filas.push({ tx, monto: cu.monto, nro: cu.nro, total: cu.total });
     }
   }
-  filas.sort((a, b) => (a.tx.fecha < b.tx.fecha ? 1 : -1));
+  filas.sort((a, b) => F.porFechaYCarga(a.tx, b.tx));
 
   // En la otra moneda el titulo es corto: va pegado abajo del de pesos, asi
   // que "Lo que va del resumen en dolares" ocupa dos renglones para decir lo

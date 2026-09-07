@@ -1804,4 +1804,61 @@ t('el débito de agosto no tapa al de septiembre', () => {
   assert.equal(F.fechaISO(d.items[0].cuando), '2026-08-28');
 });
 
+// =====================================================================
+// EL ORDEN DE LA LISTA
+//
+// La base no promete ningun orden, asi que dos gastos del mismo dia salian
+// como quisiera: se cargaba uno y aparecia en el medio, y despues de
+// sincronizar estaba en otro lado.
+// =====================================================================
+const mov = (id, fecha, created_at = null) => ({ id, fecha, created_at });
+const orden = lista => lista.slice().sort(F.porFechaYCarga).map(x => x.id).join(' ');
+
+t('dentro del mismo dia, el ultimo cargado va primero', () => {
+  assert.equal(orden([mov('b', '2026-09-07', '2026-09-07T10:00:02Z'),
+                      mov('a', '2026-09-07', '2026-09-07T10:00:01Z'),
+                      mov('c', '2026-09-07', '2026-09-07T10:00:03Z')]),
+               'c b a');
+});
+
+t('la fecha manda sobre el orden de carga', () => {
+  // Cargado hoy pero con fecha de la semana pasada: va abajo igual, donde
+  // corresponde por fecha. Si no, anotar un gasto viejo lo pondria arriba de
+  // todo y la lista dejaria de ser cronologica.
+  assert.equal(orden([mov('viejo', '2026-09-01', '2026-09-07T23:00:00Z'),
+                      mov('hoy', '2026-09-07', '2026-09-01T01:00:00Z')]),
+               'hoy viejo');
+});
+
+t('editar un gasto viejo no lo mueve de lugar', () => {
+  // El desempate es created_at, no updated_at: corregirle la nota a un gasto
+  // de ayer no lo hace mas nuevo.
+  const antes = [mov('uno', '2026-09-07', '2026-09-07T09:00:00Z'),
+                 mov('dos', '2026-09-07', '2026-09-07T10:00:00Z')];
+  const editado = antes.map(m => m.id === 'uno'
+    ? { ...m, updated_at: '2026-09-07T23:59:00Z' } : m);
+  assert.equal(orden(editado), orden(antes));
+});
+
+t('los que no tienen fecha de carga no bailan', () => {
+  // Las filas viejas, de antes de que se escribiera created_at. No se sabe
+  // cuando se cargaron, asi que van al fondo de su dia; lo que importa es que
+  // salgan siempre igual y no cambien de lugar en cada sincronizacion.
+  const l = [mov('x', '2026-09-07'), mov('y', '2026-09-07'), mov('z', '2026-09-07')];
+  assert.equal(orden(l), orden(l.slice().reverse()));
+  assert.equal(orden([mov('zz', '2026-09-07'), mov('aa', '2026-09-07'),
+                      mov('con', '2026-09-07', '2026-09-07T09:00:00Z')]),
+               'con zz aa');
+});
+
+t('un resumen importado entero conserva el orden del archivo', () => {
+  // guardarVarios le suma un milisegundo a cada fila justamente para esto:
+  // las cincuenta entran en el mismo instante y sin desempate quedarian en
+  // orden aleatorio dentro del dia.
+  const base = Date.parse('2026-09-07T12:00:00Z');
+  const delArchivo = ['primera', 'segunda', 'tercera'].map((id, i) =>
+    mov(id, '2026-09-07', new Date(base + i).toISOString()));
+  assert.equal(orden(delArchivo), 'tercera segunda primera');
+});
+
 console.log(`\n${ok} pruebas OK`);

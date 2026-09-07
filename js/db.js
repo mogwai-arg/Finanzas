@@ -3,7 +3,7 @@
 // supabase-js va empaquetado en vendor/ para que la PWA no dependa de
 // ningun CDN y funcione tambien sin conexion.
 // =====================================================================
-import { normalizar } from './filas.js';
+import { normalizar, COLUMNAS } from './filas.js';
 export { normalizar };
 
 /**
@@ -522,6 +522,15 @@ export async function guardar(tabla, fila) {
   else {
     const lista = state[tabla] || (state[tabla] = []);
     const i = lista.findIndex(x => x.id === nueva.id);
+    // Cuando se cargo, que no es cuando se toco por ultima vez. Las listas
+    // desempatan por esto para que dos movimientos del mismo dia queden en el
+    // orden en que se anotaron; con `updated_at` alcanzaba con corregirle una
+    // nota a un gasto viejo para que saltara al principio de su dia.
+    //
+    // Solo al crear: en una fila que ya existe, pisarlo seria reescribir su
+    // historia.
+    if (i < 0 && !nueva.created_at && COLUMNAS[tabla]?.includes('created_at'))
+      nueva.created_at = nueva.updated_at;
     if (i >= 0) lista[i] = { ...lista[i], ...nueva }; else lista.unshift(nueva);
   }
   guardarCache(); emit();
@@ -554,8 +563,18 @@ export async function guardar(tabla, fila) {
 export async function guardarVarios(tabla, filas) {
   if (!filas.length) return [];
   const ahora = new Date().toISOString();
-  const nuevas = filas.map(f => normalizar(tabla,
-    { ...f, id: f.id || uuid(), user_id: state.user.id, updated_at: ahora }));
+  const existen = new Set((state[tabla] || []).map(x => x.id));
+  // Un resumen entero entra en el mismo milisegundo, asi que sin desempatar
+  // las cincuenta filas del dia quedan en cualquier orden. El +i las deja
+  // como venian en el archivo, que es el orden en que las leyo el banco.
+  const nuevas = filas.map((f, i) => {
+    const id = f.id || uuid();
+    const fila = normalizar(tabla,
+      { ...f, id, user_id: state.user.id, updated_at: ahora });
+    if (!existen.has(id) && !fila.created_at && COLUMNAS[tabla]?.includes('created_at'))
+      fila.created_at = new Date(Date.parse(ahora) + i).toISOString();
+    return fila;
+  });
 
   // Se arma un mapa por id y se vuelca de nuevo a la lista.
   //

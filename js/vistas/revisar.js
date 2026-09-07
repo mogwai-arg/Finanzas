@@ -16,7 +16,7 @@ import { irA } from '../ruteo.js';
 
 export function vistaRevisar(root) {
   const pend = state.transactions.filter(t => t.revisado === false)
-    .sort((a, b) => (a.fecha < b.fecha ? 1 : -1));
+    .sort(F.porFechaYCarga);
 
   const espejos = losEspejos();
 

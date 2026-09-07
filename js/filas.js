@@ -19,7 +19,7 @@
 //
 // Filtrar y normalizar aca, en el unico lugar por donde pasa todo lo que se
 // guarda, es mas seguro que acordarse en cada vista.
-const COLUMNAS = {
+export const COLUMNAS = {
   fondos: ['id', 'user_id', 'nombre', 'objetivo', 'fecha_objetivo', 'moneda', 'account_id',
            'aportes', 'icono', 'activo', 'orden', 'updated_at'],
   deudas: ['id', 'user_id', 'nombre', 'monto', 'moneda', 'direccion', 'vence', 'notas',
@@ -30,7 +30,8 @@ const COLUMNAS = {
   transactions: ['id', 'user_id', 'fecha', 'descripcion', 'comercio', 'monto', 'moneda',
                  'tipo', 'account_id', 'destino_account_id', 'monto_destino', 'moneda_destino',
                  'category_id', 'cuotas', 'reintegro', 'promo_id', 'notas', 'origen',
-                 'import_hash', 'fuente', 'revisado', 'confianza', 'externo_id', 'updated_at']
+                 'import_hash', 'fuente', 'revisado', 'confianza', 'externo_id',
+                 'created_at', 'updated_at']
 };
 
 const diaValido = n => (Number.isInteger(Number(n)) && Number(n) >= 1 && Number(n) <= 31

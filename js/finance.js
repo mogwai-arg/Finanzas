@@ -177,6 +177,32 @@ export function proximoCiclo(tarjeta, ref = hoy()) {
 }
 export const dias = (a, b) => Math.round((b - a) / 86400000);
 
+/**
+ * El orden de cualquier lista de movimientos: por fecha, y dentro del mismo
+ * dia por orden de carga.
+ *
+ * Con la fecha sola, dos gastos del mismo dia quedaban en el orden en que los
+ * devolviera la base, que no promete ninguno: se cargaba un gasto y aparecia
+ * en el medio del dia, entre dos que ya estaban, y despues de sincronizar
+ * estaba en otro lado. Un movimiento que se mueve solo no se puede verificar
+ * contra el ticket.
+ *
+ * El desempate es `created_at` y no `updated_at`: corregirle la nota a un
+ * gasto de la semana pasada no lo hace mas nuevo. Y al final el id, que no
+ * ordena nada pero es siempre igual —dos filas cargadas en el mismo
+ * milisegundo, o dos viejas sin `created_at`, si no siguen bailando—.
+ *
+ * Ultimo cargado primero, igual que el resto de la lista: lo que se acaba de
+ * anotar queda arriba de su dia, que es donde uno lo va a buscar.
+ */
+export function porFechaYCarga(a, b) {
+  if (a.fecha !== b.fecha) return a.fecha < b.fecha ? 1 : -1;
+  const ca = a.created_at || '', cb = b.created_at || '';
+  if (ca !== cb) return ca < cb ? 1 : -1;
+  const ia = String(a.id || ''), ib = String(b.id || '');
+  return ia < ib ? 1 : ia > ib ? -1 : 0;
+}
+
 /** Cierre de la cuota anterior, para buscar el ciclo siguiente. */
 const cierre0 = (out, primero, k) => out.length ? out[out.length - 1].cierre : primero.cierre;
 
@@ -1315,7 +1341,7 @@ export function extractoDeCuenta(cuenta, txs, ref = hoy()) {
     else { salidas += m; filas.push({ tx, entra: false, monto: m }); }
   }
 
-  filas.sort((a, b) => (a.tx.fecha < b.tx.fecha ? 1 : a.tx.fecha > b.tx.fecha ? -1 : 0));
+  filas.sort((a, b) => porFechaYCarga(a.tx, b.tx));
   const saldo = round2(inicial + entradas - salidas);
   return {
     inicial: round2(inicial), desde: cuenta.saldo_al || null,
