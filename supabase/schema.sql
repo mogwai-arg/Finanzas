@@ -322,3 +322,6 @@ begin
                       with check (user_id = auth.uid())$f$, t);
   end loop;
 end $$;
+
+-- Promos: el relevamiento semanal hace upsert por titulo (ver 022).
+create unique index if not exists promos_titulo_idx on public.promos (user_id, titulo);

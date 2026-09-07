@@ -144,5 +144,77 @@ t('la base tiene todas las columnas que la app le escribe a settings', () => {
     'esa columna: la fila entera se va a rechazar');
 });
 
+// =====================================================================
+// EL RELEVAMIENTO SEMANAL DE PROMOS
+//
+// El archivo lo escribe otra sesion y se pega entero en el SQL Editor: si
+// una fila trae un `canal` que la base no acepta, Postgres rechaza el INSERT
+// completo y no entra ninguna de las cincuenta. Y si trae un rubro que la
+// app no conoce, entra pero despues no agrupa con nada. Las dos cosas se ven
+// leyendo el archivo, asi que se leen aca antes de correrlo.
+// =====================================================================
+const RUBROS = ['supermercado', 'combustible', 'gastronomia', 'salud',
+                'indumentaria', 'hogar', 'otros'];
+const EMISORES = ['galicia', 'modo', 'mercadopago', 'personalpay', 'otro'];
+const CANALES = ['presencial', 'online', 'ambos'];
+const TIPOS = ['reintegro', 'descuento', 'cuotas'];
+
+/** Los valores de nivel uno de un `(...)` de VALUES, sin partir por comas. */
+function valores(fila) {
+  const vs = [];
+  let buf = '', hondo = 0;
+  for (let i = 1; i < fila.length - 1; i++) {
+    const c = fila[i];
+    if (c === "'") {                       // adentro de un texto no hay comas
+      buf += c;
+      while (++i < fila.length) {
+        if (fila[i] === "'" && fila[i + 1] === "'") { buf += "''"; i++; continue; }
+        buf += fila[i];
+        if (fila[i] === "'") break;
+      }
+      continue;
+    }
+    if (c === '[' || c === '(') hondo++;
+    else if (c === ']' || c === ')') hondo--;
+    else if (c === ',' && hondo === 0) { vs.push(buf.trim()); buf = ''; continue; }
+    buf += c;
+  }
+  vs.push(buf.trim());
+  return vs.map(v => v.replace(/^'|'$/g, ''));
+}
+
+for (const archivo of readdirSync('supabase').filter(f => /^promos_.*\.sql$/.test(f))) {
+  t(`${archivo} entra en la base tal como esta`, () => {
+    const src = readFileSync(`supabase/${archivo}`, 'utf8');
+    const filas = src.split('\n').filter(l => l.startsWith("('<TU_USER_ID>'"));
+    assert.ok(filas.length > 0, 'no encontro ninguna fila de promo');
+
+    // El upsert necesita el indice de la 022; sin el, `on conflict` es un
+    // error de sintaxis y el archivo no corre.
+    assert.match(src, /on conflict \(user_id, titulo\) do update/,
+      'sin ON CONFLICT, correrlo dos semanas seguidas duplica todo');
+    assert.ok(!/^\s*delete\s+from\s+public\.promos/im.test(src),
+      'un DELETE se lleva puesto lo cargado a mano y lo marcado como favorito');
+    assert.ok(!/\bset\b[^;]*\brecordar\s*=/i.test(src.split('commit;')[0] || ''),
+      'el upsert no puede pisar `recordar`: es una decision de la persona');
+
+    const titulos = new Set();
+    for (const fila of filas) {
+      const v = valores(fila.replace(/,$/, ''));
+      const [, titulo, , rubro, emisor, tipo, , , , dias, , canal] = v;
+      assert.equal(v.length, 18, `${titulo}: ${v.length} valores, tienen que ser 18`);
+      assert.ok(!titulos.has(titulo), `titulo repetido, rompe el upsert: ${titulo}`);
+      titulos.add(titulo);
+      assert.ok(RUBROS.includes(rubro), `${titulo}: rubro "${rubro}" no existe en la app`);
+      assert.ok(EMISORES.includes(emisor), `${titulo}: emisor "${emisor}" no existe en la app`);
+      assert.ok(TIPOS.includes(tipo), `${titulo}: tipo "${tipo}" lo rechaza el check`);
+      assert.ok(CANALES.includes(canal), `${titulo}: canal "${canal}" lo rechaza el check`);
+      assert.match(dias, /^\{\d?(,\d)*\}$/, `${titulo}: dias "${dias}" no es un int[]`);
+      for (const d of dias.slice(1, -1).split(',').filter(Boolean))
+        assert.ok(Number(d) >= 0 && Number(d) <= 6, `${titulo}: dia ${d} fuera de 0..6`);
+    }
+  });
+}
+
 console.log(`\n${ok} pruebas OK${mal ? `, ${mal} FALLAN` : ''}\n`);
 process.exit(mal ? 1 : 0);

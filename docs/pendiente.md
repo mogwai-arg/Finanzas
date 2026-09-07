@@ -16,7 +16,13 @@ arregló, lo que se miró y está bien, y lo que quedó abierto— en
    Después, **Reintentar** en ese mismo cartel y el cambio sube.
 3. **Correr `supabase/migrations/021_saldo_del_banco.sql`.** Para poder anotar
    lo que dice el banco de un resumen que todavía no cerró.
-4. **Prender "Topes del mes"** en Ajustes → Avisos.
+4. **Correr `supabase/migrations/022_promos_unicas.sql`.** Una sola vez. Es
+   lo que permite pegar el relevamiento de promos todas las semanas sin
+   borrar nada ni duplicar filas.
+5. **Pegar `supabase/promos_2026-09-07.sql`** en el SQL Editor, reemplazando
+   `<TU_USER_ID>`. Son las 53 promos de esta semana. Cómo funciona y qué
+   pedirle a quien arma el relevamiento está en [`promos.md`](promos.md).
+6. **Prender "Topes del mes"** en Ajustes → Avisos.
 
 ---
 

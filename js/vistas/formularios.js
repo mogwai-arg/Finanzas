@@ -407,6 +407,11 @@ export function formPresupuesto(periodo = hoyISO().slice(0, 7)) {
 // =====================================================================
 // PROMOS
 // =====================================================================
+const RUBROS_PROMO = [['supermercado','Supermercado'],['combustible','Combustible'],
+                      ['gastronomia','Gastronomía'],['salud','Farmacia y salud'],
+                      ['indumentaria','Indumentaria'],['hogar','Hogar'],['otros','Otros']]
+  .map(([value, label]) => ({ value, label }));
+
 export function formPromo(p = null) {
   const nuevo = !p;
   let dias = (p?.dias || []).map(String);
@@ -430,10 +435,14 @@ export function formPromo(p = null) {
     tope: h('input', { type: 'text', inputmode: 'decimal', value: p?.tope ? String(p.tope) : '',
                        placeholder: '20000' }),
     medio: h('input', { type: 'text', value: p?.medio_pago || '', placeholder: 'Galicia Visa' }),
-    rubro: select([['supermercado','Supermercado'],['combustible','Combustible'],
-                   ['gastronomia','Gastronomía'],['salud','Farmacia y salud'],
-                   ['indumentaria','Indumentaria'],['hogar','Hogar'],['otros','Otros']]
-                  .map(([value, label]) => ({ value, label })), { value: p?.rubro || 'supermercado' }),
+    // Un rubro que no este en la lista —lo carga el SQL del relevamiento, o
+    // una version vieja de la app— no puede quedar seleccionado, asi que el
+    // desplegable agarra el primero y al guardar lo pisa sin avisar. Se
+    // agrega tal cual esta al final: se ve raro, pero se ve.
+    rubro: select(RUBROS_PROMO.concat(
+                    p?.rubro && !RUBROS_PROMO.some(r => r.value === p.rubro)
+                      ? [{ value: p.rubro, label: p.rubro }] : []),
+                  { value: p?.rubro || 'supermercado' }),
     desde: h('input', { type: 'date', value: p?.vigencia_desde || '' }),
     hasta: h('input', { type: 'date', value: p?.vigencia_hasta || '' }),
     url: h('input', { type: 'url', value: p?.url || '', placeholder: 'https://…' }),
@@ -493,10 +502,16 @@ export function formPromo(p = null) {
         await guardar('promos', { ...(p || {}),
           titulo: c.titulo.value.trim(), comercio,
           valor: num(c.valor.value), tope: num(c.tope.value) || null,
-          tope_periodo: 'mensual', medio_pago: c.medio.value.trim() || null,
-          rubro: c.rubro.value, tipo: c.tipo.value, emisor: c.emisor.value, canal: 'ambos',
+          // Tres campos que esta hoja no muestra. Si se cargo por SQL vienen
+          // con datos —tope semanal, solo online, los nombres con los que el
+          // mapa la encuentra— y pisarlos por editar una nota seria borrarlos
+          // sin que nadie los haya tocado.
+          tope_periodo: p?.tope_periodo || 'mensual',
+          canal: p?.canal || 'ambos',
+          marcas: p?.marcas?.length ? p.marcas : [comercio],
+          medio_pago: c.medio.value.trim() || null,
+          rubro: c.rubro.value, tipo: c.tipo.value, emisor: c.emisor.value,
           dias: dias.map(Number).sort(),
-          marcas: [comercio],
           vigencia_desde: c.desde.value || null, vigencia_hasta: c.hasta.value || null,
           url: c.url.value.trim() || null, notas: c.notas.value.trim() || null,
           activa: true, favorita: cFavorita.checked, recordar: cRecordar.checked });

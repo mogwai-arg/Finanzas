@@ -1,0 +1,25 @@
+-- =====================================================================
+-- PARTE 22 — el relevamiento de promos se corre todas las semanas
+--
+-- El listado de promos vigentes lo arma otra sesion y llega como un INSERT
+-- largo. Corrido tal cual, cada lunes inserta las mismas cuarenta promos otra
+-- vez: a la tercera semana hay ciento veinte filas y tres "20% en COTO".
+-- Lo que se venia haciendo para evitarlo era borrar todo antes de insertar, y
+-- eso se lleva puesto lo que se marco a mano —las favoritas, las que avisan—
+-- y deja huerfano cualquier uso anotado contra esa promo.
+--
+-- Con este indice el INSERT puede decir `on conflict (user_id, titulo)`: la
+-- promo que ya estaba se actualiza en su lugar y conserva su id. El titulo es
+-- la llave porque es lo unico estable entre relevamientos —el comercio se
+-- repite ("20% en COTO" y "30% en COTO" son dos) y la url cambia con la
+-- campaña—.
+--
+-- Si esto falla con "could not create unique index" es que ya hay titulos
+-- repetidos de las corridas anteriores. Que se queden las mas nuevas:
+--
+--   delete from public.promos a using public.promos b
+--    where a.user_id = b.user_id and a.titulo = b.titulo
+--      and (a.updated_at, a.id) < (b.updated_at, b.id);
+-- =====================================================================
+create unique index if not exists promos_titulo_idx
+  on public.promos (user_id, titulo);
