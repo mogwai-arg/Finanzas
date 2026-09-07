@@ -15,11 +15,8 @@ archivo deja la base igual que correrlo una.
 
 ### Nada que reemplazar
 
-El archivo no lleva el uuid del usuario escrito. Lo resuelve la base:
-
-```sql
-create temporary table _yo as select id from auth.users;
-```
+El archivo no lleva el uuid del usuario escrito. Lo resuelve la base, en cada
+fila: `(select id from auth.users)`.
 
 Es un proyecto de una sola persona, así que ese `select` devuelve una fila y
 listo. Si algún día hubiera dos usuarios, el `INSERT` corta con *"more than
@@ -53,10 +50,23 @@ ya estaba se actualiza en su lugar y **conserva su id, su `favorita` y su
 (`activa = false`), no se borra, así el historial de usos no queda apuntando a
 una fila que no existe.
 
-El corte es por `updated_at`: el archivo anota `now()` al empezar y apaga todo
-lo del relevamiento que no haya tocado. Y "lo del relevamiento" es por
-dominio (`modo.com.ar`, `beneficios.galicia.ar`), no por "tiene un link": una
-promo propia con el link pegado no se apaga.
+El corte es la lista de títulos que trae el archivo: la segunda sentencia
+apaga lo del relevamiento que no esté nombrado ahí. Y "lo del relevamiento" es
+por dominio (`modo.com.ar`, `beneficios.galicia.ar`), no por "tiene un link":
+una promo propia con el link pegado no se apaga.
+
+### Dos sentencias sueltas, y por qué
+
+El archivo no abre transacción ni usa tablas temporales, aunque sería más
+corto. **El SQL Editor no garantiza que dos sentencias caigan en la misma
+conexión**, y una tabla temporal creada en la primera puede no existir en la
+segunda: *"ERROR: 42P01: relation `_corte` does not exist"*. Tampoco sirve
+guardar el momento del corte en una variable por lo mismo.
+
+Así que cada sentencia se sostiene sola: la primera carga, la segunda apaga
+comparando contra una lista de títulos escrita en el propio archivo. No
+dependen del orden, ni del reloj, ni de que las dos entren juntas. Lo peor que
+puede pasar si la segunda no corre es que quede prendida una promo vencida.
 
 **Por eso el título es la llave y tiene que ser estable de una semana a la
 otra.** Si "20% en Jumbo" pasa a llamarse "Jumbo 20% de reintegro", la base no

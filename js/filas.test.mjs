@@ -186,8 +186,12 @@ function valores(fila) {
 for (const archivo of readdirSync('supabase').filter(f => /^promos_.*\.sql$/.test(f))) {
   t(`${archivo} entra en la base tal como esta`, () => {
     const src = readFileSync(`supabase/${archivo}`, 'utf8');
-    const filas = src.split('\n').filter(l => l.startsWith('((select id from _yo)'));
+    const filas = src.split('\n').filter(l => l.startsWith('((select id from auth.users)'));
     assert.ok(filas.length > 0, 'no encontro ninguna fila de promo');
+
+    // Sin los comentarios: el pie del archivo trae un `set recordar = true`
+    // comentado a proposito, para copiarlo y elegir cuales avisan.
+    const vivo = src.replace(/^\s*--.*$/gm, '');
 
     // El upsert necesita el indice de la 022; sin el, `on conflict` es un
     // error de sintaxis y el archivo no corre.
@@ -195,9 +199,17 @@ for (const archivo of readdirSync('supabase').filter(f => /^promos_.*\.sql$/.tes
       'sin ON CONFLICT, correrlo dos semanas seguidas duplica todo');
     assert.ok(!/^\s*delete\s+from\s+public\.promos/im.test(src),
       'un DELETE se lleva puesto lo cargado a mano y lo marcado como favorito');
-    assert.ok(!/<[A-Z_]+>/.test(src.replace(/^--.*$/gm, '')),
+    assert.ok(!/<[A-Z_]+>/.test(vivo),
       'quedo un placeholder sin reemplazar: se pega tal cual y Postgres lo rechaza');
-    assert.ok(!/\bset\b[^;]*\brecordar\s*=/i.test(src.split('commit;')[0] || ''),
+    assert.ok(!/^\s*create\s+(temp|temporary)\s+table/im.test(vivo),
+      'el SQL Editor puede correr cada sentencia en otra conexion: una tabla ' +
+      'temporal de la primera no existe en la segunda');
+
+    // Lo que la sentencia 2 deja prendido tiene que ser exactamente lo que la
+    // sentencia 1 cargo: un titulo de menos y esa promo se apaga sola.
+    const corte = (vivo.split('titulo not in (')[1] || '').split(');')[0];
+    assert.ok(corte, 'no encontro la lista de titulos del corte');
+    assert.ok(!/\bset\b[^;]*\brecordar\s*=/i.test(vivo),
       'el upsert no puede pisar `recordar`: es una decision de la persona');
 
     const titulos = new Set();
@@ -214,7 +226,12 @@ for (const archivo of readdirSync('supabase').filter(f => /^promos_.*\.sql$/.tes
       assert.match(dias, /^\{\d?(,\d)*\}$/, `${titulo}: dias "${dias}" no es un int[]`);
       for (const d of dias.slice(1, -1).split(',').filter(Boolean))
         assert.ok(Number(d) >= 0 && Number(d) <= 6, `${titulo}: dia ${d} fuera de 0..6`);
+      assert.ok(corte.includes(`'${titulo}'`),
+        `${titulo} se carga y despues el corte no la nombra: se apaga sola`);
     }
+    const enCorte = (corte.match(/'(?:[^']|'')*'/g) || []).length;
+    assert.equal(enCorte, filas.length,
+      `el corte nombra ${enCorte} titulos y se cargan ${filas.length}`);
   });
 }
 
