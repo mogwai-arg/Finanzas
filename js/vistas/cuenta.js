@@ -36,13 +36,24 @@ export function vistaCuenta(root, params) {
 
     // Plata que la app no sabe de dónde salió. Va arriba de todo porque es lo
     // que hace que los demás números no cierren.
+    // Con un saldo declarado viejo, la causa casi siempre es esa: se escribio
+    // el saldo que dice el banco HOY y la fecha quedo en la que ya tenia la
+    // cuenta, asi que se le aplicaron encima todos los movimientos de por
+    // medio. Decir "falta un ingreso" ahi manda a buscar donde no esta.
     e.faltaOrigen ? h('div.aviso.amb',
       h('div.av.amb', icono('sube', 17)),
       h('div.txt',
         h('div.tt', 'Falta de dónde salió esta plata'),
-        h('div.ds', 'La cuenta quedó en negativo: salió más de lo que la app sabe que ',
-          'entró. O falta cargar el saldo con el que arrancó, o falta un ingreso.'),
-        h('button.btn', { onclick: () => formCuenta(c) }, 'Poner el saldo inicial'))) : null,
+        e.desde && e.desde < new Date().toISOString().slice(0, 10)
+          ? h('div.ds', 'La cuenta quedó en negativo. El saldo anotado es del ',
+              `${e.desde.slice(8, 10)}/${e.desde.slice(5, 7)} y desde esa fecha se le `,
+              'suman y restan todos los movimientos cargados. Si ese número es el que ',
+              'ves hoy en el banco, volvé a ponerlo con la fecha de hoy y la cuenta ',
+              'queda en ese número.')
+          : h('div.ds', 'La cuenta quedó en negativo: salió más de lo que la app sabe que ',
+              'entró. O falta cargar el saldo con el que arrancó, o falta un ingreso.'),
+        h('button.btn', { onclick: () => formCuenta(c) },
+          e.desde ? 'Poner el saldo de hoy' : 'Poner el saldo inicial'))) : null,
 
     h('div.grp.pad',
       h('div.ghead', { style: { margin: '0 0 5px' } }, 'Tiene ahora'),

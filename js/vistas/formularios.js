@@ -80,6 +80,7 @@ export function formCuenta(a = null) {
     // El saldo inicial no aplica a una tarjeta de crédito: lo que hay ahí es
     // deuda, y sale del cronograma de cuotas, no de un número cargado a mano.
     bloqueSaldo.hidden = esCredito;
+    if (!esCredito) verResultado();
   }
   c.tipo.addEventListener('change', actualizar);
 
@@ -110,12 +111,54 @@ export function formCuenta(a = null) {
         icono('mas', 16), 'Agregar un ciclo'))
   );
 
+  // Lo que va a quedar la cuenta si se guarda asi, calculado con lo mismo que
+  // usa la pantalla.
+  //
+  // Existe por un caso real y caro: el campo dice "Saldo de hoy" pero la
+  // fecha de abajo conservaba la que ya tenia la cuenta —de hace cuatro
+  // meses—. Se escribia el saldo que dice el banco hoy y la app le aplicaba
+  // encima cuatro meses de movimientos: la cuenta quedaba en cientos de miles
+  // negativos y no habia forma de ver por que, ni de volver atras.
+  const resultado = h('div.small', { style: { marginTop: '8px', lineHeight: '1.45' } });
+  const verResultado = () => {
+    if (c.tipo.value === 'credito') return;
+    const monto = num(c.saldo.value);
+    const fecha = c.saldoAl.value || hoyISO();
+    const cuenta = { ...(a || {}), id: a?.id || 'nueva', tipo: c.tipo.value,
+                     saldo_visto_at: null };
+    const queda = F.saldoDeCuenta(cuenta, a ? state.transactions : [],
+                                  new Date(), monto, fecha);
+    const m = c.moneda.value || 'ARS';
+    const atrasado = fecha < hoyISO();
+    resultado.className = 'small' + (queda < 0 ? ' neg' : ' mut');
+    // Sin el filtro, un `null` entre los hijos se escribe como la palabra
+    // "null" al lado del monto: replaceChildren no lo saltea como h().
+    resultado.replaceChildren(...[
+      `Con esto la cuenta queda en ${plata(m === 'USD' ? queda : Math.round(queda), m)}.`,
+      atrasado ? h('div', { style: { marginTop: '4px' } },
+        `Ojo: ese saldo es del ${fecha.slice(8, 10)}/${fecha.slice(5, 7)}, no de hoy, `,
+        'así que se le suman y restan todos los movimientos cargados desde esa fecha. ',
+        'Si el número que pusiste es el que ves hoy en el banco, la fecha tiene que ',
+        'ser la de hoy.') : null
+    ].filter(Boolean));
+  };
+
+  // Si se cambia el monto, la fecha se va a hoy: el campo dice "Saldo de hoy"
+  // y una fecha vieja ahi abajo convierte ese numero en otra cosa.
+  c.saldo.addEventListener('input', () => {
+    if (num(c.saldo.value) !== (Number(a?.saldo_inicial) || 0)) c.saldoAl.value = hoyISO();
+    verResultado();
+  });
+  c.saldoAl.addEventListener('change', verResultado);
+  c.moneda.addEventListener('change', verResultado);
+
   bloqueSaldo.append(h('div.f',
     h('label', 'Saldo de hoy'), c.saldo,
     h('div.small.mut', { style: { marginTop: '6px', lineHeight: '1.45' } },
       'El que ves ahora en el banco o en la billetera. Este número pasa a ser el saldo: ',
       'lo que ya cargaste hasta este momento no se vuelve a sumar ni a restar, porque el ',
-      'banco ya lo tenía adentro. Lo que cargues después sí se descuenta.')),
+      'banco ya lo tenía adentro. Lo que cargues después sí se descuenta.'),
+    resultado),
     campo('Ese saldo es del', c.saldoAl),
     h('div.f',
       h('label', 'Rinde al año (%)'), c.tna,
@@ -126,6 +169,7 @@ export function formCuenta(a = null) {
           `Cargada el ${a.tna_al}. Cambian seguido: si está vieja, el cálculo miente.`) : null)));
 
   actualizar();
+  verResultado();
 
   const cerrar = hoja(nuevo ? 'Nueva cuenta' : 'Editar cuenta', h('div',
     campo('Nombre', c.nombre),
