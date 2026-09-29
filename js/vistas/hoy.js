@@ -510,18 +510,33 @@ function loQueSeViene(hoy) {
                  ir: `/tarjetas/${t.id}` });
   }
 
-  // Gastos fijos sin pagar
+  // Gastos fijos sin pagar.
+  //
+  // Los del mes en curso y los del que viene, porque el 29 los del mes en
+  // curso ya están todos pagados y las expensas del 1 vencen en dos días: la
+  // sección quedaba vacía justo cuando más sirve. Las tarjetas de arriba ya
+  // miran hasta el próximo vencimiento, que cae en el mes que viene; cortar
+  // los fijos en el fin de mes era la única parte de esta lista que se
+  // guiaba por el calendario y no por lo que se viene.
+  //
+  // Del mes que viene entra solo lo cercano: en cuanto empieza el mes, lo del
+  // siguiente está a treinta días y no es "lo que se viene", es ruido.
   const p = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}`;
-  for (const r of F.recurrentesDelMes(state.recurrings, state.recurring_payments, p, hoy)) {
-    if (r.pagado) continue;
+  const delMes = F.recurrentesDelMes(state.recurrings, state.recurring_payments, p, hoy)
+    .filter(r => !r.pagado).map(r => ({ periodo: p, r }));
+  for (const { periodo, r } of [...delMes,
+                                ...F.recurrentesQueVienen(state.recurrings,
+                                                          state.recurring_payments, hoy)]) {
     // Un fijo que cae solo en la tarjeta no se paga aparte: entra al resumen
     // y sale cuando se paga el resumen. Listarlo acá lo cobraría dos veces.
     // El que se paga a mano queda, aunque a veces lo pagues con la tarjeta:
     // hay que acordarse igual, y con qué se paga se decide ese día.
     if (F.debitoEnTarjeta(r, state.accounts)) continue;
-    items.push({ id: r.id, nombre: r.nombre, monto: r.monto, vence: r.vence,
-                 moneda: r.moneda || 'ARS',
-                 icono: iconoDe(r.nombre), recurrente: r, periodo: p, ir: `/mes` });
+    // El período va con el item: sin esto, anotar el pago de las expensas de
+    // octubre desde acá lo guardaba como el pago de septiembre.
+    items.push({ id: `${periodo}:${r.id}`, nombre: r.nombre, monto: r.monto,
+                 vence: r.vence, moneda: r.moneda || 'ARS',
+                 icono: iconoDe(r.nombre), recurrente: r, periodo, ir: '/mes' });
   }
 
   if (!items.length) return null;
@@ -567,9 +582,11 @@ function loQueSeViene(hoy) {
     // tengo que juntar". Faltaba, y estaba una pantalla más adentro.
     h('button.li', { style: { marginTop: '8px' }, onclick: () => irA('/mes') },
       h('div.m', h('div.t', 'En total hay que pagar'),
+        // Ya no es "este mes": la lista cruza el fin de mes cuando lo que
+        // viene esta del otro lado.
         h('div.s', items.length > MUESTRA
-          ? `${items.length} cosas este mes · ${items.length - MUESTRA} no entran acá`
-          : `${items.length} ${items.length === 1 ? 'cosa' : 'cosas'} este mes`)),
+          ? `${items.length} cosas por pagar · ${items.length - MUESTRA} no entran acá`
+          : `${items.length} ${items.length === 1 ? 'cosa' : 'cosas'} por pagar`)),
       // Cada moneda en su renglón: en una sola línea "$ 1.827.185 + US$ 850"
       // no entra en un teléfono y se comía el nombre de la fila.
       h('div.v', ...Object.entries(totales).map(([m, v], i) => {

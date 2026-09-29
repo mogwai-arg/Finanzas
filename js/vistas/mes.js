@@ -19,6 +19,14 @@ export function vistaMes(root) {
   const hoy = new Date();
   const p = hoyISO().slice(0, 7);
   const rec = F.recurrentesDelMes(state.recurrings, state.recurring_payments, p, hoy);
+  // Los del mes que viene que ya vencen en días. Van aparte y no mezclados
+  // con los de arriba: "falta pagar" y "3 de 8 gastos fijos" son de ESTE mes,
+  // y sumarles los del que viene daría un número que no es ninguno de los
+  // dos. Pero tienen que estar, porque el 29 son los únicos que quedan y Hoy
+  // ya los muestra: si acá no estuvieran, "Ver todo" llevaría a una pantalla
+  // donde no está lo que se acaba de ver.
+  const vienen = F.recurrentesQueVienen(state.recurrings, state.recurring_payments, hoy)
+    .filter(({ r }) => !F.debitoEnTarjeta(r, state.accounts));
   const faltan = rec.filter(r => !r.pagado);
   // Los que se debitan en la tarjeta no se pagan aparte: salen con el resumen,
   // que ya está contado más arriba. Sumarlos sería cobrarlos dos veces.
@@ -48,6 +56,10 @@ export function vistaMes(root) {
     // La pila, y debajo lo que antes vivía en la pantalla de tarjetas. Eran
     // dos lugares con los mismos números y una puerta en el medio.
     seccionTarjetas(hoy),
+
+    vienen.length ? h('section',
+      h('div.ghead', 'Del mes que viene'),
+      h('div.grp', vienen.map(({ periodo, r }) => filaRecurrente(r, periodo, hoy)))) : null,
 
     h('section',
       h('div.ghead', 'Gastos fijos',

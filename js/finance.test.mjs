@@ -1945,4 +1945,67 @@ t('el extracto de la cuenta dice lo mismo que el saldo', () => {
   assert.equal(e.salidas, 5000);
 });
 
+// =====================================================================
+// LO QUE SE VIENE NO TERMINA EL 30
+//
+// El 29 los gastos fijos del mes estan todos pagados y las expensas del 1
+// vencen en dos dias. La lista cortaba en el fin de mes y quedaba vacia
+// justo cuando mas sirve.
+// =====================================================================
+const FIJOS_VEN = [
+  { id: 'alq', nombre: 'Alquiler', activo: true, dia_vencimiento: 5, monto: 900000, moneda: 'ARS' },
+  { id: 'col', nombre: 'Colegio', activo: true, dia_vencimiento: 10, monto: 400000, moneda: 'ARS' },
+  { id: 'exp', nombre: 'Expensas', activo: true, dia_vencimiento: 1, monto: 250000, moneda: 'ARS' }
+];
+const PAGOS_SEP_VEN = FIJOS_VEN.map(r => ({ recurring_id: r.id, periodo: '2026-09',
+                                    pagado_at: '2026-09-05', monto: r.monto }));
+const losQueVienen = (ref, pagos = PAGOS_SEP_VEN) =>
+  F.recurrentesQueVienen(FIJOS_VEN, pagos, d(ref)).map(x => `${x.periodo} ${x.r.nombre}`);
+
+t('el 29 aparecen los del mes que viene que vencen en días', () => {
+  assert.deepEqual(losQueVienen('2026-09-29'), ['2026-10 Expensas', '2026-10 Alquiler']);
+});
+
+t('a mitad de mes no aparece ninguno: eso no es "lo que se viene"', () => {
+  // Lo del mes siguiente esta a treinta dias. Mostrarlo seria ruido todo el
+  // mes para que sirva los ultimos diez dias.
+  assert.deepEqual(losQueVienen('2026-09-15'), []);
+  assert.deepEqual(losQueVienen('2026-10-02'), []);
+});
+
+t('el borde: entra a diez días y no a once', () => {
+  assert.deepEqual(losQueVienen('2026-09-21'), ['2026-10 Expensas']);   // el 1/10, a 10 dias
+  assert.deepEqual(losQueVienen('2026-09-20'), []);                      // a 11
+});
+
+t('uno del mes que viene ya pagado no se lista', () => {
+  const pagos = [...PAGOS_SEP_VEN, { recurring_id: 'exp', periodo: '2026-10',
+                                 pagado_at: '2026-09-28', monto: 250000 }];
+  assert.deepEqual(losQueVienen('2026-09-29', pagos), ['2026-10 Alquiler']);
+});
+
+t('viene con su período, para no anotar el pago en el mes equivocado', () => {
+  // Es lo que hace que tocar "Pagar" en las expensas de octubre desde Hoy no
+  // lo guarde como el pago de septiembre.
+  const v = F.recurrentesQueVienen(FIJOS_VEN, PAGOS_SEP_VEN, d('2026-09-29'));
+  assert.equal(v[0].periodo, '2026-10');
+  assert.equal(F.fechaISO(v[0].r.vence), '2026-10-01');
+});
+
+t('la ventana no depende de la hora del día', () => {
+  // Las pantallas pasan `new Date()` con la hora puesta. Antes el colegio
+  // estaba "a 11 días" a la mañana y "a 10" a la tarde, así que la fila
+  // aparecía sola a mitad del día.
+  const aLas = h => F.recurrentesQueVienen(FIJOS_VEN, PAGOS_SEP_VEN, new Date(h))
+    .map(x => x.r.nombre);
+  assert.deepEqual(aLas('2026-09-29T00:30:00'), aLas('2026-09-29T23:30:00'));
+  assert.deepEqual(aLas('2026-09-29T13:00:00'), ['Expensas', 'Alquiler']);
+});
+
+t('diciembre mira a enero del año siguiente', () => {
+  const pagosDic = FIJOS_VEN.map(r => ({ recurring_id: r.id, periodo: '2026-12',
+                                     pagado_at: '2026-12-05', monto: r.monto }));
+  assert.deepEqual(losQueVienen('2026-12-29', pagosDic), ['2027-01 Expensas', '2027-01 Alquiler']);
+});
+
 console.log(`\n${ok} pruebas OK`);

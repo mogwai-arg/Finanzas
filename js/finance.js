@@ -832,6 +832,34 @@ export function recurrentesDelMes(recurrings, pagos, per, ref = hoy()) {
 }
 
 /**
+ * Los gastos fijos del mes que viene que ya estan a la vuelta de la esquina.
+ *
+ * El 29 los del mes en curso estan todos pagados y las expensas del 1 vencen
+ * en dos dias: cualquier lista que corte en el fin de mes queda vacia justo
+ * cuando mas sirve. Las tarjetas ya se miran por vencimiento —que cae en el
+ * mes siguiente— asi que los fijos eran lo unico que se guiaba por el
+ * calendario en vez de por lo que se viene.
+ *
+ * Solo lo cercano: apenas empieza el mes, lo del siguiente esta a treinta
+ * dias y eso no es "lo que se viene", es ruido.
+ *
+ * Devuelve el periodo con cada uno. Sin eso, anotar el pago de las expensas
+ * de octubre lo guarda como el pago de septiembre.
+ */
+export function recurrentesQueVienen(recurrings, pagos, ref = hoy(), dias = 10) {
+  // Las pantallas pasan `new Date()`, con la hora puesta, y `diasRestantes`
+  // redondea: a la mañana el colegio esta "a 11 dias" y a la tarde "a 10", y
+  // la fila aparecia sola a mitad del dia. Se cuenta por dias de calendario,
+  // que ademas es lo que dice la fila.
+  const desde = new Date(ref.getFullYear(), ref.getMonth(), ref.getDate());
+  const sig = new Date(desde.getFullYear(), desde.getMonth() + 1, 1);
+  const per = `${sig.getFullYear()}-${String(sig.getMonth() + 1).padStart(2, '0')}`;
+  return recurrentesDelMes(recurrings, pagos, per, desde)
+    .filter(r => !r.pagado && r.diasRestantes <= dias)
+    .map(r => ({ periodo: per, r }));
+}
+
+/**
  * Saldo arrastrado de un gasto fijo.
  *
  * El alquiler vale 850 dolares, pero para no romper billetes un mes se pagan
