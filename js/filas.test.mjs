@@ -1,5 +1,6 @@
 // node js/filas.test.mjs
 import assert from 'node:assert/strict';
+import { MIGRACION, faltaMigracion, migracionesQueFaltan } from './migraciones.js';
 import { normalizar } from './filas.js';
 
 let ok = 0, mal = 0;
@@ -234,6 +235,59 @@ for (const archivo of readdirSync('supabase').filter(f => /^promos_.*\.sql$/.tes
       `el corte nombra ${enCorte} titulos y se cargan ${filas.length}`);
   });
 }
+
+// =====================================================================
+// QUE MIGRACION CREA CADA COLUMNA
+//
+// La app usa este mapa para contestar la unica pregunta util cuando la base
+// rechaza una fila: cual de los archivos de supabase/migrations hay que
+// correr. Si se agrega una columna en un SQL y no se agrega ahi, el cartel
+// vuelve a ser un callejon sin salida.
+// =====================================================================
+t('js/migraciones.js dice lo mismo que supabase/migrations', () => {
+  const real = {};
+  for (const f of readdirSync('supabase/migrations').sort()) {
+    const sql = readFileSync(`supabase/migrations/${f}`, 'utf8');
+    for (const m of sql.matchAll(
+        /alter\s+table\s+public\.(\w+)\s+add\s+column\s+if\s+not\s+exists\s+(\w+)/gi)) {
+      (real[m[1]] ||= {})[m[2]] = f;
+    }
+  }
+  const falta = [];
+  for (const [tabla, cols] of Object.entries(real))
+    for (const [col, archivo] of Object.entries(cols))
+      if (MIGRACION[tabla]?.[col] !== archivo)
+        falta.push(`${tabla}.${col} → ${archivo} (dice ${MIGRACION[tabla]?.[col] || 'nada'})`);
+  assert.deepEqual(falta, [], 'regenerar js/migraciones.js:\n  ' + falta.join('\n  '));
+
+  // Y al reves: una entrada que nombra un archivo que ya no crea esa columna
+  // manda a correr algo que no arregla nada.
+  const sobra = [];
+  for (const [tabla, cols] of Object.entries(MIGRACION))
+    for (const col of Object.keys(cols))
+      if (!real[tabla]?.[col]) sobra.push(`${tabla}.${col}`);
+  assert.deepEqual(sobra, [], 'sobran en js/migraciones.js');
+});
+
+t('el rechazo de Postgres se traduce a un archivo', () => {
+  // El mensaje real, tal cual lo devuelve PostgREST.
+  assert.deepEqual(
+    faltaMigracion("Could not find the 'saldos_tarjeta' column of 'settings' in the schema cache"),
+    { tabla: 'settings', columna: 'saldos_tarjeta', archivo: '021_saldo_del_banco.sql' });
+  // Un error que NO es una columna faltante no se disfraza de migracion.
+  assert.equal(faltaMigracion('new row violates check constraint "promos_canal_check"'), null);
+  assert.equal(faltaMigracion(null), null);
+});
+
+t('dos columnas de la misma migracion son una sola cosa que correr', () => {
+  assert.deepEqual(migracionesQueFaltan([
+    { error: "Could not find the 'cotejos' column of 'settings' in the schema cache" },
+    { error: "Could not find the 'suscripciones' column of 'settings' in the schema cache" },
+    { error: 'sin relacion' }
+  ]), [{ archivo: '020_cotejos_suscripciones.sql',
+         columnas: ['settings.cotejos', 'settings.suscripciones'] }]);
+  assert.deepEqual(migracionesQueFaltan([]), []);
+});
 
 console.log(`\n${ok} pruebas OK${mal ? `, ${mal} FALLAN` : ''}\n`);
 process.exit(mal ? 1 : 0);

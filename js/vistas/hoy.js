@@ -13,6 +13,7 @@
 // =====================================================================
 import { h, frag, icono, iconoDe, hoja, campo, select, aviso } from '../ui.js';
 import { state, guardar, fallidas, sincronizar, bajarAdjunto } from '../db.js';
+import { migracionesQueFaltan } from '../migraciones.js';
 import * as F from '../finance.js';
 import { plataPartida, plata, cuandoVence, diasHasta, hoyISO, aFecha, nombreDe,
          aNumero, etiquetaCuenta } from '../formato.js';
@@ -235,12 +236,17 @@ function noSeGuardo() {
   if (!rotas.length) return null;
   const QUE = { recurring_payments: 'un pago de un gasto fijo', transactions: 'un movimiento',
                 recurrings: 'un gasto fijo', accounts: 'una cuenta', budgets: 'un presupuesto',
-                promos: 'una promo', recibos: 'un recibo' };
+                promos: 'una promo', recibos: 'un recibo',
+                settings: 'un ajuste', fondos: 'un fondo', deudas: 'una deuda' };
   const cuales = [...new Set(rotas.map(r => QUE[r.tabla] || r.tabla))];
   // El motivo, con las palabras de la base. Sin esto el cartel es un callejón
   // sin salida: se puede reintentar para siempre sin saber que lo que sobra
   // es un valor que la tabla no acepta.
   const motivos = [...new Set(rotas.map(r => r.error).filter(Boolean))].slice(0, 3);
+  // Y si el motivo es una columna que la base no tiene, cual archivo la crea.
+  // El mensaje de Postgres es cierto y no se puede hacer nada con el: dice
+  // que falta la columna, no en cual de los veintitres SQL esta.
+  const faltan = migracionesQueFaltan(rotas);
 
   const btn = h('button.btn', 'Intentar de nuevo');
   btn.onclick = async () => {
@@ -257,6 +263,12 @@ function noSeGuardo() {
                                      : `${rotas.length} cambios no se guardaron`),
       h('div.ds', `Quedó sin subir ${cuales.join(', ')}. Lo que ves en la pantalla `,
         'puede volver atrás solo hasta que se guarde de verdad.'),
+      faltan.length ? h('div.small', { style: { marginTop: '8px', lineHeight: '1.5' } },
+        h('b', faltan.length === 1 ? 'Falta correr esto en Supabase:'
+                                   : 'Faltan correr estos en Supabase:'),
+        faltan.map(x => h('div', { style: { marginTop: '4px' } },
+          x.archivo ? `· supabase/migrations/${x.archivo}` : '· (no está en ninguna migración)',
+          h('span.mut', ` — crea ${x.columnas.join(', ')}`)))) : null,
       motivos.length ? h('div.small.mut', { style: { marginTop: '8px', lineHeight: '1.5' } },
         motivos.map(m => h('div', { style: { marginTop: '4px' } }, '· ', m))) : null,
       btn));

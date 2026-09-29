@@ -6,6 +6,7 @@ import { state, salir, sincronizar, exportarJSON, importarJSON, pendientes, fall
          traerDolar,
          FUNCTIONS_URL, conectar, desconectar, leerAhora, mirarBandeja,
          guardar, probarAviso, generarClavesAviso } from '../db.js';
+import { migracionesQueFaltan } from '../migraciones.js';
 import { plata, fechaRelativa, aNumero } from '../formato.js';
 import { bishu } from '../bishu.js';
 import { estadoPush, prenderPush, apagarPush } from '../push.js';
@@ -27,6 +28,16 @@ export function vistaAjustes(root) {
         h('div.tt', `${rotas.length} cambios no se pudieron subir`),
         h('div.ds', 'Están guardados acá, no se perdió nada. Casi siempre es que ',
           'a la base le falta correr una migración.'),
+        // Y decir cuál. "Casi siempre falta una migración" sin nombrar el
+        // archivo deja el mismo callejón: hay veintitrés y hay que abrirlos
+        // de a uno para encontrar la columna que falta.
+        migracionesQueFaltan(rotas).length
+          ? h('div.small', { style: { marginTop: '8px', lineHeight: '1.5' } },
+              h('b', 'Corré esto en el SQL Editor:'),
+              migracionesQueFaltan(rotas).map(x => h('div', { style: { marginTop: '4px' } },
+                x.archivo ? `· supabase/migrations/${x.archivo}` : '· (no está en ninguna migración)',
+                h('span.mut', ` — crea ${x.columnas.join(', ')}`))))
+          : null,
         // Sin el motivo, el cartel es un callejón sin salida: se puede
         // reintentar para siempre y nunca saber que falta una columna.
         h('div.small.mut', { style: { marginTop: '8px', lineHeight: '1.5' } },

@@ -4,6 +4,7 @@
 // ningun CDN y funcione tambien sin conexion.
 // =====================================================================
 import { normalizar, COLUMNAS } from './filas.js';
+import { faltaMigracion } from './migraciones.js';
 export { normalizar };
 
 /**
@@ -145,7 +146,12 @@ function rechazo(tabla, e) {
   // Sin señal el fetch tira TypeError: eso es la cola haciendo su trabajo, no
   // un rechazo.
   if (/failed to fetch|networkerror|load failed/i.test(msg)) return;
-  state.rechazo = { tabla, error: msg, cuando: Date.now() };
+  // "Could not find the 'saldos_tarjeta' column of 'settings' in the schema
+  // cache" es cierto y no sirve: no dice cual de los veintitres archivos de
+  // supabase/migrations la crea. Con el nombre del archivo se arregla en un
+  // minuto; sin el, se pierde la tarde.
+  const falta = faltaMigracion(msg);
+  state.rechazo = { tabla, error: msg, cuando: Date.now(), falta };
   emit();
 }
 
