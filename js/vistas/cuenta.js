@@ -55,7 +55,11 @@ export function vistaCuenta(root, params) {
       h('div', { style: { marginTop: '13px', paddingTop: '13px',
                           borderTop: '1px solid var(--line)' } },
         // El saldo inicial no es un movimiento: va sin signo. Los otros dos sí.
-        renglon('Arrancó con', e.inicial, moneda, false,
+        //
+        // Y no siempre es "arrancó": cuando hay fecha de corte, lo normal es
+        // que sea el saldo que se acaba de copiar del banco para volver a
+        // estar al día. Decir "arrancó con" ahí suena a otra cosa.
+        renglon(e.desde ? 'El banco decía' : 'Arrancó con', e.inicial, moneda, false,
           e.desde ? `al ${e.desde.slice(8, 10)}/${e.desde.slice(5, 7)}`
                   : 'sin fecha de corte: se cuenta todo lo cargado'),
         renglon('Entró', e.entradas, moneda, true, 'ingresos y movidas de otras cuentas'),

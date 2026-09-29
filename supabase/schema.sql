@@ -325,3 +325,6 @@ end $$;
 
 -- Promos: el relevamiento semanal hace upsert por titulo (ver 022).
 create unique index if not exists promos_titulo_idx on public.promos (user_id, titulo);
+
+-- Cuentas: a que hora se miro el banco para anotar el saldo (ver 023).
+alter table public.accounts add column if not exists saldo_visto_at timestamptz;

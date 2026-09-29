@@ -32,7 +32,7 @@
   --brand-solid: #0D5470; /* relleno de botones solidos */
 
   /* ---------- semántica: color solo cuando significa algo ---------- */
-  --pos:       #0B7F5A;  --pos-bg: #E3F4EC;  /* entra plata · dentro del tope */
+  --pos:       #0A7654;  --pos-bg: #E3F4EC;  /* entra plata · dentro del tope */
   --amb:       #9A5D00;  --amb-bg: #FBF0DE;  /* vence pronto · cerca del tope */
   --neg:       #C1293D;  --neg-bg: #FBE9EB;  /* vencido. NUNCA para "te pasaste" */
   /* Los mismos, para PINTAR un bloque con texto blanco encima. En claro

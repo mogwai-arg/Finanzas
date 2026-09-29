@@ -22,7 +22,11 @@ arregló, lo que se miró y está bien, y lo que quedó abierto— en
 5. **Pegar `supabase/promos_2026-09-07.sql`** en el SQL Editor, entero y sin
    tocar nada. Son las 53 promos de esta semana. Cómo funciona y qué pedirle
    a quien arma el relevamiento está en [`promos.md`](promos.md).
-6. **Prender "Topes del mes"** en Ajustes → Avisos.
+6. **Correr `supabase/migrations/023_saldo_visto.sql`.** Es lo que hace que
+   poner el saldo que dice el banco lo deje en ese número. Sin esto la app
+   descuenta los movimientos del mismo día que ya estaban cargados, aunque el
+   banco ya los tuviera adentro.
+7. **Prender "Topes del mes"** en Ajustes → Avisos.
 
 ---
 

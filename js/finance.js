@@ -731,15 +731,51 @@ export function diasSinCargar(txs, ref = hoy()) {
  * `inicial` es un saldo tomado del banco y `desde` la fecha de ese saldo. Los
  * movimientos anteriores a esa fecha NO se suman: ya estan adentro del numero.
  */
+/**
+ * Un movimiento del mismo dia que el saldo declarado: ya esta adentro de ese
+ * numero, o no.
+ *
+ * El saldo que dice el banco se anota con una fecha, y una fecha sola no
+ * alcanza. "1.000.000 al 29" incluye todo lo del 29 que el banco ya habia
+ * visto; el cafe que se carga a la tarde, no. Las dos cosas son del 29 y la
+ * diferencia es plata.
+ *
+ * Lo resuelve `saldo_visto_at`, el momento en que se miro el banco: cargado
+ * antes, ya estaba contado; cargado despues, se suma. Sin ese dato —cuentas
+ * de antes de la migracion 023— vale el dia entero, que es como se lee "el
+ * saldo al 29": el del cierre de ese dia.
+ */
+function yaEstabaEnElSaldo(tx, cuenta) {
+  const visto = cuenta && cuenta.saldo_visto_at;
+  if (!visto) return true;
+  const cargado = tx.created_at || null;
+  return !cargado || cargado <= visto;
+}
+
+/**
+ * Los movimientos que el saldo declarado NO tiene adentro todavia.
+ *
+ * Antes de una fecha de corte no se cuenta nada y despues se cuenta todo; el
+ * dia del corte es el unico que hay que mirar de cerca.
+ */
+function cuentaDespuesDelCorte(tx, corte, cuenta) {
+  if (!corte) return true;
+  const f = parseFecha(tx.fecha);
+  if (f < corte) return false;
+  if (f.getTime() !== corte.getTime()) return true;
+  return !yaEstabaEnElSaldo(tx, cuenta);
+}
+
 export function saldoDeCuenta(cuenta, txs, ref = hoy(), inicial = 0, desde = null) {
   let saldo = Number(inicial) || 0;
-  // `desde` es la fecha del saldo declarado. Todo lo anterior ya esta contado
-  // adentro de ese numero; volver a sumarlo duplica el saldo.
+  // `desde` es la fecha del saldo declarado. Todo lo que ese numero ya tiene
+  // adentro no se vuelve a contar; sumarlo otra vez movia el saldo justo
+  // cuando se acababa de poner el de verdad.
   const corte = desde ? parseFecha(desde) : null;
   for (const tx of txs) {
     const f = parseFecha(tx.fecha);
     if (f > ref) continue;
-    if (corte && f < corte) continue;
+    if (!cuentaDespuesDelCorte(tx, corte, cuenta)) continue;
     const propio = tx.account_id === cuenta.id;
     const destino = tx.destino_account_id === cuenta.id;
     if (!propio && !destino) continue;
@@ -1319,7 +1355,7 @@ export function extractoDeCuenta(cuenta, txs, ref = hoy()) {
   for (const tx of txs) {
     const f = parseFecha(tx.fecha);
     if (f > ref) continue;
-    if (corte && f < corte) continue;
+    if (!cuentaDespuesDelCorte(tx, corte, cuenta)) continue;
     const propio = tx.account_id === cuenta.id;
     const destino = tx.destino_account_id === cuenta.id;
     if (!propio && !destino) continue;

@@ -113,8 +113,9 @@ export function formCuenta(a = null) {
   bloqueSaldo.append(h('div.f',
     h('label', 'Saldo de hoy'), c.saldo,
     h('div.small.mut', { style: { marginTop: '6px', lineHeight: '1.45' } },
-      'El que ves ahora en el banco o en la billetera. Los movimientos anteriores a la fecha ',
-      'de abajo no se vuelven a sumar: ya están adentro de este número.')),
+      'El que ves ahora en el banco o en la billetera. Este número pasa a ser el saldo: ',
+      'lo que ya cargaste hasta este momento no se vuelve a sumar ni a restar, porque el ',
+      'banco ya lo tenía adentro. Lo que cargues después sí se descuenta.')),
     campo('Ese saldo es del', c.saldoAl),
     h('div.f',
       h('label', 'Rinde al año (%)'), c.tna,
@@ -168,6 +169,16 @@ export function formCuenta(a = null) {
           ciclos: esCredito ? ciclos.filter(x => x.cierre && x.vence) : [],
           saldo_inicial: esCredito ? 0 : num(c.saldo.value),
           saldo_al: esCredito ? null : (c.saldoAl.value || hoyISO()),
+          // A que hora se miro el banco. Un movimiento del mismo dia que el
+          // saldo cuenta solo si se cargo despues de este momento: antes ya
+          // estaba adentro del numero del banco. Se pone sola y solo cuando
+          // el saldo declarado cambia; si no cambio, sigue valiendo la de
+          // cuando se anoto.
+          saldo_visto_at: esCredito ? null
+                : (num(c.saldo.value) === (Number(a?.saldo_inicial) || 0)
+                   && (c.saldoAl.value || hoyISO()) === (a?.saldo_al || null))
+                  ? (a?.saldo_visto_at || null)
+                  : new Date().toISOString(),
           tna: esCredito ? null : (num(c.tna.value) || null),
           // La fecha se pone sola y solo cuando la tasa cambia: es lo que
           // permite avisar que está vieja en vez de seguir calculando con un

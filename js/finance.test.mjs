@@ -392,9 +392,9 @@ const META = [{ clase: 'ahorro', moneda: 'ARS', monto: 350000 },
               { clase: 'ahorro', moneda: 'USD', monto: 200 }];
 const CTAS_AH = [
   { id: 'gal', nombre: 'Galicia', tipo: 'cuenta', moneda: 'ARS',
-    saldo_inicial: 1000000, saldo_al: '2026-08-01' },
+    saldo_inicial: 1000000, saldo_al: '2026-07-31' },
   { id: 'usd', nombre: 'Dólares', tipo: 'efectivo', moneda: 'USD',
-    saldo_inicial: 500, saldo_al: '2026-08-01' }
+    saldo_inicial: 500, saldo_al: '2026-07-31' }
 ];
 
 t('el mes en curso nunca se declara cumplido: el día 3 no se sabe', () => {
@@ -999,9 +999,21 @@ t('sin fecha de corte se cuenta todo, como antes', () => {
   const txs = [{ id: 'a', fecha: '2026-08-20', tipo: 'gasto', moneda: 'ARS', monto: 500000, account_id: 'gal' }];
   assert.equal(F.saldoDeCuenta(GAL, txs, d('2026-09-05'), 1000000), 500000);
 });
-t('un movimiento del mismo dia del corte SI cuenta', () => {
+t('un movimiento del mismo dia del corte NO se vuelve a contar', () => {
+  // Esta prueba decia lo contrario y era el bug: se copiaba el saldo del
+  // banco y la app le restaba los gastos de ese mismo dia, que el banco YA
+  // habia cobrado. Se anotaba 1.000.000 y la cuenta mostraba 900.000.
   const txs = [{ id: 'a', fecha: '2026-09-01', tipo: 'gasto', moneda: 'ARS', monto: 100000, account_id: 'gal' }];
-  assert.equal(F.saldoDeCuenta(GAL, txs, d('2026-09-05'), 1000000, '2026-09-01'), 900000);
+  assert.equal(F.saldoDeCuenta(GAL, txs, d('2026-09-05'), 1000000, '2026-09-01'), 1000000);
+});
+t('salvo que se haya cargado despues de mirar el banco', () => {
+  const cuenta = { ...GAL, saldo_visto_at: '2026-09-01T12:00:00.000Z' };
+  const antes = [{ id: 'a', fecha: '2026-09-01', tipo: 'gasto', moneda: 'ARS', monto: 100000,
+                   account_id: 'gal', created_at: '2026-09-01T09:00:00.000Z' }];
+  const despues = [{ id: 'b', fecha: '2026-09-01', tipo: 'gasto', moneda: 'ARS', monto: 100000,
+                     account_id: 'gal', created_at: '2026-09-01T20:00:00.000Z' }];
+  assert.equal(F.saldoDeCuenta(cuenta, antes, d('2026-09-05'), 1000000, '2026-09-01'), 1000000);
+  assert.equal(F.saldoDeCuenta(cuenta, despues, d('2026-09-05'), 1000000, '2026-09-01'), 900000);
 });
 
 t('el 1 de septiembre hay un resumen cerrado esperando pago', () => {
@@ -1859,6 +1871,78 @@ t('un resumen importado entero conserva el orden del archivo', () => {
   const delArchivo = ['primera', 'segunda', 'tercera'].map((id, i) =>
     mov(id, '2026-09-07', new Date(base + i).toISOString()));
   assert.equal(orden(delArchivo), 'tercera segunda primera');
+});
+
+// =====================================================================
+// PONER EL SALDO QUE DICE EL BANCO
+//
+// Es la forma rapida de volver a estar al dia despues de unos dias sin
+// cargar nada: se copia el numero del banco y ese pasa a ser el saldo. Lo
+// que no puede pasar es que la app lo mueva.
+// =====================================================================
+const CTA_BCO = { id: 'gal', tipo: 'cuenta', moneda: 'ARS',
+              saldo_inicial: 1000000, saldo_al: '2026-09-29',
+              saldo_visto_at: '2026-09-29T12:00:00.000Z' };
+const movCta = (monto, tipo, created_at, fecha = '2026-09-29') =>
+  ({ fecha, tipo, account_id: 'gal', monto, moneda: 'ARS', created_at });
+const alDia29 = (cuenta, txs) =>
+  F.saldoDeCuenta(cuenta, txs, d('2026-09-29'), cuenta.saldo_inicial, cuenta.saldo_al);
+
+t('el saldo que dice el banco queda tal cual', () => {
+  // El caso real: se anotaba 1.000.000 y la cuenta mostraba 970.000, porque
+  // le restaba un gasto y le sumaba un ingreso del mismo dia que ya estaban
+  // adentro del numero del banco.
+  assert.equal(alDia29(CTA_BCO, [movCta(50000, 'gasto', '2026-09-29T10:00:00.000Z'),
+                             movCta(20000, 'ingreso', '2026-09-29T10:30:00.000Z')]),
+               1000000);
+});
+
+t('lo que se carga despues de mirar el banco si se descuenta', () => {
+  // El otro lado del mismo problema: si se excluyera el dia entero, el cafe
+  // de la tarde no aparecería en ningun saldo. Plata que la app cree que no
+  // existe.
+  assert.equal(alDia29(CTA_BCO, [movCta(5000, 'gasto', '2026-09-29T18:00:00.000Z')]), 995000);
+  assert.equal(alDia29(CTA_BCO, [movCta(50000, 'gasto', '2026-09-29T10:00:00.000Z'),
+                             movCta(5000, 'gasto', '2026-09-29T18:00:00.000Z')]), 995000);
+});
+
+t('lo de los dias siguientes se sigue contando', () => {
+  const luego = [movCta(9000, 'gasto', '2026-09-30T09:00:00.000Z', '2026-09-30')];
+  assert.equal(alDia29(CTA_BCO, luego), 1000000);            // el 29 todavia no paso
+  assert.equal(F.saldoDeCuenta(CTA_BCO, luego, d('2026-09-30'),
+                               CTA_BCO.saldo_inicial, CTA_BCO.saldo_al), 991000);
+});
+
+t('lo anterior a la fecha del saldo nunca se vuelve a contar', () => {
+  assert.equal(alDia29(CTA_BCO, [movCta(300000, 'gasto', '2026-09-20T10:00:00.000Z',
+                                    '2026-09-20')]), 1000000);
+});
+
+t('sin la hora del banco vale el dia entero', () => {
+  // Cuentas de antes de la migracion 023. "El saldo al 29" se lee como el
+  // del cierre de ese dia, que es lo razonable con solo una fecha.
+  const vieja = { ...CTA_BCO, saldo_visto_at: null };
+  assert.equal(alDia29(vieja, [movCta(50000, 'gasto', '2026-09-29T10:00:00.000Z'),
+                               movCta(5000, 'gasto', '2026-09-29T18:00:00.000Z')]),
+               1000000);
+});
+
+t('un movimiento sin fecha de carga se toma por ya contado', () => {
+  // Filas viejas, de antes de que la app escribiera created_at. Ante la duda
+  // no se descuenta: inventar un gasto que el banco ya cobro es peor que no
+  // verlo, porque el numero del banco es el que se paga.
+  assert.equal(alDia29(CTA_BCO, [movCta(50000, 'gasto', null)]), 1000000);
+});
+
+t('el extracto de la cuenta dice lo mismo que el saldo', () => {
+  const txs = [movCta(50000, 'gasto', '2026-09-29T10:00:00.000Z'),
+               movCta(5000, 'gasto', '2026-09-29T18:00:00.000Z')];
+  const e = F.extractoDeCuenta(CTA_BCO, txs, d('2026-09-29'));
+  assert.equal(e.saldo, alDia29(CTA_BCO, txs));
+  // Y el que ya estaba adentro no aparece como movimiento nuevo: si saliera
+  // en la lista, la cuenta de "arrancó / entró / salió" no cerraría.
+  assert.equal(e.filas.length, 1);
+  assert.equal(e.salidas, 5000);
 });
 
 console.log(`\n${ok} pruebas OK`);
