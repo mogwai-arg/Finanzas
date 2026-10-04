@@ -1,0 +1,37 @@
+BANCO GALICIA                                           VISA
+TITULAR DE CUENTA:
+PEREZ/JUAN                              CIERRE ACTUAL: 01 Oct 26
+VENCIMIENTO   SALDO $   SALDO U$S  PAGO MIN.$  PAGO MIN.U$S
+09 Oct 26   680.823,62    12,98      67.000,00       -,--
+TNA $     80,280 %     TEM $      6,598 %
+VTO. ANTERIOR                 SALDO ANTERIOR  $                    U$S                    PROXIMO CIERRE
+04 Sep 26                           1276838,45              15,24                           29 Oct 26
+CIERRE ANTERIOR               PAGO MIN. ANT.   $                               PROXIMO VTO.
+27 Ago 26                             71070,00                               11 Nov 26
+LIMITES: COMPRA $   7000000,00 FINANCIACION $  6300000,00
+Cuotas a vencer:
+Octubre/26 Noviembre/26  Diciembre/26     Enero/27    Febrero/27     Marzo/27
+$12.466,66        $0,00        $0,00        $0,00        $0,00        $0,00                               _
+FECHA  COMPROBANTE      DETALLE DE TRANSACCION                               PESOS          DOLARES
+SALDO  ANTERIOR                               1.276.838,45            15,24
+02.09.26               SU  PAGO  EN  PESOS                               1.275.752,92-
+02.09.26               SU  PAGO  EN  USD                               15,24-
+04.09.26               DEV.IMP.  RG  5617   30%(    3618,46)                           1.085,53-                _
+20.06.26     158758*    TIENDA  ONLINE  UNO                Cuota   03/03                    32.556,66
+22.08.26     311338*    JUGUETERIA  DOS     Cuota   02/03                    12.466,66
+27.08.26     023895*    CLUB  DEPORTIVO  000000030332623                            35.430,00
+28.08.26     423575K    SERVICIO  DE  VIDEO                               23.999,00
+28.08.26     766613K    TIENDA  NUBE  P1nUTcNR USD        9,99                               9,99
+28.08.26     084852     SERVICIO  MOVIL    MMQH5W6F1   USD       2,99                               2,99
+31.08.26     301415*    EDITOR  DE  FOTOS                               34.727,00
+01.09.26     005097*    PREPAGA                               376.566,40
+13.09.26     402302K    ESTACION  DE  SERVICIO                               80.012,00
+30.09.26     284053*    EDITOR  DE  FOTOS                               34.727,00
+Tarjeta 4321 Total  Consumos  de  JUAN  PEREZ                               630.484,72            12,98  _
+01.10.26               IIBB  PERCEP-CABA  2,00%(    62864,48)                          1.257,28
+01.10.26               IVA  RG  4240  21%(    62864,48)                               13.201,54
+01.10.26               DB.RG  5617   30%  (    119600,28 )                            35.880,08
+__________________________________________________________
+SALDO ACTUAL       $        680.823,62   U$S        12,98
+__________________________________________________________
+PAGO MINIMO        $         67.000,00

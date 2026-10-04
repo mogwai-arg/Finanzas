@@ -22,6 +22,12 @@ const t = (n, fn) => { try { fn(); console.log('  ok  ' + n); ok++; }
                        catch (e) { console.log('  FALLA  ' + n + '\n        ' + e.message); fallo++; } };
 const igual = (a, b, m = '') => { if (a !== b) throw new Error(`${m} esperaba ${JSON.stringify(b)}, dio ${JSON.stringify(a)}`); };
 const cerca = (a, b, tol = 0.01) => { if (Math.abs(a - b) > tol) throw new Error(`esperaba ~${b}, dio ${a}`); };
+const igualJSON = (a, b, m = '') => igual(JSON.stringify(a), JSON.stringify(b), m);
+const distinto = (a, b, m = '') => { if (JSON.stringify(a) === JSON.stringify(b))
+  throw new Error(`${m} esperaba que fueran distintos, los dos dieron ${JSON.stringify(a)}`); };
+const cierto = (v, m = '') => { if (!v) throw new Error(m || 'esperaba algo cierto'); };
+const coincide = (v, re, m = '') => { if (!re.test(String(v)))
+  throw new Error(`${m} ${JSON.stringify(String(v))} no coincide con ${re}`); };
 
 console.log('\nFORMATO ARGENTINO');
 t('un millon con centavos', () => cerca(parseMonto('1.276.838,45'), 1276838.45));
@@ -206,6 +212,136 @@ t('dos filas del mismo dia con comprobante repetido no colisionan', () => {
 t('importar el mismo resumen dos veces da los mismos ids', () => {
   igual(aMovimientos(v).map(m => m.externo_id).join('|'),
         aMovimientos(parseResumen(VISA)).map(m => m.externo_id).join('|'));
+});
+
+// =====================================================================
+// EL OTRO VISA: EL DE 2026
+//
+// El mismo banco manda dos formatos. Este llego con cero consumos leidos:
+// no fallaba, devolvia una lista vacia, que es peor porque parece que el PDF
+// no tiene nada adentro.
+//
+// Cambia casi todo lo que el parser daba por sentado: las fechas van con
+// puntos (20.09.26), el comprobante va ADELANTE del comercio y con la marca
+// pegada (284053*), la cuota trae la palabra (Cuota 03/03), el menos va
+// ATRAS (1.275.752,92-), el total se llama SALDO ACTUAL y las seis fechas
+// del ciclo no estan en una fila sino en seis casillas con etiqueta.
+// =====================================================================
+const VP = leer('resumen-visa-puntos.txt');
+
+t('se reconoce el emisor y la tarjeta', () => {
+  const r = parseResumen(VP);
+  igual(r.emisor, 'galicia');
+  igual(r.marca, 'visa');
+  igual(r.ultimos4, '4321');
+});
+
+t('las seis fechas del ciclo salen de las casillas con etiqueta', () => {
+  // Estan repartidas en tres pares de lineas y alineadas por columna. No se
+  // leen por posicion: se juntan las seis del documento y se ordenan, que es
+  // la misma suposicion que ya usaba el formato de una fila.
+  igualJSON(leerCiclo(VP), {
+    cierreAnterior: '2026-08-27', vencimientoAnterior: '2026-09-04',
+    cierre: '2026-10-01', vencimiento: '2026-10-09',
+    cierreProximo: '2026-10-29', vencimientoProximo: '2026-11-11' });
+});
+
+t('los consumos se leen y suman lo que dice el propio resumen', () => {
+  const r = parseResumen(VP);
+  igual(r.consumos.length, 10);
+  const ars = r.consumos.filter(c => c.ars != null).reduce((a, c) => a + c.ars, 0);
+  const usd = r.consumos.filter(c => c.usd != null).reduce((a, c) => a + c.usd, 0);
+  igual(Math.round(ars * 100) / 100, 630484.72);
+  igual(Math.round(usd * 100) / 100, 12.98);
+});
+
+t('el comprobante de adelante no se queda adentro del nombre', () => {
+  // Decia '284053* EDITOR DE FOTOS'. Con el numero adentro, el comercio no
+  // agrupa con nada y no coincide con lo que uno anoto a mano.
+  const c = parseResumen(VP).consumos.find(x => x.comprobante === '284053');
+  igual(c.comercio, 'EDITOR DE FOTOS');
+  igual(c.marca, '*');
+  igual(c.ars, 34727);
+});
+
+t('el pago en dolares no entra como un pago en pesos', () => {
+  // 'SU PAGO EN USD 15,24-' no repite el importe detras del USD, asi que la
+  // deteccion por importe no lo ve. Y sin el menos de atras, un pago de un
+  // millon doscientos mil se leia como un consumo.
+  const r = parseResumen(VP);
+  igual(r.pagos.length, 2);
+  igual(r.pagos[0].ars, -1275752.92);
+  igual(r.pagos[0].usd, null);
+  igual(r.pagos[1].usd, -15.24);
+  igual(r.pagos[1].ars, null);
+});
+
+t('el total se llama SALDO ACTUAL y trae las dos monedas', () => {
+  const r = parseResumen(VP);
+  igualJSON(r.total, { ars: 680823.62, usd: 12.98 });
+  igual(r.pagoMinimo, 67000);
+  igualJSON(r.saldoAnterior, { ars: 1276838.45, usd: 15.24 });
+});
+
+t('el resumen cuadra: anterior + pagos + consumos + impuestos = total', () => {
+  // Es la unica prueba que de verdad dice que se leyo todo. Si falta un
+  // consumo o un impuesto, no cierra.
+  const r = parseResumen(VP);
+  const suma = (l, k) => l.reduce((a, x) => a + (x[k] || 0), 0);
+  const ars = r.saldoAnterior.ars + suma(r.pagos, 'ars') + suma(r.consumos, 'ars')
+            + r.impuestos.reduce((a, i) => a + i.monto, 0);
+  igual(Math.round(ars * 100) / 100, r.total.ars);
+  const usd = r.saldoAnterior.usd + suma(r.pagos, 'usd') + suma(r.consumos, 'usd');
+  igual(Math.round(usd * 100) / 100, r.total.usd);
+});
+
+t('una devolucion de impuesto queda negativa aunque el menos vaya atras', () => {
+  const dev = parseResumen(VP).impuestos.find(i => i.devolucion);
+  igual(dev.monto, -1085.53);
+});
+
+// ---------------------------------------------------------------------
+// UNA COMPRA EN CUOTAS ES UNA COMPRA, NO UNA CUOTA
+// ---------------------------------------------------------------------
+t('se guarda la compra entera, no el importe de la cuota', () => {
+  // El resumen cobra una cuota de 32.556,66 de una compra en 3. Se guardaba
+  // ese importe con `cuotas: 3`, y como la app divide monto por cuotas, la
+  // compra pasaba a valer un tercio: la tarjeta contaba 10.852,22 de un
+  // consumo de 32.556,66. Y por eso tampoco reconocia la compra anotada a
+  // mano, que se compara por importe.
+  const m = aMovimientos(parseResumen(VP), 'tj').filter(x => x.cuotas > 1);
+  igual(m.length, 2);
+  const uno = m.find(x => x.comercio === 'TIENDA ONLINE UNO');
+  igual(uno.cuotas, 3);
+  igual(uno.monto, 97669.98);              // 32.556,66 x 3
+  igual(uno.fecha, '2026-06-20');          // la fecha de la COMPRA
+  coincide(uno.notas, /3 cuotas de 32\.556,66/);
+});
+
+t('la misma compra en cuotas no se carga una vez por resumen', () => {
+  // Aparece en todos los resumenes hasta que termina de pagarse. Con el
+  // cierre adentro de la clave, cada resumen la cargaba de nuevo: una compra
+  // en doce cuotas entraba doce veces.
+  const r = parseResumen(VP);
+  const a = aMovimientos(r, 'tj');
+  const otroCierre = aMovimientos({ ...r, ciclo: { ...r.ciclo, cierre: '2026-10-29' } }, 'tj');
+  const enCuotas = x => x.filter(y => y.cuotas > 1).map(y => y.externo_id).sort();
+  igualJSON(enCuotas(a), enCuotas(otroCierre));
+  // Y los de un solo pago SI llevan el cierre: ahi cada resumen trae los
+  // suyos y la clave tiene que distinguirlos.
+  const sueltos = x => x.filter(y => y.cuotas === 1).map(y => y.externo_id).sort();
+  distinto(sueltos(a), sueltos(otroCierre));
+});
+
+t('el formato viejo sigue leyendose igual', () => {
+  // Los dos conviven: el de Mastercard usa guiones, pone el comprobante al
+  // final y el menos adelante.
+  const r = parseResumen(leer('resumen-visa.txt'));
+  cierto(r.consumos.length > 10, `leyo ${r.consumos.length}`);
+  cierto(r.ciclo);
+  const cuotas = r.consumos.find(c => c.cuota);
+  cierto(cuotas, 'no encontro una compra en cuotas');
+  igual(cuotas.comercio, 'DLO*Naked');
 });
 
 console.log(`\n${ok} pruebas OK${fallo ? `, ${fallo} FALLAN` : ''}\n`);

@@ -7,6 +7,7 @@ cada uno en vez de contra un ejemplo inventado.
 |---|---|
 | `resumen-visa.txt` | Resumen de tarjeta de Galicia, texto extraído del PDF |
 | `resumen-mastercard.txt` | Idem, la otra tarjeta |
+| `resumen-visa-puntos.txt` | El Visa de 2026: fechas con puntos, comprobante adelante, menos atras y el ciclo en seis casillas con etiqueta. Es otro formato del MISMO banco |
 | `clash-combustibles.html` | La página de promos de combustibles de `promos.clash.com.ar`, guardada tal cual |
 
 `clash-combustibles.html` es la copia que sirve el sitio, con las rutas a las
