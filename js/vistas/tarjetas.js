@@ -9,7 +9,7 @@ import * as F from '../finance.js';
 import { plata, plataPartida, diasHasta, fechaISO, mesCorto, periodoLargo, buscar,
          fechaRelativa, tituloTx, dondeTx, aNumero, hoyISO } from '../formato.js';
 import { irA } from '../ruteo.js';
-import { formCuenta } from './formularios.js';
+import { formCuenta, formPagoTarjeta } from './formularios.js';
 import { formImportarResumen } from './importar.js';
 import { formMovimiento } from './form-movimiento.js';
 import { barrasHorizontales } from '../graficos.js';
@@ -53,6 +53,7 @@ export function vistaTarjeta(root, { id }) {
     plastico(t, hoy, false),
     faltaElCierre(t),
     limite(t, hoy),
+    botonPagar(t, hoy),
     loQueDiceElBanco(t, hoy),
     consumosDelCiclo(t, hoy),
     consumosDelCiclo(t, hoy, (t.moneda || 'ARS') === 'USD' ? 'ARS' : 'USD'),
@@ -171,6 +172,66 @@ function tira(t, hoy, alTocar) {
  * tira de la pila. Si cada una lo calculara por su lado, la tira podria decir
  * un numero y la tarjeta abierta otro.
  */
+/**
+ * Que resumen se paga y cuanto falta de el, en las DOS monedas.
+ *
+ * Una tarjeta argentina tiene dos saldos y se pagan por separado. El resto de
+ * la pantalla trabaja con la moneda de la tarjeta, asi que el saldo en
+ * dolares no tenia por donde anotarse.
+ *
+ * Si hay un saldo anotado del banco, manda ese: es el que se paga. La
+ * diferencia con lo cargado ya se muestra al lado y no se disimula.
+ */
+function faltaPorMoneda(t, hoy) {
+  const cerrado = F.resumenAPagar(t, hoy);
+  const ciclo = cerrado || F.proximoCiclo(t, hoy);
+  const per = F.periodo(ciclo.vence);
+  const montos = {};
+  for (const m of ['ARS', 'USD']) {
+    const b = F.brechaDeTarjeta(state.transactions, t, per,
+                               state.settings?.saldos_tarjeta, m);
+    if (cerrado) {
+      const falta = F.faltaPagarDeResumen(state.transactions, t, cerrado, m);
+      montos[m] = b.banco != null ? Math.max(0, F.round2(falta + b.dif)) : falta;
+    } else {
+      // Todavia no cerro: no hay nada que pagar, pero se deja el total en
+      // curso como sugerencia para quien quiera adelantar.
+      montos[m] = 0;
+    }
+  }
+  return { ciclo, cerrado, montos };
+}
+
+/**
+ * Anotar el pago, desde la ficha de la tarjeta.
+ *
+ * Estaba en un solo lugar de toda la app: el boton de la fila en "Lo que se
+ * viene" de Hoy, que muestra tres cosas. Con tres servicios vencidos arriba,
+ * la tarjeta no entraba en el corte y no habia NINGUNA forma de anotar el
+ * pago. Y la ficha de la tarjeta es justamente donde uno esta mirando ese
+ * resumen.
+ */
+function botonPagar(t, hoy) {
+  if (!F.tieneCiclo(t)) return null;
+  const { ciclo, cerrado, montos } = faltaPorMoneda(t, hoy);
+  const hay = ['ARS', 'USD'].filter(m => montos[m] > 0);
+  const dv = diasHasta(isoDe(ciclo.vence), hoy);
+
+  const detalle = hay.length
+    ? hay.map(m => plata(m === 'USD' ? montos[m] : Math.round(montos[m]), m)).join(' y ')
+      + (dv < 0 ? ` · venció hace ${-dv} d` : dv === 0 ? ' · vence hoy' : ` · en ${dv} d`)
+    : cerrado ? 'Este resumen ya está saldado'
+              : `El resumen en curso cierra el ${ciclo.cierre.getDate()}/${ciclo.cierre.getMonth() + 1}`;
+
+  return h('button.li', { style: { background: 'var(--card)',
+                                   borderRadius: 'var(--r-tarjeta)' },
+    onclick: () => formPagoTarjeta(t, ciclo, montos) },
+    h('div', { class: `av ${hay.length ? (dv <= 3 ? 'amb' : '') : ''}` }, icono('enviar', 17)),
+    h('div.m', h('div.t', hay.length ? 'Anotar el pago' : 'Anotar un pago'),
+      h('div.s', detalle)),
+    h('span.chev', icono('chev', 15)));
+}
+
 export function montoDelPlastico(t, hoy) {
   const est = estadoTarjeta(t, hoy);
   const { moneda, falta, aPagar, pagado } = est;

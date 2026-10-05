@@ -485,9 +485,17 @@ export function pagadoDeResumen(txs, tarjeta, ciclo, moneda = 'ARS') {
   for (const tx of txs) {
     if (tx.tipo !== 'transferencia') continue;
     if (tx.destino_account_id !== tarjeta.id) continue;
-    if ((tx.moneda || 'ARS') !== moneda) continue;
+    // Lo que LLEGO a la tarjeta, no lo que salio de la cuenta. El resumen en
+    // dolares se puede pagar en pesos —el banco lo ofrece y es lo normal—, y
+    // esa transferencia sale de una cuenta en pesos con `monto` en pesos y
+    // `monto_destino` en dolares. Mirando `moneda` pasaban las dos cosas
+    // peores a la vez: el resumen en dolares no se daba nunca por pagado, y
+    // el resumen en PESOS contaba como pagado un importe que no era suyo.
+    const m = tx.moneda_destino || tx.moneda || 'ARS';
+    if (m !== moneda) continue;
+    const monto = tx.monto_destino != null ? tx.monto_destino : tx.monto;
     const f = parseFecha(tx.fecha);
-    if (f >= desde && f <= hasta) total += Math.abs(Number(tx.monto) || 0);
+    if (f >= desde && f <= hasta) total += Math.abs(Number(monto) || 0);
   }
   return round2(total);
 }

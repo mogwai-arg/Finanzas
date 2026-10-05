@@ -19,6 +19,7 @@ import { plataPartida, plata, cuandoVence, diasHasta, hoyISO, aFecha, nombreDe,
          aNumero, etiquetaCuenta } from '../formato.js';
 import { irA } from '../ruteo.js';
 import { formPago } from './mes.js';
+import { formPagoTarjeta } from './formularios.js';
 import { formImportarResumen } from './importar.js';
 import { formImportarExtracto } from './extracto.js';
 import { bishu, frasesDeBishu as F_frases } from '../bishu.js';
@@ -574,7 +575,9 @@ function loQueSeViene(hoy) {
         // contrario de lo que hace. Ahora lo dice con la palabra.
         (it.tarjeta || it.recurrente) ? h('button.pagar', {
           'aria-label': `Anotar el pago de ${it.nombre}`, style: { flex: 'none' },
-          onclick: () => it.tarjeta ? formPagoTarjeta(it.tarjeta, it.ciclo, it.monto, it.moneda)
+          onclick: () => it.tarjeta
+            ? formPagoTarjeta(it.tarjeta, it.ciclo, { [it.moneda]: it.monto },
+                              { foco: it.moneda })
                                     : formPago(it.recurrente, it.periodo) },
           'Pagar') : null);
     })),
@@ -777,60 +780,3 @@ function antesDeComprar() {
   );
 }
 
-// =====================================================================
-/**
- * Anotar el pago de un resumen, desde donde uno lo está mirando.
- *
- * Un pago de tarjeta es una movida de plata: sale de una cuenta y entra a la
- * tarjeta. Guardarlo así —y no como un gasto— es lo que hace que no se cuente
- * dos veces: el gasto ya se contó cuando se hizo la compra.
- */
-export function formPagoTarjeta(tarjeta, ciclo, sugerido, moneda = 'ARS') {
-  const cuentas = state.accounts.filter(a =>
-    a.activo !== false && a.tipo !== 'credito' && (a.moneda || 'ARS') === moneda);
-
-  // Con los centavos puestos: redondear la sugerencia dejaba un resto que
-  // mantenía el resumen sin saldar.
-  const cMonto = h('input', { type: 'text', inputmode: 'decimal',
-                              value: Number(sugerido) % 1
-                                ? Number(sugerido).toFixed(2).replace('.', ',')
-                                : String(Math.round(sugerido)) });
-  const cCuenta = select(cuentas.map(a => ({ value: a.id, label: etiquetaCuenta(a) })),
-                         { value: cuentas[0]?.id || '' });
-  const cFecha = h('input', { type: 'date', value: hoyISO() });
-
-  // Sin consumos cargados el pago no puede contar como gasto: la app no sabe
-  // en qué se gastó. Decirlo acá evita el agujero de un resumen pagado que no
-  // aparece en ningún lado del mes.
-  const sinConsumos = !F.totalTarjetaEnPeriodo(state.transactions, tarjeta,
-                                               F.periodo(ciclo.vence), moneda);
-
-  const cerrar = hoja(`Pagar ${tarjeta.nombre}`, h('div',
-    h('div.small.mut', { style: { lineHeight: '1.5', marginBottom: '14px' } },
-      `Del resumen que vence el ${ciclo.vence.getDate()}/${ciclo.vence.getMonth() + 1}. `,
-      'Si pagás una parte, el resto sigue figurando. El pago no cuenta como gasto ',
-      'del mes: cada compra ya contó el día que la hiciste.'),
-    sinConsumos ? h('div.aviso.amb', { style: { marginBottom: '14px' } },
-      h('div.av.amb', icono('rayo', 17)),
-      h('div.txt',
-        h('div.tt', 'No tengo consumos de este resumen'),
-        h('div.ds', 'Si lo pagás así, esa plata no va a figurar como gasto en ningún ' +
-          'lado: la app no sabe en qué se gastó. Importá el resumen y después anotá el pago.'))) : null,
-    campo('Cuánto', cMonto),
-    campo('Desde', cCuenta),
-    campo('Cuándo', cFecha),
-    h('button.btn', { style: { marginTop: '4px' }, onclick: async () => {
-      const monto = aNumero(cMonto.value);
-      if (!monto) { cMonto.focus(); aviso('Falta el monto'); return; }
-      if (!cCuenta.value) { aviso('Falta desde qué cuenta'); return; }
-      await guardar('transactions', {
-        fecha: cFecha.value || hoyISO(),
-        descripcion: `Pago ${tarjeta.nombre}`, comercio: null,
-        monto, moneda, tipo: 'transferencia',
-        account_id: cCuenta.value, destino_account_id: tarjeta.id,
-        cuotas: 1, fuente: 'manual', revisado: true
-      });
-      cerrar();
-      aviso(`Pago anotado · ${plata(monto, moneda)}`);
-    } }, 'Anotar el pago')));
-}

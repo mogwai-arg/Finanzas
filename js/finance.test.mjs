@@ -739,6 +739,40 @@ t('pagar el resumen baja lo que falta', () => {
   assert.equal(F.faltaPagarDeResumen(t, GALICIA, ciclo), 40000);
 });
 
+t('el resumen en dolares se puede pagar en pesos', () => {
+  // Es lo que ofrece el banco y es lo normal. Esa transferencia sale de una
+  // cuenta en pesos: `monto` en pesos y `monto_destino` en dolares. Mirando
+  // `moneda` pasaban las dos cosas peores a la vez —el resumen en dolares no
+  // se daba nunca por pagado, y el de PESOS contaba como pagado un importe
+  // que no era suyo—.
+  const txs = [
+    { id:'g1', account_id:'g', tipo:'gasto', moneda:'ARS', monto:500000, fecha:'2026-08-20', cuotas:1 },
+    { id:'g2', account_id:'g', tipo:'gasto', moneda:'USD', monto:55, fecha:'2026-08-21', cuotas:1 },
+    { id:'p1', tipo:'transferencia', destino_account_id:'g', account_id:'gal',
+      moneda:'ARS', monto:75000, moneda_destino:'USD', monto_destino:55,
+      fecha:'2026-09-02' }
+  ];
+  const ciclo = { cierre: d('2026-08-27'), vence: d('2026-09-04') };
+  // Lo que LLEGO a la tarjeta fueron 55 dolares.
+  assert.equal(F.pagadoDeResumen(txs, GALICIA, ciclo, 'USD'), 55);
+  assert.equal(F.faltaPagarDeResumen(txs, GALICIA, ciclo, 'USD'), 0);
+  // Y el resumen en pesos sigue intacto: esos 75.000 no eran suyos.
+  assert.equal(F.pagadoDeResumen(txs, GALICIA, ciclo, 'ARS'), 0);
+  assert.equal(F.faltaPagarDeResumen(txs, GALICIA, ciclo, 'ARS'), 500000);
+  // Y de los dos importes sale el tipo de cambio de la operacion.
+  assert.equal(F.tipoDeCambio(txs[2]).valor, 1363.64);
+});
+
+t('un pago en pesos del resumen en pesos sigue contando igual', () => {
+  const txs = [
+    { id:'g1', account_id:'g', tipo:'gasto', moneda:'ARS', monto:100000, fecha:'2026-08-20', cuotas:1 },
+    { id:'p1', tipo:'transferencia', destino_account_id:'g', moneda:'ARS', monto:60000, fecha:'2026-09-02' }
+  ];
+  const ciclo = { cierre: d('2026-08-27'), vence: d('2026-09-04') };
+  assert.equal(F.pagadoDeResumen(txs, GALICIA, ciclo, 'ARS'), 60000);
+  assert.equal(F.pagadoDeResumen(txs, GALICIA, ciclo, 'USD'), 0);
+});
+
 t('un pago fuera de la ventana no cuenta para ese resumen', () => {
   const t = [
     { id:'g1', account_id:'g', tipo:'gasto', moneda:'ARS', monto:100000, fecha:'2026-08-20', cuotas:1 },

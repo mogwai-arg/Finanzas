@@ -710,3 +710,130 @@ export function formCategorias() {
     h('button.btn.sec', { style: { marginTop: '14px' }, onclick: () => editar() },
       icono('mas', 16), 'Nueva categoría')));
 }
+
+// =====================================================================
+/**
+ * Anotar el pago de un resumen, desde donde uno lo está mirando.
+ *
+ * Un pago de tarjeta es una movida de plata: sale de una cuenta y entra a la
+ * tarjeta. Guardarlo así —y no como un gasto— es lo que hace que no se cuente
+ * dos veces: el gasto ya se contó cuando se hizo la compra.
+ */
+export function formPagoTarjeta(tarjeta, ciclo, montos = {}, { foco = null } = {}) {
+  const propia = tarjeta.moneda || 'ARS';
+  const cuentas = state.accounts.filter(a => a.activo !== false && a.tipo !== 'credito');
+  const hayDe = m => cuentas.filter(a => (a.moneda || 'ARS') === m);
+
+  // Un resumen argentino tiene DOS saldos y se pagan por separado: el de
+  // pesos y el de dolares. Antes la hoja tomaba una sola moneda, asi que el
+  // de dolares no habia forma de anotarlo.
+  //
+  // Los dos bloques SIEMPRE, no solo el que tiene algo pendiente. Esa leccion
+  // ya la pago la hoja de "lo que dice el banco": condicionarlo a que la app
+  // tenga consumos en esa moneda es justo al reves de para que sirve, porque
+  // el caso en que hay que poder anotarlo es el que la app todavia no vio.
+  const bloque = m => {
+    const pend = Number(montos[m]) || 0;
+    const cMonto = h('input', { type: 'text', inputmode: 'decimal',
+                                placeholder: m === 'USD' ? '0,00' : '0',
+                                value: pend ? (pend % 1 ? pend.toFixed(2).replace('.', ',')
+                                                        : String(Math.round(pend))) : '' });
+    const propias = hayDe(m);
+    // Y el de dolares se puede pagar EN PESOS: el banco lo ofrece y es lo
+    // normal. Por eso el desplegable trae todas las cuentas y no solo las de
+    // esa moneda; si la cuenta elegida es de otra, se pregunta cuanto te
+    // debitaron, que es el unico lugar donde esta el tipo de cambio real.
+    const cCuenta = select(cuentas.map(a => ({ value: a.id, label: etiquetaCuenta(a) })),
+                           { value: (propias[0] || cuentas[0])?.id || '' });
+    const cCambio = h('input', { type: 'text', inputmode: 'decimal', placeholder: '0' });
+    const enOtra = h('div.f', { hidden: true },
+      h('label', 'Cuánto te debitaron'), cCambio,
+      h('div.small.mut', { style: { marginTop: '6px', lineHeight: '1.45' } },
+        'La cuenta que elegiste no es en ', m === 'USD' ? 'dólares' : 'pesos',
+        '. Poné lo que salió de ahí: de esos dos números sale el tipo de cambio ',
+        'de la operación, que no está en ningún otro lado.'));
+
+    const deLaCuenta = () => cuentas.find(a => a.id === cCuenta.value);
+    const revisar = () => {
+      const c = deLaCuenta();
+      enOtra.hidden = !c || (c.moneda || 'ARS') === m;
+    };
+    cCuenta.addEventListener('change', revisar);
+    revisar();
+
+    const nodo = h('div.f', { style: { marginBottom: '2px' } },
+      h('label', m === 'USD' ? 'Pagaste en dólares' : 'Pagaste en pesos'),
+      cMonto,
+      !pend ? h('div.small.mut', { style: { marginTop: '6px', lineHeight: '1.45' } },
+        'La app no tiene nada pendiente en ', m === 'USD' ? 'dólares' : 'pesos',
+        ' de este resumen. Vacío si no pagaste nada.') : null);
+
+    return { m, nodo, cuenta: campo('Desde', cCuenta), enOtra,
+             leer: () => {
+               const monto = num(cMonto.value);
+               if (!monto) return null;
+               const c = deLaCuenta();
+               if (!c) return { error: 'Falta desde qué cuenta' };
+               const propiaDeLaCuenta = (c.moneda || 'ARS') === m;
+               if (propiaDeLaCuenta) {
+                 return { moneda: m, monto, account_id: c.id };
+               }
+               const salio = num(cCambio.value);
+               if (!salio) return { error: `Falta cuánto te debitaron de ${c.nombre}` };
+               // Sale de la cuenta en SU moneda y entra a la tarjeta en la del
+               // resumen: es la misma forma que usa comprar dolares.
+               return { moneda: c.moneda || 'ARS', monto: salio, account_id: c.id,
+                        moneda_destino: m, monto_destino: monto };
+             } };
+  };
+
+  // La moneda de la tarjeta primero, y la otra abajo.
+  const orden = foco ? [foco, foco === 'USD' ? 'ARS' : 'USD']
+                     : [propia, propia === 'USD' ? 'ARS' : 'USD'];
+  const bloques = orden.map(bloque);
+
+  const cFecha = h('input', { type: 'date', value: hoyISO() });
+
+  // Sin consumos cargados el pago no puede contar como gasto: la app no sabe
+  // en qué se gastó. Decirlo acá evita el agujero de un resumen pagado que no
+  // aparece en ningún lado del mes.
+  const sinConsumos = !F.totalTarjetaEnPeriodo(state.transactions, tarjeta,
+                                               F.periodo(ciclo.vence), propia);
+
+  const cerrar = hoja(`Pagar ${tarjeta.nombre}`, h('div',
+    h('div.small.mut', { style: { lineHeight: '1.5', marginBottom: '14px' } },
+      `Del resumen que vence el ${ciclo.vence.getDate()}/${ciclo.vence.getMonth() + 1}. `,
+      'Si pagás una parte, el resto sigue figurando. El pago no cuenta como gasto ',
+      'del mes: cada compra ya contó el día que la hiciste.'),
+    sinConsumos ? h('div.aviso.amb', { style: { marginBottom: '14px' } },
+      h('div.av.amb', icono('rayo', 17)),
+      h('div.txt',
+        h('div.tt', 'No tengo consumos de este resumen'),
+        h('div.ds', 'Si lo pagás así, esa plata no va a figurar como gasto en ningún ' +
+          'lado: la app no sabe en qué se gastó. Importá el resumen y después anotá el pago.'))) : null,
+    ...bloques.flatMap(b => [b.nodo, b.cuenta, b.enOtra]),
+    campo('Cuándo', cFecha),
+    h('button.btn', { style: { marginTop: '4px' }, onclick: async () => {
+      const leidos = bloques.map(b => b.leer());
+      const error = leidos.find(x => x && x.error);
+      if (error) { aviso(error.error); return; }
+      const pagos = leidos.filter(x => x && !x.error);
+      if (!pagos.length) { aviso('Falta el monto'); return; }
+
+      const fecha = cFecha.value || hoyISO();
+      for (const p of pagos) {
+        await guardar('transactions', {
+          fecha, descripcion: `Pago ${tarjeta.nombre}`, comercio: null,
+          monto: p.monto, moneda: p.moneda,
+          account_id: p.account_id, destino_account_id: tarjeta.id,
+          moneda_destino: p.moneda_destino || null,
+          monto_destino: p.monto_destino != null ? p.monto_destino : null,
+          tipo: 'transferencia', cuotas: 1, fuente: 'manual', revisado: true
+        });
+      }
+      cerrar();
+      aviso(pagos.length === 1
+        ? `Pago anotado · ${plata(pagos[0].monto, pagos[0].moneda)}`
+        : `${pagos.length} pagos anotados`);
+    } }, 'Anotar el pago')));
+}
