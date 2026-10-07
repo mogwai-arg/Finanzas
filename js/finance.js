@@ -899,9 +899,32 @@ export function saldoRecurrente(recurring, pagos, hasta = null) {
  * resto sigue arrastrandose.
  */
 export function aPagarRecurrente(recurring, pagos, per) {
-  const valor = Number(recurring.monto_estimado) || 0;
   const saldo = saldoRecurrente(recurring, pagos, per);
-  return { valor, saldo, sugerido: round2(Math.max(0, valor - saldo)) };
+  // En un gasto variable el `monto_estimado` envejece en un mes: con
+  // aumentos todos los meses, y con una factura que ademas sube o baja con
+  // el consumo, el numero cargado hace medio año no es una referencia de
+  // nada. Lo ultimo que se pago si: es el dato mas cercano que hay.
+  const ultimo = recurring.variable ? ultimoPagado(recurring.id, pagos, per) : null;
+  const valor = ultimo != null ? ultimo : (Number(recurring.monto_estimado) || 0);
+  return { valor, saldo, desdeUltimoPago: ultimo != null,
+           sugerido: round2(Math.max(0, valor - saldo)) };
+}
+
+/**
+ * Lo que se pago la ultima vez, mirando hacia atras desde un periodo.
+ *
+ * `pagadoEn` contesta por un mes puntual; esto busca el mas reciente que
+ * exista antes del que se esta mirando. Una factura bimestral no se paga
+ * todos los meses y aun asi la ultima sirve.
+ */
+export function ultimoPagado(recurringId, pagos, antesDe = null) {
+  let mejor = null;
+  for (const p of pagos || []) {
+    if (p.recurring_id !== recurringId || !p.pagado_at || p.monto == null) continue;
+    if (antesDe && p.periodo >= antesDe) continue;
+    if (!mejor || p.periodo > mejor.periodo) mejor = p;
+  }
+  return mejor ? Number(mejor.monto) : null;
 }
 
 /**

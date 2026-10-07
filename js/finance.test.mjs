@@ -1371,7 +1371,11 @@ t('un gasto variable no arrastra saldo: la luz no se debe ni se tiene a favor', 
   const pagos = [{ recurring_id: 'x', periodo: '2026-07', monto: 980, pagado_at: 'x' },
                  { recurring_id: 'x', periodo: '2026-08', monto: 1100, pagado_at: 'x' }];
   assert.equal(F.saldoRecurrente(r, pagos, '2026-09'), 0);
-  assert.equal(F.aPagarRecurrente(r, pagos, '2026-09').sugerido, 27200);
+  // Y la sugerencia es lo ULTIMO que se pago, no el estimado. Esta prueba
+  // pedia 27.200 y justamente ese numero es el que no sirve: la retencion
+  // fue de 980 y de 1.100, el estimado quedo de una carga vieja. Con
+  // aumentos todos los meses, lo ultimo pagado es siempre mejor referencia.
+  assert.equal(F.aPagarRecurrente(r, pagos, '2026-09').sugerido, 1100);
 });
 
 t('pero uno de monto fijo sigue arrastrando', () => {
@@ -2040,6 +2044,68 @@ t('diciembre mira a enero del año siguiente', () => {
   const pagosDic = FIJOS_VEN.map(r => ({ recurring_id: r.id, periodo: '2026-12',
                                      pagado_at: '2026-12-05', monto: r.monto }));
   assert.deepEqual(losQueVienen('2026-12-29', pagosDic), ['2027-01 Expensas', '2027-01 Alquiler']);
+});
+
+// =====================================================================
+// UN GASTO VARIABLE NO DEJA SALDO, Y SU REFERENCIA ES LO ULTIMO QUE PAGASTE
+//
+// En Argentina la factura cambia todos los meses: por aumento y por consumo.
+// Pagar 39.096 donde el mes pasado fueron 37.784 no es pagar de mas.
+// =====================================================================
+const LUZ = { id: 'luz', nombre: 'Municipalidad', activo: true, dia_vencimiento: 7,
+              monto_estimado: 20000, moneda: 'ARS', variable: true };
+const FIJO = { ...LUZ, id: 'fijo', variable: false };
+const pagoDe = (id, per, monto) => ({ recurring_id: id, periodo: per, monto,
+                                      pagado_at: `${per}-05T12:00:00.000Z` });
+
+t('la referencia de un variable es lo ultimo que pagaste', () => {
+  // El monto_estimado se cargo una vez y envejecio. Lo ultimo pagado es el
+  // dato mas cercano que hay.
+  const pagos = [pagoDe('luz', '2026-08', 31200), pagoDe('luz', '2026-09', 37784)];
+  const a = F.aPagarRecurrente(LUZ, pagos, '2026-10');
+  assert.equal(a.valor, 37784);
+  assert.equal(a.desdeUltimoPago, true);
+  assert.equal(a.saldo, 0);
+  assert.equal(a.sugerido, 37784);
+});
+
+t('sin pagos todavia, se usa lo cargado a mano', () => {
+  const a = F.aPagarRecurrente(LUZ, [], '2026-10');
+  assert.equal(a.valor, 20000);
+  assert.equal(a.desdeUltimoPago, false);
+});
+
+t('un gasto fijo de verdad NO cambia: sigue valiendo lo cargado', () => {
+  // El alquiler vale lo que dice el contrato, se haya pagado de mas o de
+  // menos. Ahi el saldo arrastrado si tiene sentido y no se toca.
+  const pagos = [pagoDe('fijo', '2026-09', 25000)];
+  const a = F.aPagarRecurrente(FIJO, pagos, '2026-10');
+  assert.equal(a.valor, 20000);
+  assert.equal(a.saldo, 5000);           // pago 5.000 de mas
+  assert.equal(a.sugerido, 15000);
+});
+
+t('un variable nunca arrastra saldo, pague lo que pague', () => {
+  const pagos = [pagoDe('luz', '2026-08', 31200), pagoDe('luz', '2026-09', 90000)];
+  assert.equal(F.aPagarRecurrente(LUZ, pagos, '2026-10').saldo, 0);
+});
+
+t('lo ultimo pagado salta los meses sin pago', () => {
+  // Una factura bimestral no se paga todos los meses, y la ultima sirve
+  // igual.
+  const pagos = [pagoDe('luz', '2026-06', 18000), pagoDe('luz', '2026-08', 31200)];
+  assert.equal(F.ultimoPagado('luz', pagos, '2026-10'), 31200);
+  assert.equal(F.ultimoPagado('luz', pagos, '2026-07'), 18000);
+  assert.equal(F.ultimoPagado('luz', [], '2026-10'), null);
+});
+
+t('un pago sin monto no cuenta como referencia', () => {
+  // Marcado pagado sin anotar cuanto: no se sabe, y un cero inventado seria
+  // peor que no tener nada.
+  const pagos = [pagoDe('luz', '2026-08', 31200),
+                 { recurring_id: 'luz', periodo: '2026-09', monto: null,
+                   pagado_at: '2026-09-05T12:00:00.000Z' }];
+  assert.equal(F.ultimoPagado('luz', pagos, '2026-10'), 31200);
 });
 
 console.log(`\n${ok} pruebas OK`);

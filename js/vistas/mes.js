@@ -186,6 +186,26 @@ export function formPago(r, periodo) {
 
   const recalcular = () => {
     const pagado = num(campo.value);
+
+    // Un gasto variable no deja saldo. La luz de este mes no es "de mas" ni
+    // "de menos" contra la del mes pasado: es lo que salio. Con aumentos
+    // todos los meses y una factura que ademas sube o baja con el consumo,
+    // decir "te quedan 1.312 a favor" por pagar 39.096 donde el mes pasado
+    // fueron 37.784 es inventar un credito que no existe.
+    //
+    // Lo que si sirve es la comparacion, que es informacion y no una deuda.
+    if (r.variable) {
+      const dif = r.valor ? Math.round(((pagado - r.valor) / r.valor) * 100) : 0;
+      nuevoSaldo.replaceChildren(
+        r.valor
+          ? `${r.desdeUltimoPago ? 'La última vez' : 'Tenés cargado'} ${plata(r.valor, r.moneda)}.`
+          : 'Primera vez que lo pagás.',
+        r.valor && pagado && dif
+          ? ` Este mes ${dif > 0 ? 'subió' : 'bajó'} ${Math.abs(dif)} %.` : '',
+        ' El monto de este mes es el que pongas: no queda nada a favor ni en contra.');
+      return;
+    }
+
     const queda = Math.round((r.saldo + pagado - r.valor) * 100) / 100;
     nuevoSaldo.replaceChildren(
       `Vale ${plata(r.valor, r.moneda)}.`,
@@ -194,12 +214,29 @@ export function formPago(r, periodo) {
         : queda > 0 ? ` Te quedan ${plata(queda, r.moneda)} a favor para el mes que viene.`
                     : ` Quedás debiendo ${plata(Math.abs(queda), r.moneda)}.`);
   };
+  // Marcarlo variable desde acá, que es donde se nota.
+  //
+  // La opción está en la ficha del gasto fijo y dice "El monto cambia cada
+  // mes", pero uno se entera de que le hacía falta justo acá, leyendo un
+  // saldo a favor que no existe. Mandarlo a otra pantalla a buscarla es
+  // perder el pago a medio anotar.
+  const marcar = h('button.btn.sec', { style: { marginTop: '10px' }, onclick: async () => {
+    const base = state.recurrings.find(x => x.id === r.id);
+    if (base) await guardar('recurrings', { ...base, variable: true });
+    r.variable = true; r.saldo = 0;
+    marcar.hidden = true;
+    recalcular();
+    aviso('Listo: no vuelve a llevar saldo');
+  } }, 'El monto de esto cambia todos los meses');
+  marcar.hidden = !!r.variable;
+
   campo.addEventListener('input', recalcular);
   recalcular();
 
   const cerrar = hoja(`¿Cuánto pagaste de ${r.nombre}?`, h('div',
     h('div.f', h('label', 'Monto'), campo),
     nuevoSaldo,
+    marcar,
     h('div.f', { style: { marginTop: '16px' } }, h('label', 'Cuándo'), cFecha),
     h('div.f', h('label', 'Con qué pagaste'), cCuenta,
       h('div.small.mut', { style: { marginTop: '6px', lineHeight: '1.45' } },
@@ -227,7 +264,7 @@ export function formPago(r, periodo) {
         transaction_id: tx ? tx.id : null,
         pagado_at: new Date().toISOString() });
 
-      const queda = Math.round((r.saldo + monto - r.valor) * 100) / 100;
+      const queda = r.variable ? 0 : Math.round((r.saldo + monto - r.valor) * 100) / 100;
       cerrar();
       aviso(queda ? `${r.nombre} pagado · ${plata(Math.abs(queda), r.moneda)} ${queda > 0 ? 'a favor' : 'en contra'}`
                   : `${r.nombre} pagado`);
