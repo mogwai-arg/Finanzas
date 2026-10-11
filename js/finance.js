@@ -500,10 +500,41 @@ export function cuotasComprometidas(txs, tarjeta, per, moneda = 'ARS') {
  * tarjeta. Se cuentan los que caen entre el cierre y unos dias despues del
  * vencimiento, que es la ventana en la que uno paga.
  */
+/**
+ * Entre que fechas un pago cuenta como pago de ESTE resumen.
+ *
+ * Era del cierre hasta el vencimiento mas diez dias, y eso deja huecos: el
+ * resumen que cerro el 27/08 contaba pagos hasta el 14/09, el que cierra el
+ * 01/10 empieza a contar el 01/10, y un pago del 20/09 no era de ninguno de
+ * los dos. La plata salia de la cuenta y la tarjeta seguia figurando impaga.
+ *
+ * Ahora las ventanas encajan sin huecos ni superposicion: cada resumen se
+ * queda con los pagos hechos desde que cerro hasta que cierra el siguiente.
+ * Es la misma ventana con la que `resumenAPagar` decide cual es el resumen
+ * en juego, asi que las dos cosas dejan de poder contradecirse.
+ *
+ * Un pago tardio entra igual —el siguiente cierre esta un mes despues del
+ * vencimiento— y uno adelantado va al resumen anterior, que es el que
+ * estaba abierto cuando se pago.
+ */
+function ventanaDePago(tarjeta, ciclo) {
+  const cs = ciclosOrdenados(tarjeta);
+  const siguiente = cs.find(c => c.cierre > ciclo.cierre);
+  // Sin un cierre declarado despues, se estima con el dia fijo de la tarjeta.
+  // Hasta el dia ANTES del cierre siguiente: ese dia ya es del resumen que
+  // cierra, no de este. Asi las ventanas encajan sin pisarse.
+  const proximoCierre = siguiente ? siguiente.cierre
+    : diaSeguro(ciclo.cierre.getFullYear(), ciclo.cierre.getMonth() + 1,
+                ciclo.cierre.getDate());
+  const hasta = new Date(proximoCierre.getTime() - 86400000);
+  // Nunca mas corta que la de antes: lo que contaba, sigue contando.
+  const minimo = new Date(ciclo.vence.getTime() + 10 * 86400000);
+  return { desde: ciclo.cierre, hasta: hasta > minimo ? hasta : minimo };
+}
+
 export function pagadoDeResumen(txs, tarjeta, ciclo, moneda = 'ARS') {
   if (!ciclo) return 0;
-  const desde = ciclo.cierre;
-  const hasta = new Date(ciclo.vence.getTime() + 10 * 86400000);
+  const { desde, hasta } = ventanaDePago(tarjeta, ciclo);
   let total = 0;
   for (const tx of txs) {
     if (tx.tipo !== 'transferencia') continue;

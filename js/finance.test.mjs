@@ -2170,4 +2170,61 @@ t('el saldo en dolares se mide aparte del de pesos', () => {
   assert.equal(F.pendienteDeResumen(txs, TJP, CERRADO, DICE, 'ARS'), 0);
 });
 
+// =====================================================================
+// LAS VENTANAS DE PAGO ENCAJAN, SIN HUECOS
+//
+// Contaban del cierre al vencimiento mas diez dias. El resumen del 27/08
+// contaba pagos hasta el 14/09 y el del 01/10 empezaba el 01/10: un pago del
+// 20/09 no era de ninguno de los dos. La plata salia de la cuenta y la
+// tarjeta seguia figurando impaga, con el resumen viejo pegado en pantalla.
+// =====================================================================
+const TJV = { id: 'v', tipo: 'credito', moneda: 'ARS', cierre_dia: 1, vencimiento_dia: 9,
+              ciclos: [{ cierre: '2026-08-27', vence: '2026-09-04' },
+                       { cierre: '2026-10-01', vence: '2026-10-09' },
+                       { cierre: '2026-10-29', vence: '2026-11-11' }] };
+const AGO = { cierre: d('2026-08-27'), vence: d('2026-09-04') };
+const gastoAgo = { id: 'a', account_id: 'v', tipo: 'gasto', moneda: 'ARS',
+                   monto: 500000, fecha: '2026-08-20', cuotas: 1 };
+const pagoEl = f => ({ id: 'p', tipo: 'transferencia', account_id: 'gal',
+                       destino_account_id: 'v', moneda: 'ARS', monto: 500000, fecha: f });
+
+t('un pago en el hueco entre dos resumenes ya cuenta', () => {
+  // El 20/09 no era de ninguno. Es el caso de pagar la tarjeta unos dias
+  // antes de que cierre el siguiente resumen, que es lo normal.
+  assert.equal(F.pagadoDeResumen([gastoAgo, pagoEl('2026-09-20')], TJV, AGO), 500000);
+  assert.equal(F.pagadoDeResumen([gastoAgo, pagoEl('2026-09-30')], TJV, AGO), 500000);
+});
+
+t('lo que contaba antes sigue contando', () => {
+  assert.equal(F.pagadoDeResumen([gastoAgo, pagoEl('2026-08-27')], TJV, AGO), 500000);
+  assert.equal(F.pagadoDeResumen([gastoAgo, pagoEl('2026-09-04')], TJV, AGO), 500000);
+  assert.equal(F.pagadoDeResumen([gastoAgo, pagoEl('2026-09-14')], TJV, AGO), 500000);
+});
+
+t('un pago del resumen siguiente no se le cuenta al anterior', () => {
+  // Las ventanas encajan pero no se pisan: el 01/10 ya es del resumen que
+  // cerro ese dia.
+  assert.equal(F.pagadoDeResumen([gastoAgo, pagoEl('2026-10-01')], TJV, AGO), 0);
+  assert.equal(F.pagadoDeResumen([gastoAgo, pagoEl('2026-10-25')], TJV, AGO), 0);
+});
+
+t('y uno de antes del cierre tampoco: ese resumen no existia', () => {
+  assert.equal(F.pagadoDeResumen([gastoAgo, pagoEl('2026-08-26')], TJV, AGO), 0);
+});
+
+t('pagado el resumen, la tarjeta pasa al periodo nuevo', () => {
+  // El caso entero: resumen de agosto pagado el 20/09 y una compra de
+  // octubre. La tarjeta tiene que mostrar la compra nueva, no el resumen
+  // viejo.
+  const nuevo = { id: 'b', account_id: 'v', tipo: 'gasto', moneda: 'ARS',
+                  monto: 88500, fecha: '2026-10-06', cuotas: 1 };
+  const txs = [gastoAgo, nuevo, pagoEl('2026-09-20')];
+  const hoy = d('2026-10-12');
+  const cerrado = F.resumenAPagar(TJV, hoy);
+  assert.equal(F.pendienteDeResumen(txs, TJV, cerrado, null), 0);
+  const per = F.periodo(F.proximoCiclo(TJV, hoy).vence);
+  assert.equal(per, '2026-11');
+  assert.equal(F.totalTarjetaEnPeriodo(txs, TJV, per, 'ARS'), 88500);
+});
+
 console.log(`\n${ok} pruebas OK`);
