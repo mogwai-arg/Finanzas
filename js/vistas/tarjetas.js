@@ -16,6 +16,11 @@ import { barrasHorizontales } from '../graficos.js';
 
 const isoDe = d => fechaISO(d);
 
+// "en -2 d" no lo dice nadie. Una fecha que ya paso se cuenta para atras, y
+// el signo menos delante de un numero de dias se lee como un error antes que
+// como "hace".
+const enDias = d => d < 0 ? `hace ${-d} d` : d === 0 ? 'hoy' : `en ${d} d`;
+
 /**
  * Todo lo de las tarjetas, para poner adentro de Pagar.
  *
@@ -78,7 +83,18 @@ function estadoTarjeta(t, hoy) {
   const cerrado = F.resumenAPagar(t, hoy);
   const falta = cerrado ? F.faltaPagarDeResumen(state.transactions, t, cerrado, moneda) : 0;
   const pagado = cerrado ? F.pagadoDeResumen(state.transactions, t, cerrado, moneda) : 0;
-  const aPagar = falta > 0 ? cerrado : null;
+
+  // Lo que de VERDAD queda por pagar, que es el numero que la tarjeta muestra:
+  // si se anoto lo que dice el banco, manda ese, porque es el que se paga.
+  //
+  // Esto se decidia con `falta` —lo cargado— y se mostraba con el del banco.
+  // Cuando no coinciden, la tarjeta quedaba en lo peor de los dos: el cartel
+  // de "VENCIO" de un resumen que hay que pagar, y encima de un "$ 0". Y no
+  // pasaba nunca al ciclo en curso, asi que la tarjeta se veia congelada en un
+  // resumen viejo y saldado.
+  const pendiente = F.pendienteDeResumen(state.transactions, t, cerrado,
+                                         state.settings?.saldos_tarjeta, moneda);
+  const aPagar = pendiente > 0 ? cerrado : null;
   const ciclo = aPagar || F.proximoCiclo(t, hoy);
   // Los débitos automáticos que todavía no llegaron: Netflix, la prepaga.
   // Son plata comprometida aunque el consumo no figure todavía, y se miran
@@ -92,7 +108,8 @@ function estadoTarjeta(t, hoy) {
   // encima las descontaba dos veces: el limite disponible daba el limite
   // entero y "0 % usado" con la tarjeta llena.
   const pagadoVivo = cerrado && cerrado.vence >= hoy ? pagado : 0;
-  return { moneda, cerrado, falta, pagado, pagadoVivo, aPagar, ciclo, previstos,
+  return { moneda, cerrado, falta, pendiente, pagado, pagadoVivo,
+           aPagar, ciclo, previstos,
            // El resumen nuevo no arranca en cero: arranca debiendo las cuotas
            // de compras de meses anteriores, y suma desde ahí.
            comprometido: F.comprometidoEnPeriodo(state.transactions, t,
@@ -234,7 +251,7 @@ function botonPagar(t, hoy) {
 
 export function montoDelPlastico(t, hoy) {
   const est = estadoTarjeta(t, hoy);
-  const { moneda, falta, aPagar, pagado } = est;
+  const { moneda, falta, pendiente, aPagar, pagado } = est;
   const c = F.proximoCiclo(t, hoy);
   const foco = aPagar || c;
   // Sin cierre cargado no hay resumen que mostrar: en vez de un cero que
@@ -246,10 +263,9 @@ export function montoDelPlastico(t, hoy) {
   const b = sinCiclo ? null
     : F.brechaDeTarjeta(state.transactions, t, F.periodo(foco.vence),
                         state.settings?.saldos_tarjeta, moneda);
-  const total = sinCiclo
-    ? todoLoQueDebe(t)
-    : aPagar ? (b.banco != null ? Math.max(0, F.round2(falta + b.dif)) : falta)
-             : b.total;
+  // El mismo numero con el que se decidio que hay algo que pagar: si se
+  // decide con uno y se muestra otro, la tarjeta se contradice sola.
+  const total = sinCiclo ? todoLoQueDebe(t) : aPagar ? pendiente : b.total;
   const dv = diasHasta(isoDe(foco.vence), hoy);
   return { ...est, c, foco, sinCiclo, b, total, dv,
     etiqueta: sinCiclo ? 'En consumos'
@@ -315,9 +331,9 @@ function plastico(t, hoy, linkear) {
           h('b', 'sin él no sé cuándo se paga')))
       : h('div.foot',
           h('div', h('span', aPagar ? 'Vence' : 'Cierra'),
-            h('b', aPagar ? `${fmt(foco.vence)} · en ${dv} d` : `${fmt(c.cierre)} · en ${dc} d`)),
+            h('b', aPagar ? `${fmt(foco.vence)} · ${enDias(dv)}` : `${fmt(c.cierre)} · ${enDias(dc)}`)),
           h('div', h('span', aPagar ? 'Próximo cierre' : 'Vence'),
-            h('b', aPagar ? `${fmt(c.cierre)} · en ${dc} d` : `${fmt(c.vence)} · en ${dv} d`)),
+            h('b', aPagar ? `${fmt(c.cierre)} · ${enDias(dc)}` : `${fmt(c.vence)} · ${enDias(dv)}`)),
           !foco.declarado && h('div', h('span', 'estimado'))),
     // Que el pago figure, y que las cuotas ya comprometidas no parezcan gasto
     // nuevo: una tarjeta que vuelve a cero sin explicación se lee como un

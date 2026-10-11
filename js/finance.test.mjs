@@ -2108,4 +2108,66 @@ t('un pago sin monto no cuenta como referencia', () => {
   assert.equal(F.ultimoPagado('luz', pagos, '2026-10'), 31200);
 });
 
+// =====================================================================
+// LA TARJETA DECIDE Y MUESTRA CON EL MISMO NUMERO
+//
+// Caso real: el resumen vencio el 9/10 y esta pagado segun el banco, pero la
+// app tiene 209.666 de mas cargados de ese periodo. La tarjeta decidia "hay
+// algo que pagar" con lo cargado y mostraba el numero del banco: quedaba
+// "VENCIO $ 0" y no pasaba nunca al ciclo en curso.
+// =====================================================================
+const TJP = { id: 'v', tipo: 'credito', moneda: 'ARS', cierre_dia: 1, vencimiento_dia: 9,
+              ciclos: [{ cierre: '2026-10-01', vence: '2026-10-09' },
+                       { cierre: '2026-10-29', vence: '2026-11-11' }] };
+const CERRADO = { cierre: d('2026-10-01'), vence: d('2026-10-09') };
+const CONSUMO = { id: 'c1', account_id: 'v', tipo: 'gasto', moneda: 'ARS',
+                  monto: 1250969.70, fecha: '2026-09-15', cuotas: 1 };
+const PAGO = { id: 'p1', tipo: 'transferencia', account_id: 'gal', destino_account_id: 'v',
+               moneda: 'ARS', monto: 1041303, fecha: '2026-10-09' };
+const DICE = { v: { '2026-10': { ARS: { monto: 1041303, cuando: '2026-09-28' } } } };
+
+t('pagado segun el banco: no queda nada pendiente', () => {
+  // Lo cargado dice que faltan 209.666, pero el banco cobro 1.041.303 y eso
+  // se pago. El resumen esta saldado.
+  assert.equal(F.faltaPagarDeResumen([CONSUMO, PAGO], TJP, CERRADO), 209666.7);
+  assert.equal(F.pendienteDeResumen([CONSUMO, PAGO], TJP, CERRADO, DICE), 0);
+});
+
+t('sin numero del banco manda lo cargado', () => {
+  assert.equal(F.pendienteDeResumen([CONSUMO, PAGO], TJP, CERRADO, null), 209666.7);
+  assert.equal(F.pendienteDeResumen([CONSUMO, PAGO], TJP, CERRADO, {}), 209666.7);
+});
+
+t('si el banco dice MAS de lo cargado, eso es lo que falta', () => {
+  // Consumos que todavia no llegaron al detalle. El numero del banco es el
+  // que se paga, asi que falta esa diferencia tambien.
+  const dice = { v: { '2026-10': { ARS: { monto: 1400000, cuando: '2026-09-28' } } } };
+  assert.equal(F.pendienteDeResumen([CONSUMO, PAGO], TJP, CERRADO, dice), 358697);
+});
+
+t('una compra posterior al numero del banco se suma', () => {
+  // El banco no la habia visto cuando se anoto el saldo.
+  const despues = { id: 'c2', account_id: 'v', tipo: 'gasto', moneda: 'ARS',
+                    monto: 50000, fecha: '2026-09-30', cuotas: 1 };
+  assert.equal(F.pendienteDeResumen([CONSUMO, despues, PAGO], TJP, CERRADO, DICE), 50000);
+});
+
+t('pagar de mas no deja un resumen negativo', () => {
+  const pagoDeMas = { ...PAGO, monto: 2000000 };
+  assert.equal(F.pendienteDeResumen([CONSUMO, pagoDeMas], TJP, CERRADO, DICE), 0);
+  assert.equal(F.pendienteDeResumen([CONSUMO, pagoDeMas], TJP, CERRADO, null), 0);
+});
+
+t('sin resumen cerrado no hay nada pendiente', () => {
+  assert.equal(F.pendienteDeResumen([CONSUMO], TJP, null, DICE), 0);
+});
+
+t('el saldo en dolares se mide aparte del de pesos', () => {
+  const enUsd = { id: 'u1', account_id: 'v', tipo: 'gasto', moneda: 'USD',
+                  monto: 91.57, fecha: '2026-09-20', cuotas: 1 };
+  const txs = [CONSUMO, enUsd, PAGO];
+  assert.equal(F.pendienteDeResumen(txs, TJP, CERRADO, DICE, 'USD'), 91.57);
+  assert.equal(F.pendienteDeResumen(txs, TJP, CERRADO, DICE, 'ARS'), 0);
+});
+
 console.log(`\n${ok} pruebas OK`);

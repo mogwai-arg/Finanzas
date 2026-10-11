@@ -348,6 +348,29 @@ export function saldoDeclarado(declarados, tarjetaId, per, moneda = 'ARS') {
  * importan y por eso no se recorta a cero: un total que sobra tambien es un
  * error, y silenciarlo lo deja adentro para siempre.
  */
+/**
+ * Lo que de verdad queda por pagar de un resumen cerrado.
+ *
+ * Si se anoto lo que dice el banco, manda ese numero: es el que se paga. Lo
+ * cargado puede tener de mas —un consumo duplicado, una cuota contada dos
+ * veces— y lo que importa es cuanto hay que transferir.
+ *
+ * Existe para que la pantalla DECIDA y MUESTRE con el mismo numero. Antes
+ * decidia con lo cargado y mostraba el del banco, y cuando no coincidian la
+ * tarjeta quedaba en lo peor de los dos: el cartel de "VENCIO" de un resumen
+ * que hay que pagar, y encima un "$ 0". Y no pasaba nunca al ciclo en curso,
+ * asi que se veia congelada en un resumen viejo y ya saldado.
+ */
+export function pendienteDeResumen(txs, tarjeta, cerrado, declarados, moneda = 'ARS') {
+  if (!cerrado) return 0;
+  const falta = faltaPagarDeResumen(txs, tarjeta, cerrado, moneda);
+  const b = brechaDeTarjeta(txs, tarjeta, periodo(cerrado.vence), declarados, moneda);
+  // Sin numero del banco, lo cargado es lo unico que hay.
+  if (b.banco == null) return falta;
+  // Nunca menos que cero: haber pagado de mas no es un resumen "negativo".
+  return Math.max(0, round2(falta + b.dif));
+}
+
 export function brechaDeTarjeta(txs, tarjeta, per, declarados, moneda = 'ARS') {
   const app = totalTarjetaEnPeriodo(txs, tarjeta, per, moneda);
   const dec = saldoDeclarado(declarados, tarjeta.id, per, moneda);
