@@ -20,6 +20,7 @@ const isoDe = d => fechaISO(d);
 // el signo menos delante de un numero de dias se lee como un error antes que
 // como "hace".
 const enDias = d => d < 0 ? `hace ${-d} d` : d === 0 ? 'hoy' : `en ${d} d`;
+const fmtDia = d => `${d.getDate()}/${d.getMonth() + 1}`;
 
 /**
  * Todo lo de las tarjetas, para poner adentro de Pagar.
@@ -565,13 +566,47 @@ function consumosDelCiclo(t, hoy, cual = null) {
   // explicar: es lo normal. La sección directamente no está.
   if (!filas.length && moneda !== propia) return null;
   if (!filas.length) {
+    // Un cero sin explicacion es lo peor que puede decir esta pantalla: uno
+    // carga movimientos, la tarjeta sigue en cero y no hay forma de saber si
+    // el problema es la cuenta, la fecha o la app.
+    //
+    // Asi que se dice lo que se vio: cuantos consumos tiene la tarjeta en esta
+    // moneda y en que resumen caen. Casi siempre la respuesta esta ahi —caen
+    // en el que viene, porque la compra entro despues del cierre—.
+    const otros = new Map();
+    for (const tx of state.transactions) {
+      if (tx.account_id !== t.id || tx.tipo !== 'gasto') continue;
+      if (F.monedaDe(tx) !== moneda) continue;
+      for (const cu of F.cronograma(tx, t, hoy)) {
+        const k = cu.periodoVenc;
+        otros.set(k, { n: (otros.get(k)?.n || 0) + 1,
+                       monto: (otros.get(k)?.monto || 0) + cu.monto });
+      }
+    }
+    const lista = [...otros.entries()].sort((a, b) => a[0] < b[0] ? -1 : 1);
+    const cuando = `del ${fmtDia(c.cierre)} al ${fmtDia(c.vence)}`;
+
     return h('section',
       h('div.ghead', titulo),
       h('div.grp.pad',
         h('div.small.mut', { style: { lineHeight: '1.5' } },
-          'Todavía no hay consumos en este resumen. Si cargaste alguno y no aparece acá, ',
-          'fijate que lo hayas puesto en la tarjeta y no en la cuenta del mismo banco: ',
-          'en el formulario dicen el tipo al lado del nombre.')));
+          `Este resumen —el que vence el ${fmtDia(c.vence)}— no tiene consumos `,
+          `cargados${moneda !== propia ? ` en ${moneda === 'USD' ? 'dólares' : 'pesos'}` : ''}. `,
+          lista.length
+            ? 'Los que tenés cargados caen en otro:'
+            : 'Y la tarjeta no tiene ninguno cargado. Si cargaste alguno y no aparece, ' +
+              'fijate que lo hayas puesto en la tarjeta y no en la cuenta del mismo banco: ' +
+              'en el formulario dicen el tipo al lado del nombre.'),
+        lista.length ? h('div', { style: { marginTop: '10px' } },
+          ...lista.map(([per2, v]) => h('div', {
+            style: { display: 'flex', justifyContent: 'space-between', gap: '10px',
+                     fontSize: '13px', marginTop: '4px' } },
+            h('span.mut', `${periodoLargo(per2)} · ${v.n} ${v.n === 1 ? 'consumo' : 'consumos'}`),
+            h('b', plata(moneda === 'USD' ? v.monto : Math.round(v.monto), moneda)))),
+          h('div.small.mut', { style: { marginTop: '9px', lineHeight: '1.45' } },
+            `Una compra entra al resumen que cierra después: este cierra el `,
+            `${fmtDia(c.cierre)}, así que lo de antes ya salió en el anterior y lo de `,
+            'después va al que viene.')) : null));
   }
   const acumulado = F.round2(filas.reduce((s, f) => s + f.monto, 0));
   const fila = f => h('button.li', {
