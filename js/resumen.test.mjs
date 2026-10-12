@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import {
   parseMonto, parseFecha, parsePeriodo, detectarEmisor, leerCiclo,
-  parseResumen, aMovimientos
+  parseResumen, parsePegado, aMovimientos
 } from './resumen.js';
 
 const aca = dirname(fileURLToPath(import.meta.url));
@@ -342,6 +342,83 @@ t('el formato viejo sigue leyendose igual', () => {
   const cuotas = r.consumos.find(c => c.cuota);
   cierto(cuotas, 'no encontro una compra en cuotas');
   igual(cuotas.comercio, 'DLO*Naked');
+});
+
+// =====================================================================
+// LO QUE SE COPIA DE LA APP DEL BANCO
+//
+// Otro formato y no se parece en nada al PDF: un dato por renglon, en
+// vertical. Es lo unico que hay mientras el resumen no cierra.
+// =====================================================================
+const PEG = leer('pegado-app.txt');
+
+t('lee un movimiento simple', () => {
+  const c = parsePegado(PEG).consumos[0];
+  igual(c.fecha, '2026-10-01');
+  igual(c.comercio, 'CLUB DEPORTIVO');
+  igual(c.comprobante, '000000030332623');
+  cerca(c.ars, 36030);
+});
+
+t('empareja bien un bloque con los importes salteados', () => {
+  // Copiar una pantalla de dos columnas desacomoda los importes: vienen los
+  // dos comercios y despues los dos importes. Se emparejan en orden, que es
+  // como salen. Equivocarse acá le pone a un comercio el importe de otro.
+  const cs = parsePegado(PEG).consumos;
+  igual(cs[1].comercio, 'FEDERACION PA');
+  cerca(cs[1].ars, 190107.59);
+  igual(cs[2].comercio, 'CLUB DEPORTIVO');
+  igual(cs[2].comprobante, '000000050905041');
+  cerca(cs[2].ars, 17300);
+});
+
+t('junta el comercio cortado en dos renglones', () => {
+  const c = parsePegado(PEG).consumos[3];
+  igual(c.comercio, 'JUGUETERIA*SOMOSLOSJUGUETES');
+  igualJSON(c.cuota, { nro: 3, total: 3 });
+  cerca(c.ars, 12466.66);
+});
+
+t('entiende los dolares', () => {
+  const c = parsePegado(PEG).consumos[4];
+  igual(c.comercio, 'NETFLIX.COM');
+  cerca(c.usd, 13.34);
+  igual(c.ars, null);
+});
+
+t('dos comercios cortos seguidos no se pegan en uno', () => {
+  const cs = parsePegado('MOSTAZA\n01/10/26\n$9.500,00\nRAPPI\n01/10/26\n$12.000,00').consumos;
+  igual(cs.length, 2);
+  igual(cs[0].comercio, 'MOSTAZA');
+  igual(cs[1].comercio, 'RAPPI');
+});
+
+t('si la cuenta no cierra NO adivina: lo devuelve sin leer', () => {
+  // Dos comercios y un solo importe. Ponerle el importe a cualquiera de los
+  // dos es inventar plata; se muestra para cargarlo a mano.
+  const r = parsePegado('COMERCIO UNO\n000000011111111\nCOMERCIO DOS\n000000022222222\n$5.000,00\n01/10/26');
+  igual(r.consumos.length, 0);
+  igual(r.sinLeer.length, 1);
+  igual(r.sinLeer[0].length, 6);
+});
+
+t('una compra en cuotas se guarda entera, igual que desde el PDF', () => {
+  const m = aMovimientos(parsePegado(PEG), 'tj').find(x => x.cuotas > 1);
+  igual(m.cuotas, 3);
+  cerca(m.monto, 37399.98);          // 12.466,66 x 3
+  igual(m.fecha, '2026-08-22');
+});
+
+t('pegar lo mismo dos veces no duplica', () => {
+  const a = aMovimientos(parsePegado(PEG), 'tj').map(x => x.externo_id);
+  const b = aMovimientos(parsePegado(PEG), 'tj').map(x => x.externo_id);
+  igualJSON(a, b);
+  igual(new Set(a).size, a.length, 'ids repetidos entre si');
+});
+
+t('un resumen de verdad sigue leyendose como resumen', () => {
+  // El pegado es el plan B: no puede quedarse con lo que el PDF lee bien.
+  igual(parseResumen(VP).consumos.length, 10);
 });
 
 console.log(`\n${ok} pruebas OK${fallo ? `, ${fallo} FALLAN` : ''}\n`);

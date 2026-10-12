@@ -9,7 +9,7 @@
 import { h, icono, hoja, aviso, campo, select } from '../ui.js';
 import { state, guardar, guardarVarios } from '../db.js';
 import * as F from '../finance.js';
-import { parseResumen, aMovimientos } from '../resumen.js';
+import { parseResumen, parsePegado, aMovimientos } from '../resumen.js';
 import { plata, aFecha } from '../formato.js';
 
 const MARCAS = { visa: 'Visa', mastercard: 'Mastercard', amex: 'Amex' };
@@ -124,10 +124,20 @@ export function formImportarResumen(yaBajado = null) {
 
   function leer() {
     salida.replaceChildren(); pie.replaceChildren();
-    const r = parseResumen(texto.value);
+    let r = parseResumen(texto.value);
+
+    // Si no es un resumen, puede ser la lista de movimientos copiada de la
+    // app del banco: otro formato, en vertical, que es lo unico que hay
+    // mientras el resumen no cierra.
+    if (!r || (!r.consumos.length && !r.impuestos.length)) {
+      const p = parsePegado(texto.value);
+      if (p.consumos.length) r = p;
+    }
+
     if (!r) {
-      salida.append(nota('No reconocí el resumen. Por ahora leo los de Galicia, ' +
-        'Visa y Mastercard. Fijate que hayas copiado el texto entero.'));
+      salida.append(nota('No reconocí esto. Leo el resumen en PDF de Galicia —Visa y ' +
+        'Mastercard— y también la lista de movimientos copiada de la app del banco. ' +
+        'Fijate que hayas copiado el texto entero.'));
       return;
     }
     if (!r.consumos.length && !r.impuestos.length) {
@@ -145,17 +155,23 @@ export function formImportarResumen(yaBajado = null) {
       (!r.ultimos4 || !a.ultimos4 || a.ultimos4 === r.ultimos4)) ||
       tarjetas.find(a => a.marca === r.marca);
 
+    // Lo pegado de la app no dice de que tarjeta es: no trae marca, ni
+    // ultimos cuatro, ni ciclo. Entonces no se ofrece crear una —quedaria
+    // una tarjeta llamada "pegado", sin cierre y sin nada— y hay que elegir
+    // una de las que ya estan.
+    const dePegado = r.marca === 'pegado';
     const nombreNuevo = r.producto || MARCAS[r.marca] || r.marca;
     const cual = select([
       ...tarjetas.map(a => ({ value: a.id, label: a.nombre })),
-      { value: 'nueva', label: `Crear una nueva (${nombreNuevo}${r.ultimos4 ? ' · ' + r.ultimos4 : ''})` }
-    ], { value: propuesta?.id || 'nueva' });
+      dePegado ? null
+        : { value: 'nueva', label: `Crear una nueva (${nombreNuevo}${r.ultimos4 ? ' · ' + r.ultimos4 : ''})` }
+    ].filter(Boolean), { value: propuesta?.id || (dePegado ? tarjetas[0]?.id : 'nueva') });
 
     // Los resúmenes de Mastercard no imprimen los últimos cuatro en ningún
     // lado. En vez de dejar la tarjeta sin número, se piden acá.
     const u4 = h('input', { type: 'text', inputmode: 'numeric', maxlength: '4',
                             placeholder: '9817', value: propuesta?.ultimos4 || '' });
-    const pedirU4 = !r.ultimos4;
+    const pedirU4 = !r.ultimos4 && !dePegado;
 
     const movs = aMovimientos(r, null);
     const yaEstan = new Set(state.transactions.map(t => t.externo_id).filter(Boolean));
@@ -213,10 +229,17 @@ export function formImportarResumen(yaBajado = null) {
       })),
       resumenPares);
 
-    salida.append(
+    // Con .filter: `append` convierte un null en el texto "null" y lo escribe
+    // en la pantalla. h() los saltea, append no.
+    salida.append(...[
       h('div.grp', { style: { marginTop: '14px' } },
-        dato('Tarjeta', `${r.producto || MARCAS[r.marca] || r.marca}${r.ultimos4 ? ' · ' + r.ultimos4 : ''}`),
+        dato('Qué leí', dePegado ? 'Movimientos pegados de la app'
+          : `${r.producto || MARCAS[r.marca] || r.marca}${r.ultimos4 ? ' · ' + r.ultimos4 : ''}`),
         r.ciclo ? dato('Cierre', `${dia(r.ciclo.cierre)} · vence ${dia(r.ciclo.vencimiento)}`) : null,
+        // Lo que no se entendio se dice y se muestra: callarlo seria perder
+        // consumos sin que nadie se entere.
+        r.sinLeer?.length ? dato('No pude leer',
+          `${r.sinLeer.length} ${r.sinLeer.length === 1 ? 'bloque' : 'bloques'} · abajo`) : null,
         r.total.ars != null ? dato('Total a pagar', plata(r.total.ars)) : null,
         r.total.usd ? dato('En dólares', plata(r.total.usd, 'USD')) : null,
         dato('Consumos nuevos', String(nuevos.length) + (enCuotas ? ` · ${enCuotas} en cuotas` : '')),
@@ -230,11 +253,23 @@ export function formImportarResumen(yaBajado = null) {
           h('div.small.mut', { style: { marginTop: '-12px', marginBottom: '16px', lineHeight: '1.45' } },
             'Este resumen no los trae. Sirven para reconocer la tarjeta después.')) : null),
       listaPares,
+      r.sinLeer?.length ? h('section', { style: { marginTop: '16px' } },
+        h('div.ghead', 'Esto no lo entendí'),
+        h('div.grp.pad',
+          h('div.small.mut', { style: { lineHeight: '1.5', marginBottom: '9px' } },
+            'Los importes y los comercios no me dieron la misma cantidad, así que no ',
+            'los emparejo a ojo. Cargá estos a mano:'),
+          ...r.sinLeer.map(b => h('div', { style: { fontSize: '12.5px', marginTop: '7px',
+                                                    fontFamily: 'ui-monospace, monospace',
+                                                    color: 'var(--tx2)' } },
+            b.join(' · ').slice(0, 120)))))
+        : null,
       h('div.small.mut', { style: { lineHeight: '1.5', marginTop: '14px' } },
         r.ciclo ? 'También se guardan las seis fechas del ciclo en la tarjeta: son las que mandan sobre el día fijo de cierre. ' : '',
         enCuotas
           ? `Los consumos entran confirmados —el banco ya los cobró—; ${enCuotas === 1 ? 'la compra en cuotas queda' : 'las ' + enCuotas + ' compras en cuotas quedan'} para revisar.`
-          : 'Los consumos entran confirmados: el banco ya los cobró.'));
+          : 'Los consumos entran confirmados: el banco ya los cobró.')
+    ].filter(Boolean));
 
     botonImportar.onclick = () => importar(r, cual.value, nuevos, u4.value.trim(), decisiones);
     botonImportar.textContent = nuevos.length

@@ -314,6 +314,115 @@ export function parseResumen(texto) {
   return out;
 }
 
+// ---------------------------------------------------------------------
+// LO QUE SE COPIA DE LA APP DEL BANCO
+// ---------------------------------------------------------------------
+
+/**
+ * Movimientos copiados de la pantalla de la app, no del PDF.
+ *
+ * Es otro formato y no se parece en nada: el PDF arma una fila por consumo
+ * —fecha, comercio, importe— y la app los apila en vertical, un dato por
+ * renglon:
+ *
+ *     CLUB ATLETICO R
+ *     000000030332623
+ *     $36.030,00
+ *     01/10/26
+ *
+ * Sirve para lo que el PDF no cubre: el resumen todavia no cerro y lo unico
+ * que hay son los movimientos en pantalla.
+ *
+ * Dos cosas lo complican y las dos salen de copiar una pantalla de dos
+ * columnas:
+ *
+ *   - El comercio se corta y sigue en el renglon de abajo
+ *     ('MERPAGO*SOMOSLOSJUGUET' + 'ES').
+ *   - Los importes se desacomodan: pueden venir los dos comercios primero y
+ *     los dos importes despues.
+ *
+ * Por eso no se lee de a un renglon sino por bloque: dentro de un bloque se
+ * juntan por separado los comercios, los importes y las fechas, y recien se
+ * emparejan si hay la misma cantidad de cada uno. Si no coinciden NO se
+ * adivina: ese bloque se devuelve sin leer, con sus renglones, para que se
+ * vea y se cargue a mano. Emparejar mal un importe con un comercio es
+ * exactamente la clase de error que no se puede cometer con plata.
+ */
+export function parsePegado(texto) {
+  const consumos = [];
+  const sinLeer = [];
+
+  for (const bloque of String(texto).split(/\n\s*\n/)) {
+    const lineas = bloque.split('\n').map(l => l.trim()).filter(Boolean);
+    if (!lineas.length) continue;
+
+    const comercios = [], importes = [], fechas = [], cuotas = [], comprobantes = [];
+    let ultimoTexto = -1;
+
+    for (const l of lineas) {
+      const cu = l.match(/cuotas?\s+(\d{1,2})\s*(?:de|\/)\s*(\d{1,2})/i);
+      if (cu) { cuotas.push({ nro: Number(cu[1]), total: Number(cu[2]) }); continue; }
+
+      if (/^\d{1,2}[-/.]\d{1,2}[-/.](\d{2}|\d{4})$/.test(l)) {
+        const f = parseFecha(l);
+        if (f) { fechas.push(f); continue; }
+      }
+
+      const im = l.match(/^(US\$|u\$s|\$)?\s*(-?[\d.]+,\d{2})\s*(-?)$/i);
+      if (im) {
+        const monto = parseMonto(im[2] + (im[3] || ''));
+        if (monto != null) {
+          importes.push({ monto, usd: /u/i.test(im[1] || '') });
+          continue;
+        }
+      }
+
+      // Numeros largos con guiones: el comprobante o la referencia.
+      if (/^[\d-]{6,}$/.test(l)) { comprobantes.push(l.replace(/-/g, '')); continue; }
+
+      // Lo que queda es el nombre del comercio. Si el renglon anterior
+      // tambien era texto Y venia largo, es la misma linea cortada: la app
+      // corta a un ancho fijo. Con el anterior corto son dos comercios
+      // distintos, uno abajo del otro.
+      const pegadoAlAnterior = ultimoTexto === comercios.length - 1 &&
+                               comercios.length > 0 &&
+                               comercios[comercios.length - 1].length >= 18;
+      if (pegadoAlAnterior) comercios[comercios.length - 1] += l;
+      else { comercios.push(l); ultimoTexto = comercios.length - 1; }
+    }
+
+    // Emparejar solo si la cuenta cierra. Una fecha sola alcanza para todo el
+    // bloque —en la app los movimientos del mismo dia van juntos—, pero un
+    // importe de menos o de mas significa que algo no se entendio.
+    const n = comercios.length;
+    const fechaDe = i => fechas[i] || (fechas.length === 1 ? fechas[0] : null);
+    if (!n || importes.length !== n || !fechas.length ||
+        (fechas.length !== n && fechas.length !== 1)) {
+      sinLeer.push(lineas);
+      continue;
+    }
+
+    for (let i = 0; i < n; i++) {
+      const imp = importes[i];
+      consumos.push({
+        fecha: fechaDe(i),
+        comercio: comercios[i].replace(/\s+/g, ' ').trim(),
+        comprobante: comprobantes[i] || null,
+        cuota: cuotas.length === n ? cuotas[i] : (n === 1 ? cuotas[0] || null : null),
+        marca: null,
+        ars: imp.usd ? null : imp.monto,
+        usd: imp.usd ? imp.monto : null
+      });
+    }
+  }
+
+  return { emisor: null, marca: 'pegado', producto: null, ultimos4: null,
+           ciclo: null, saldoAnterior: { ars: null, usd: null },
+           pagos: [], consumos, impuestos: [],
+           total: { ars: null, usd: null }, pagoMinimo: null, cuotasAVencer: [],
+           sinLeer };
+}
+
 /**
  * Convierte los consumos en movimientos de la app.
  * Una compra en cuotas se guarda como UNA fila con el total y la cantidad
