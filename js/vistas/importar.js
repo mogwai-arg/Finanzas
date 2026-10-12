@@ -166,7 +166,52 @@ export function formImportarResumen(yaBajado = null) {
     // Los que ya anotaste a mano no se cargan de nuevo: se completan con lo
     // que dice el resumen. Anotar en el momento y despues importar es el uso
     // normal, no un error.
-    const reconocidos = propuesta ? planear(nuevos, propuesta.id).adoptados : 0;
+    //
+    // Pero el parecido es por importe y fecha, y con eso no alcanza: dos
+    // cafes del mismo dia por el mismo precio son dos cafes, no uno. Antes
+    // se decidia solo y lo unico que se veia era "3, se completan"; cuando
+    // se equivocaba, el consumo desaparecia y no habia como saber cual.
+    // Ahora se muestran los dos, uno al lado del otro, y decide quien los
+    // hizo.
+    const decisiones = new Map();
+    const pares = propuesta ? planear(nuevos, propuesta.id).pares : [];
+    const reconocidos = () => pares.filter(x => decisiones.get(x.m.externo_id) !== false).length;
+
+    const resumenPares = h('div.small.mut', { style: { lineHeight: '1.5' } });
+    const botonImportar = h('button.btn');
+    const repintar = () => {
+      const unidos = reconocidos();
+      const aparte = pares.length - unidos;
+      resumenPares.textContent = !aparte
+        ? (pares.length === 1
+            ? 'Se toma como el mismo: el del resumen completa al que ya tenías.'
+            : `Los ${pares.length} se toman como los mismos: el del resumen completa al que ya tenías.`)
+        : `${unidos} de ${pares.length} se ${unidos === 1 ? 'une' : 'unen'} · ` +
+          `${aparte} ${aparte === 1 ? 'entra' : 'entran'} como consumo aparte.`;
+      botonImportar.textContent = `Importar ${nuevos.length - unidos} movimientos`;
+    };
+
+    const unDato = (f, com, monto, moneda, extra) =>
+      `${dia(f)} · ${String(com || '').slice(0, 26)} · ${plata(moneda === 'USD' ? monto : Math.round(monto), moneda)}${extra || ''}`;
+
+    const listaPares = !pares.length ? null : h('section', { style: { marginTop: '16px' } },
+      h('div.ghead', pares.length === 1 ? '¿Es el mismo consumo?' : '¿Son los mismos consumos?'),
+      h('div.grp', pares.map(({ m, previo }) => {
+        const chk = h('input', { type: 'checkbox', checked: true,
+          onchange: () => { decisiones.set(m.externo_id, chk.checked); repintar(); } });
+        const dosLineas = h('div.m',
+          h('div.t', m.comercio || m.descripcion),
+          h('div.s', 'del resumen: ' +
+            unDato(m.fecha, m.comercio, m.monto, m.moneda,
+                   m.cuotas > 1 ? ` · ${m.cuotas} cuotas` : '')),
+          h('div.s', 'ya cargado: ' +
+            unDato(previo.fecha, previo.comercio || previo.descripcion,
+                   previo.monto, previo.moneda || 'ARS',
+                   previo.account_id ? '' : ' · sin cuenta')));
+        return h('label.li', { style: { padding: '11px 0', alignItems: 'flex-start' } },
+          dosLineas, chk);
+      })),
+      resumenPares);
 
     salida.append(
       h('div.grp', { style: { marginTop: '14px' } },
@@ -176,24 +221,30 @@ export function formImportarResumen(yaBajado = null) {
         r.total.usd ? dato('En dólares', plata(r.total.usd, 'USD')) : null,
         dato('Consumos nuevos', String(nuevos.length) + (enCuotas ? ` · ${enCuotas} en cuotas` : '')),
         repetidos ? dato('Ya importados', `${repetidos}, no se repiten`) : null,
-        reconocidos ? dato('Ya anotados a mano', `${reconocidos}, se completan`) : null,
+        pares.length ? dato('Parecidos a algo que ya tenías',
+                            `${pares.length} · decidís abajo`) : null,
         r.impuestos.length ? dato('Impuestos', `${r.impuestos.length} · ${plata(sumaImp(r), 'ARS', { signo: true })}`) : null),
       h('div', { style: { marginTop: '14px' } }, campo('Cargar todo en', cual),
         pedirU4 ? h('div',
           campo('Últimos 4 de la tarjeta', u4),
           h('div.small.mut', { style: { marginTop: '-12px', marginBottom: '16px', lineHeight: '1.45' } },
             'Este resumen no los trae. Sirven para reconocer la tarjeta después.')) : null),
-      h('div.small.mut', { style: { lineHeight: '1.5' } },
+      listaPares,
+      h('div.small.mut', { style: { lineHeight: '1.5', marginTop: '14px' } },
         r.ciclo ? 'También se guardan las seis fechas del ciclo en la tarjeta: son las que mandan sobre el día fijo de cierre. ' : '',
         enCuotas
           ? `Los consumos entran confirmados —el banco ya los cobró—; ${enCuotas === 1 ? 'la compra en cuotas queda' : 'las ' + enCuotas + ' compras en cuotas quedan'} para revisar.`
           : 'Los consumos entran confirmados: el banco ya los cobró.'));
 
-    pie.append(h('button.btn', { onclick: () => importar(r, cual.value, nuevos, u4.value.trim()) },
-      nuevos.length ? `Importar ${nuevos.length} movimientos` : 'Guardar las fechas del ciclo'));
+    botonImportar.onclick = () => importar(r, cual.value, nuevos, u4.value.trim(), decisiones);
+    botonImportar.textContent = nuevos.length
+      ? `Importar ${nuevos.length - reconocidos()} movimientos`
+      : 'Guardar las fechas del ciclo';
+    if (pares.length) repintar();
+    pie.append(botonImportar);
   }
 
-  async function importar(r, destino, nuevos, ultimos4) {
+  async function importar(r, destino, nuevos, ultimos4, decisiones = null) {
     const u4 = r.ultimos4 || ultimos4 || null;
     let cuenta = state.accounts.find(a => a.id === destino);
     if (!cuenta) {
@@ -215,7 +266,7 @@ export function formImportarResumen(yaBajado = null) {
     // Un consumo del resumen no es una adivinanza: el banco ya lo cobró, con
     // fecha e importe. Entra confirmado. La excepción son las cuotas, que si
     // entran mal arrastran el error doce meses: esas sí van al mazo.
-    const { filas, adoptados } = planear(nuevos, cuenta.id);
+    const { filas, adoptados } = planear(nuevos, cuenta.id, decisiones);
 
     // Los impuestos y percepciones también se pagan: entran como un gasto más.
     for (const i of r.impuestos) {
@@ -309,15 +360,21 @@ export function formImportarResumen(yaBajado = null) {
  * `tomados` existe porque dos consumos del mismo dia por el mismo importe
  * podrian adoptar los dos la misma fila y perderse uno.
  */
-function planear(nuevos, cuentaId) {
+function planear(nuevos, cuentaId, decisiones = null) {
   const tomados = new Set();
   const filas = [];
+  const pares = [];
   let adoptados = 0;
 
   for (const m of nuevos) {
     const candidatos = state.transactions.filter(t => !tomados.has(t.id));
     const previo = F.duplicadoManual({ ...m, account_id: cuentaId }, candidatos);
-    if (previo) {
+    // El parecido es por importe y fecha, y eso no alcanza para estar
+    // seguro: dos cafes del mismo dia por el mismo precio son dos cafes.
+    // Quien sabe es el que los hizo, asi que se pregunta y esto obedece.
+    const unir = !!previo && (!decisiones || decisiones.get(m.externo_id) !== false);
+    if (previo) pares.push({ m, previo, unir });
+    if (unir) {
       tomados.add(previo.id);
       filas.push({ ...previo, account_id: cuentaId, externo_id: m.externo_id,
                    cuotas: m.cuotas, fecha: m.fecha, fuente: 'resumen',
@@ -327,7 +384,7 @@ function planear(nuevos, cuentaId) {
       filas.push({ ...m, account_id: cuentaId, revisado: m.cuotas <= 1 });
     }
   }
-  return { filas, adoptados };
+  return { filas, adoptados, pares };
 }
 
 // Las fechas nuevas se suman a las que ya estaban, sin repetir cierres.
