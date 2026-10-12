@@ -363,12 +363,24 @@ export function saldoDeclarado(declarados, tarjetaId, per, moneda = 'ARS') {
  */
 export function pendienteDeResumen(txs, tarjeta, cerrado, declarados, moneda = 'ARS') {
   if (!cerrado) return 0;
-  const falta = faltaPagarDeResumen(txs, tarjeta, cerrado, moneda);
   const b = brechaDeTarjeta(txs, tarjeta, periodo(cerrado.vence), declarados, moneda);
   // Sin numero del banco, lo cargado es lo unico que hay.
-  if (b.banco == null) return falta;
-  // Nunca menos que cero: haber pagado de mas no es un resumen "negativo".
-  return Math.max(0, round2(falta + b.dif));
+  if (b.banco == null) return faltaPagarDeResumen(txs, tarjeta, cerrado, moneda);
+
+  // Se calcula de los pedazos y NO de `faltaPagarDeResumen`, que recorta en
+  // cero: si se pago mas de lo que hay cargado, ese sobrante se perdia y
+  // despues la diferencia con el banco lo volvia a sumar. Daba un pendiente
+  // que no existe —US$ 13,34 de un resumen de US$ 91,57 pagado entero—.
+  //
+  // Lo que hay que pagar es lo que dice el banco, mas lo comprado despues de
+  // ese numero, menos lo pagado.
+  const pagado = pagadoDeResumen(txs, tarjeta, cerrado, moneda);
+  const resto = round2(b.total - pagado);
+  if (resto <= 0) return 0;
+  // La misma tolerancia que `faltaPagarDeResumen`: ocho centavos de
+  // diferencia entre lo anotado y lo pagado dejaban el resumen "impago" para
+  // siempre, y la tarjeta clavada mostrando cero.
+  return resto <= (moneda === 'USD' ? 0.05 : 1) ? 0 : resto;
 }
 
 export function brechaDeTarjeta(txs, tarjeta, per, declarados, moneda = 'ARS') {

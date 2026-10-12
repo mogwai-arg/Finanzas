@@ -794,6 +794,26 @@ export function formPagoTarjeta(tarjeta, ciclo, montos = {}, { foco = null } = {
 
   const cFecha = h('input', { type: 'date', value: hoyISO() });
 
+  // Si esto es el resumen entero o una parte.
+  //
+  // La app lo venia deduciendo de los importes, y no alcanza: lo cargado
+  // puede tener de mas —un consumo duplicado, una cuota contada dos veces— y
+  // entonces un resumen pagado al 100 % seguia figurando impago para siempre.
+  // Nadie puede adivinar eso desde afuera; el unico que sabe si pago todo es
+  // el que pago. Diciendolo, el resumen queda saldado y la tarjeta arranca a
+  // sumar el mes que viene, que es lo que uno espera.
+  let esTotal = true;
+  const opciones = [['total', 'El total del resumen'], ['parte', 'Una parte']];
+  const seg = h('div.seg', { role: 'tablist', style: { marginBottom: '14px' } },
+    ...opciones.map(([v, txt]) => h('button', {
+      role: 'tab', 'aria-selected': String((v === 'total') === esTotal),
+      onclick: () => {
+        esTotal = v === 'total';
+        seg.querySelectorAll('button').forEach((b, i) =>
+          b.setAttribute('aria-selected', String((opciones[i][0] === 'total') === esTotal)));
+      }
+    }, txt)));
+
   // Sin consumos cargados el pago no puede contar como gasto: la app no sabe
   // en qué se gastó. Decirlo acá evita el agujero de un resumen pagado que no
   // aparece en ningún lado del mes.
@@ -811,6 +831,11 @@ export function formPagoTarjeta(tarjeta, ciclo, montos = {}, { foco = null } = {
         h('div.tt', 'No tengo consumos de este resumen'),
         h('div.ds', 'Si lo pagás así, esa plata no va a figurar como gasto en ningún ' +
           'lado: la app no sabe en qué se gastó. Importá el resumen y después anotá el pago.'))) : null,
+    h('div.f', h('label', '¿Qué pagaste?'), seg,
+      h('div.small.mut', { style: { marginTop: '-8px', lineHeight: '1.45' } },
+        'Si es el total, el resumen queda saldado con lo que pongas acá, aunque la app ',
+        'tenga cargado otro número. La diferencia se sigue viendo, pero no te deja la ',
+        'tarjeta pidiendo plata que ya pagaste.')),
     ...bloques.flatMap(b => [b.nodo, b.cuenta, b.enOtra]),
     campo('Cuándo', cFecha),
     h('button.btn', { style: { marginTop: '4px' }, onclick: async () => {
@@ -821,6 +846,13 @@ export function formPagoTarjeta(tarjeta, ciclo, montos = {}, { foco = null } = {
       if (!pagos.length) { aviso('Falta el monto'); return; }
 
       const fecha = cFecha.value || hoyISO();
+      // Lo que ya estaba pagado de este resumen, ANTES de guardar lo de
+      // ahora: despues de guardarlo, `pagadoDeResumen` ya lo incluye y
+      // sumarselo otra vez contaria el pago dos veces.
+      const yaPagado = {};
+      for (const m of ['ARS', 'USD'])
+        yaPagado[m] = F.pagadoDeResumen(state.transactions, tarjeta, ciclo, m);
+
       for (const p of pagos) {
         await guardar('transactions', {
           fecha, descripcion: `Pago ${tarjeta.nombre}`, comercio: null,
@@ -831,6 +863,30 @@ export function formPagoTarjeta(tarjeta, ciclo, montos = {}, { foco = null } = {
           tipo: 'transferencia', cuotas: 1, fuente: 'manual', revisado: true
         });
       }
+      // "Pagué el total": se anota cuanto fue el resumen de verdad, que es
+      // lo que acaba de pagar mas lo que ya habia pagado de este mismo
+      // resumen. Con eso queda saldado sin tocar ni un consumo: lo cargado
+      // no se corrige a mano, porque una fila sin comprobante seria plata
+      // inventada, y la diferencia queda a la vista para revisarla.
+      if (esTotal) {
+        const per = F.periodo(ciclo.vence);
+        const todos = { ...(state.settings?.saldos_tarjeta || {}) };
+        const dePer = { ...(todos[tarjeta.id] || {}) };
+        const cual = { ...(dePer[per] || {}) };
+        delete cual.monto; delete cual.cuando;   // la forma vieja, por periodo
+        for (const p of pagos) {
+          const m = p.moneda_destino || p.moneda;
+          const monto = p.monto_destino != null ? p.monto_destino : p.monto;
+          cual[m] = { monto: F.round2((yaPagado[m] || 0) + monto), cuando: fecha };
+        }
+        dePer[per] = cual;
+        // Solo los tres ultimos resumenes, como en la hoja del banco.
+        const vivos = Object.keys(dePer).sort().slice(-3);
+        await guardar('settings', { ...(state.settings || {}),
+          saldos_tarjeta: { ...todos,
+            [tarjeta.id]: Object.fromEntries(vivos.map(k => [k, dePer[k]])) } });
+      }
+
       cerrar();
       aviso(pagos.length === 1
         ? `Pago anotado · ${plata(pagos[0].monto, pagos[0].moneda)}`

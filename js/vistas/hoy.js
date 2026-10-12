@@ -495,20 +495,28 @@ function loQueSeViene(hoy) {
     // Sin cierre cargado, la fecha de vencimiento seria inventada: no entra
     // en una lista que ordena justamente por cuando hay que pagar.
     if (!F.tieneCiclo(t)) continue;
-    const moneda = t.moneda || 'ARS';
-    const c = F.resumenAPagar(t, hoy) || F.proximoCiclo(t, hoy);
-    const total = F.totalTarjetaEnPeriodo(state.transactions, t, F.periodo(c.vence), moneda);
-    if (!total) continue;
-    // Si ya se pagó algo de este resumen, lo que se viene es el resto.
-    const falta = F.faltaPagarDeResumen(state.transactions, t, c, moneda);
-    if (!falta) continue;
-    const pagado = total - falta;
-    items.push({ id: t.id, nombre: t.nombre, monto: falta, vence: c.vence,
-                 icono: 'tarjeta', moneda,
-                 nota: pagado > 0 ? `pagaste ${plata(Math.round(pagado), moneda)}`
-                                  : (c.declarado ? null : 'estimado'),
-                 tarjeta: t, ciclo: c,
-                 ir: `/tarjetas/${t.id}` });
+    const cerrado = F.resumenAPagar(t, hoy);
+    if (!cerrado) continue;
+    // Las DOS monedas: el resumen en dolares se paga aparte y hasta ahora no
+    // aparecia en esta lista, asi que no habia forma de acordarse de pagarlo.
+    for (const moneda of ['ARS', 'USD']) {
+      // El MISMO numero que muestra la tarjeta.
+      //
+      // Acá se usaba `faltaPagarDeResumen` —lo cargado— y la tarjeta usa el
+      // del banco cuando esta anotado. La misma tarjeta decia "$ 65.862 a
+      // pagar" en Hoy y "$ 0" en su ficha, el mismo dia. Un numero que
+      // depende de la pantalla donde se lo mira no es un numero.
+      const falta = F.pendienteDeResumen(state.transactions, t, cerrado,
+                                         state.settings?.saldos_tarjeta, moneda);
+      if (!falta) continue;
+      const pagado = F.pagadoDeResumen(state.transactions, t, cerrado, moneda);
+      items.push({ id: `${t.id}:${moneda}`, nombre: t.nombre, monto: falta,
+                   vence: cerrado.vence, icono: 'tarjeta', moneda,
+                   nota: pagado > 0 ? `pagaste ${plata(Math.round(pagado), moneda)}`
+                                    : (cerrado.declarado ? null : 'estimado'),
+                   tarjeta: t, ciclo: cerrado,
+                   ir: `/tarjetas/${t.id}` });
+    }
   }
 
   // Gastos fijos sin pagar.

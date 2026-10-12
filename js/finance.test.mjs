@@ -2227,4 +2227,78 @@ t('pagado el resumen, la tarjeta pasa al periodo nuevo', () => {
   assert.equal(F.totalTarjetaEnPeriodo(txs, TJV, per, 'ARS'), 88500);
 });
 
+// =====================================================================
+// RESUMEN PAGADO AL 100 %, CON NUMEROS REALES
+//
+// Dos tarjetas pagadas enteras que seguian pidiendo plata. Los importes son
+// los que de verdad dieron el problema.
+// =====================================================================
+const TJR = { id: 'r', tipo: 'credito', moneda: 'ARS', cierre_dia: 1, vencimiento_dia: 9,
+              ciclos: [{ cierre: '2026-10-01', vence: '2026-10-09' },
+                       { cierre: '2026-10-29', vence: '2026-11-11' }] };
+const CIC = { cierre: d('2026-10-01'), vence: d('2026-10-09') };
+
+t('ocho centavos no dejan un resumen impago para siempre', () => {
+  // La Master: se anoto que el banco decia 1.522.186,28 y se pagaron
+  // 1.522.186,20. Ocho centavos. Quedaba "a pagar $ 0" —el cartel de un
+  // resumen vencido con un cero adentro— y la tarjeta no pasaba nunca al
+  // mes siguiente.
+  const txs = [
+    { id: 'c', account_id: 'r', tipo: 'gasto', moneda: 'ARS', monto: 1588047.91,
+      fecha: '2026-09-20', cuotas: 1 },
+    { id: 'p', tipo: 'transferencia', account_id: 'gal', destino_account_id: 'r',
+      moneda: 'ARS', monto: 1522186.20, fecha: '2026-10-07' }
+  ];
+  const dice = { r: { '2026-10': { ARS: { monto: 1522186.28, cuando: '2026-10-07' } } } };
+  assert.equal(F.pendienteDeResumen(txs, TJR, CIC, dice), 0);
+});
+
+t('pagar MAS de lo cargado no inventa un pendiente', () => {
+  // La Visa en dolares: el banco dijo 91,57, la app tenia cargados 78,23 y
+  // se pagaron 91,57. `faltaPagarDeResumen` recorta en cero y perdia el
+  // sobrante; despues la diferencia con el banco lo volvia a sumar y daba
+  // US$ 13,34 a pagar de un resumen pagado entero.
+  const txs = [
+    { id: 'c', account_id: 'r', tipo: 'gasto', moneda: 'USD', monto: 78.23,
+      fecha: '2026-09-20', cuotas: 1 },
+    { id: 'p', tipo: 'transferencia', account_id: 'w', destino_account_id: 'r',
+      moneda: 'USD', monto: 91.57, fecha: '2026-10-05' }
+  ];
+  const dice = { r: { '2026-10': { USD: { monto: 91.57, cuando: '2026-10-05' } } } };
+  assert.equal(F.faltaPagarDeResumen(txs, TJR, CIC, 'USD'), 0);
+  assert.equal(F.pendienteDeResumen(txs, TJR, CIC, dice, 'USD'), 0);
+});
+
+t('y si de verdad falta, sigue faltando', () => {
+  // Que no se arregle apagando el aviso: pagado a medias, tiene que decirlo.
+  const txs = [
+    { id: 'c', account_id: 'r', tipo: 'gasto', moneda: 'ARS', monto: 1000000,
+      fecha: '2026-09-20', cuotas: 1 },
+    { id: 'p', tipo: 'transferencia', account_id: 'gal', destino_account_id: 'r',
+      moneda: 'ARS', monto: 400000, fecha: '2026-10-07' }
+  ];
+  const dice = { r: { '2026-10': { ARS: { monto: 1000000, cuando: '2026-10-07' } } } };
+  assert.equal(F.pendienteDeResumen(txs, TJR, CIC, dice), 600000);
+  assert.equal(F.pendienteDeResumen(txs, TJR, CIC, null), 600000);
+});
+
+t('decir "pagué el total" salda el resumen aunque sobre lo cargado', () => {
+  // Es lo que hace la hoja de pago al elegir "El total del resumen": anota
+  // que el resumen fue lo que se pago. Lo cargado no se toca —una fila sin
+  // comprobante seria plata inventada— y la diferencia queda a la vista.
+  const txs = [
+    { id: 'c1', account_id: 'r', tipo: 'gasto', moneda: 'ARS', monto: 900000,
+      fecha: '2026-09-15', cuotas: 1 },
+    { id: 'c2', account_id: 'r', tipo: 'gasto', moneda: 'ARS', monto: 100000,
+      fecha: '2026-09-16', cuotas: 1 },   // duplicado que ensucia lo cargado
+    { id: 'p', tipo: 'transferencia', account_id: 'gal', destino_account_id: 'r',
+      moneda: 'ARS', monto: 900000, fecha: '2026-10-07' }
+  ];
+  assert.equal(F.pendienteDeResumen(txs, TJR, CIC, null), 100000);
+  const total = { r: { '2026-10': { ARS: { monto: 900000, cuando: '2026-10-07' } } } };
+  assert.equal(F.pendienteDeResumen(txs, TJR, CIC, total), 0);
+  // Y la diferencia sigue contada, para poder encontrarla.
+  assert.equal(F.brechaDeTarjeta(txs, TJR, '2026-10', total).dif, -100000);
+});
+
 console.log(`\n${ok} pruebas OK`);
