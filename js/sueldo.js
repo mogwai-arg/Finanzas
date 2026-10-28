@@ -86,6 +86,37 @@ export function variacionesBasico(recibos) {
 }
 
 /**
+ * Recibos donde el basico BAJA respecto del anterior.
+ *
+ * No existe: un basico de convenio no baja nunca. Si bajo, uno de los dos
+ * recibos tiene mal ese campo —lo mas comun es haber puesto ahi el bruto o
+ * el total en vez del basico— y de ese numero cuelga toda la proyeccion.
+ *
+ * Paso de verdad y sin aviso: un basico de 1.795.421 donde los demas tenian
+ * 1.150.000 hizo que la app proyectara 1.398.000 de banco cuando el mes
+ * anterior habian entrado 2.082.000. El calculo aguanto el golpe pero nadie
+ * se entero de donde venia.
+ *
+ * Se señala el ANTERIOR, el mas alto: los basicos suben, asi que el que esta
+ * fuera de lugar es el que quedo arriba.
+ */
+const MES_CORTO = ['ene', 'feb', 'mar', 'abr', 'may', 'jun',
+                    'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+const mesCorto = p => MES_CORTO[Number(String(p).split('-')[1]) - 1] || p;
+const miles = n => '$ ' + Math.round(n).toLocaleString('es-AR');
+
+export function basicoQueBaja(recibos) {
+  const rs = porPeriodo(recibos).filter(r => r.basico > 0);
+  const out = [];
+  for (let i = 1; i < rs.length; i++) {
+    if (rs[i].basico >= rs[i - 1].basico) continue;
+    out.push({ periodo: rs[i - 1].periodo, basico: rs[i - 1].basico,
+               siguiente: rs[i].periodo, basicoSiguiente: rs[i].basico });
+  }
+  return out;
+}
+
+/**
  * Ritmo mensual de la paritaria: promedio geometrico de los saltos del
  * basico. Geometrico y no aritmetico porque los aumentos se componen.
  * Devuelve 0 si no hay con que calcularlo.
@@ -93,8 +124,19 @@ export function variacionesBasico(recibos) {
 export function ritmoParitaria(recibos) {
   const rs = porPeriodo(recibos).filter(r => r.basico > 0);
   if (rs.length < 2) return 0;
-  const saltos = rs.length - 1;
-  return Math.pow(rs[saltos].basico / rs[0].basico, 1 / saltos) - 1;
+
+  // Un basico NO baja. Si entre dos recibos bajo, uno de los dos esta mal
+  // cargado, y tomar ese salto como "el ritmo" proyecta el sueldo cayendo
+  // todos los meses: con un recibo mal cargado esto daba -11,29 % mensual.
+  //
+  // Se promedian solo los saltos posibles, y geometrico porque se componen.
+  let producto = 1, n = 0;
+  for (let i = 1; i < rs.length; i++) {
+    const salto = rs[i].basico / rs[i - 1].basico;
+    if (salto < 1) continue;
+    producto *= salto; n++;
+  }
+  return n ? Math.pow(producto, 1 / n) - 1 : 0;
 }
 
 /**
@@ -110,7 +152,25 @@ export function factorRemunerativo(recibos) {
   // es como decirle a alguien que va a cobrar 141.000 en vez de 2.000.000.
   const base = tipicos.length ? tipicos : porPeriodo(recibos).filter(sirve);
   if (!base.length) return 0;
-  return base.reduce((s, r) => s + r.remunerativo / r.basico, 0) / base.length;
+
+  // La MEDIANA de los tres ultimos, no el promedio de todos.
+  //
+  // Dos razones, y las dos se vieron en recibos de verdad:
+  //
+  // Un recibo con el basico mal cargado arrastraba la cuenta entera. Uno con
+  // 1.795.421 donde los demas tienen 1.150.000 da una relacion de 1,2 contra
+  // 1,9, y promediado con uno solo mas tiraba la proyeccion un 25 % abajo:
+  // 1.398.000 de banco donde el mes pasado habian entrado 2.082.000.
+  //
+  // Y la relacion se mueve: el basico sube por paritaria y la antiguedad y el
+  // presentismo quedan atras, asi que baja despacio mes a mes. Promediar toda
+  // la historia proyecta con la estructura de hace medio año.
+  //
+  // Con menos de tres se usa el ultimo, que es el que mas se parece al que
+  // viene. La mediana de dos seria el promedio, y es justo lo que falla.
+  const ultimos = base.slice(-3).map(r => r.remunerativo / r.basico).sort((a, b) => a - b);
+  return ultimos.length >= 3 ? ultimos[1]
+                             : base[base.length - 1].remunerativo / base[base.length - 1].basico;
 }
 
 /**
@@ -410,6 +470,12 @@ export function proximoCobro(recibos, { diaCobro = 1, sobre = 0, sobreDesde = nu
   if (proy.sinBruto) {
     porque.push({ tipo: 'aviso', texto: 'ningún recibo trae el bruto remunerativo, ' +
       'así que escalo el último neto con el aumento' });
+  }
+  // Un basico que baja es un recibo mal cargado, y de ahi cuelga todo.
+  for (const m of basicoQueBaja(recibos)) {
+    porque.push({ tipo: 'aviso', texto: `el básico de ${mesCorto(m.periodo)} ` +
+      `(${miles(m.basico)}) es más alto que el de ${mesCorto(m.siguiente)} ` +
+      `(${miles(m.basicoSiguiente)}), y un básico no baja: revisá ese recibo` });
   }
 
   return {

@@ -9,7 +9,8 @@ import {
   factorRemunerativo, componerNoRemunerativo, proyectarSueldo, aguinaldo,
   calendarioDeIngresos, sumarMeses,
   pctAcumulado, basicoSegunAcuerdo, fueraDeAcuerdo, sumasVigentes,
-  brutoDeRecibo, netoDeclarado, proximoCobro, acuerdoVigente, sumasDeclaradas
+  brutoDeRecibo, netoDeclarado, proximoCobro, acuerdoVigente, sumasDeclaradas,
+  basicoQueBaja
 } from './sueldo.js';
 
 let ok = 0, fallo = 0;
@@ -83,7 +84,11 @@ t('el orden en que se cargan los recibos no cambia el resultado', () => {
 });
 
 console.log('\nFACTOR DEL BASICO');
-t('el bruto es ~1,83 veces el basico', () => cerca(factorRemunerativo(NORMALES), 1.8334, 0.001));
+// Con dos recibos se usa el ULTIMO, no el promedio de los dos: la relacion
+// baja despacio mes a mes —el basico sube por paritaria y la antiguedad y el
+// presentismo quedan atras— asi que el ultimo es el que mas se parece al que
+// viene. Antes esperaba 1,8334, que era el promedio.
+t('el bruto es ~1,84 veces el basico', () => cerca(factorRemunerativo(NORMALES), 1.8355, 0.001));
 t('los meses con vacaciones no ensucian el factor', () => {
   cerca(factorRemunerativo(HISTORIA), factorRemunerativo(NORMALES), 0.001);
 });
@@ -558,6 +563,58 @@ t('avisa cuando la cuenta se hizo con menos de lo que necesita', () => {
   // Y el número tiene que ser creíble: nada de caer a la mitad.
   if (!(c.banco > 1800000)) throw new Error(`banco: ${c.banco}`);
   if (Math.abs(c.porcentaje) >= 25) throw new Error(`variación irreal: ${c.porcentaje} %`);
+});
+
+// ---------------------------------------------------------------------
+// UN RECIBO MAL CARGADO NO PUEDE ARRASTRAR LA PROYECCION
+//
+// Paso de verdad: un basico de 1.795.421 donde los demas tenian 1.150.000.
+// La app proyectaba 1.398.000 de banco donde el mes anterior habian entrado
+// 2.082.000, y no decia por que.
+// ---------------------------------------------------------------------
+console.log('\nUN RECIBO FUERA DE LUGAR');
+
+const CON_ERROR = [
+  { periodo: '2026-05', basico: 1795421, remunerativo: 2164862.50,   // basico mal
+    noRemunerativo: 144295.56, deducciones: 425755.63, neto: 1883402.43 },
+  { periodo: '2026-06', basico: 1122725.33, remunerativo: 2429014.35,
+    noRemunerativo: 184121.81, deducciones: 477636.16, neto: 2135500,
+    conceptos: ['VACACIONES'] },
+  { periodo: '2026-08', basico: 1149545.03, remunerativo: 2301786.41,
+    noRemunerativo: 172849.90, deducciones: 447970.93, neto: 2026665.38,
+    conceptos: ['VACACIONES'] },
+  { periodo: '2026-09', basico: 1253514, remunerativo: 2403279.83,
+    noRemunerativo: 145595.52, deducciones: 466734.96, neto: 2082140.39 }
+];
+
+t('el recibo fuera de lugar no se lleva puesta la relacion', () => {
+  // Promediando mayo (1,206) con septiembre (1,917) daba 1,5615 y de ahi
+  // salia todo el faltante. Vale la del ultimo recibo normal.
+  cerca(factorRemunerativo(CON_ERROR), 1.9172, 0.001);
+});
+
+t('un basico que baja se señala, con los dos meses', () => {
+  const m = basicoQueBaja(CON_ERROR);
+  igual(m.length, 1);
+  igual(m[0].periodo, '2026-05');
+  igual(m[0].siguiente, '2026-06');
+});
+
+t('una historia sana no señala nada', () => igual(basicoQueBaja(HISTORIA).length, 0));
+
+t('el ritmo no puede ser negativo: un basico no baja', () => {
+  // Con el salto de mayo a junio adentro daba -11,29 % mensual, o sea el
+  // sueldo cayendo para siempre.
+  const r = ritmoParitaria(CON_ERROR);
+  if (!(r > 0)) throw new Error(`esperaba un ritmo positivo, dio ${(r * 100).toFixed(2)} %`);
+  cerca(r, 0.0566, 0.001);
+});
+
+t('y la proyeccion avisa del recibo, no se lo calla', () => {
+  const c = proximoCobro(CON_ERROR, { diaCobro: 1 });
+  const aviso = c.porque.find(p => p.tipo === 'aviso' && /básico no baja/.test(p.texto));
+  if (!aviso) throw new Error('no avisa del recibo mal cargado');
+  if (!/may/.test(aviso.texto)) throw new Error(`no nombra el mes: ${aviso.texto}`);
 });
 
 console.log(`\n${ok} pruebas OK${fallo ? `, ${fallo} FALLAN` : ''}\n`);
